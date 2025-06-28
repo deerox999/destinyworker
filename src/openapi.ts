@@ -33,6 +33,103 @@ export const openApiSpec = {
         }
       }
     },
+    "/api/json": {
+      post: {
+        summary: "JSON 데이터 저장",
+        description: "사용자의 JSON 데이터를 저장합니다.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/SaveJsonRequest"
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "JSON 데이터 저장 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SaveJsonResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "잘못된 요청",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            description: "서버 오류",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/json/{userId}": {
+      get: {
+        summary: "JSON 데이터 조회",
+        description: "특정 사용자의 저장된 JSON 데이터를 조회합니다.",
+        parameters: [
+          {
+            name: "userId",
+            in: "path",
+            required: true,
+            description: "사용자 ID",
+            schema: {
+              type: "string"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "JSON 데이터 조회 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/GetJsonResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "데이터를 찾을 수 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            description: "서버 오류",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/google/login": {
       post: {
         summary: "Google OAuth 로그인",
@@ -439,6 +536,80 @@ export const openApiSpec = {
           error: {
             type: "string",
             description: "오류 메시지"
+          }
+        }
+      },
+      SaveJsonRequest: {
+        type: "object",
+        required: ["userId", "data"],
+        properties: {
+          userId: {
+            type: "string",
+            description: "사용자 ID"
+          },
+          data: {
+            type: "object",
+            description: "저장할 JSON 데이터 (any 타입)"
+          }
+        }
+      },
+      SaveJsonResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "저장 성공 여부"
+          },
+          id: {
+            type: "integer",
+            description: "저장된 데이터의 ID"
+          },
+          message: {
+            type: "string",
+            description: "성공 메시지"
+          }
+        }
+      },
+      GetJsonResponse: {
+        type: "object",
+        properties: {
+          userId: {
+            type: "string",
+            description: "사용자 ID"
+          },
+          records: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/JsonRecord"
+            },
+            description: "저장된 JSON 데이터 목록"
+          },
+          count: {
+            type: "integer",
+            description: "총 레코드 수"
+          }
+        }
+      },
+      JsonRecord: {
+        type: "object",
+        properties: {
+          id: {
+            type: "integer",
+            description: "데이터 ID"
+          },
+          data: {
+            type: "object",
+            description: "저장된 JSON 데이터"
+          },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            description: "생성 일시"
+          },
+          updated_at: {
+            type: "string",
+            format: "date-time",
+            description: "수정 일시"
           }
         }
       }

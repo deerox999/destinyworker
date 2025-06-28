@@ -35,6 +35,19 @@ export default {
         return await databaseApiHandlers.getComments(request, env);
       }
 
+      // JSON 저장/조회 API 라우팅
+      if (route(url, request, "/api/json", "POST")) {
+        return await databaseApiHandlers.saveJson(request, env);
+      }
+
+      // JSON 조회 API (URL 파라미터에서 userId 추출)
+      if (url.pathname.startsWith("/api/json/") && request.method === "GET") {
+        const userId = url.pathname.split("/api/json/")[1];
+        if (userId) {
+          return await databaseApiHandlers.getJson(request, env, userId);
+        }
+      }
+
       // Google OAuth 로그인 API 라우팅
       if (route(url, request, "/api/auth/google/login", "POST")) {
         return await googleAuthApiHandlers.googleLogin(request, env);
