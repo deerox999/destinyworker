@@ -12,5 +12,8 @@
   ],
   "observability": {
     "enabled": true
+  },
+  "dev": {
+    "port": 9393
   }
 }
