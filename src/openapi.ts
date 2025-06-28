@@ -12,6 +12,27 @@ export const openApiSpec = {
     }
   ],
   paths: {
+    "/api/comments": {
+      get: {
+        summary: "댓글 목록 조회",
+        description: "댓글 목록을 조회합니다.",
+        responses: {
+          "200": {
+            description: "댓글 목록 조회 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: {
+                    $ref: "#/components/schemas/Comment"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/google/login": {
       post: {
         summary: "Google OAuth 로그인",
