@@ -1,0 +1,16 @@
+{
+  "compatibility_date": "2025-04-01",
+  "main": "src/index.ts",
+  "name": "destinyworker",
+  "upload_source_maps": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_id": "85e7d772-5696-4091-abf9-ff9d70b94a7a",
+      "database_name": "destiny"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
