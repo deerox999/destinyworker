@@ -20,7 +20,8 @@
   },
   "devDependencies": {
     "typescript": "5.8.3",
-    "wrangler": "4.16.1"
+    "wrangler": "4.16.1",
+    "lunar-javascript": "^1.7.3"
   },
   "dependencies": {
     "@types/swagger-ui-dist": "^3.30.5"

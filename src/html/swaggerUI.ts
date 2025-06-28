@@ -51,12 +51,10 @@ export function generateSwaggerHTML(): string {
 
 export function generateApiListHTML(): string {
   const endpoints = [
-    { method: 'GET', path: '/api/users', description: '사용자 목록 조회' },
-    { method: 'POST', path: '/api/users', description: '새 사용자 생성' },
-    { method: 'GET', path: '/api/users/{id}', description: '특정 사용자 조회' },
-    { method: 'GET', path: '/api/comments', description: '댓글 목록 조회' },
-    { method: 'POST', path: '/api/saju/calculate', description: '사주 계산' },
-    { method: 'GET', path: '/api/health', description: '서버 상태 확인' },
+    { method: 'POST', path: '/api/auth/google/login', description: 'Google OAuth 로그인' },
+    { method: 'POST', path: '/api/auth/logout', description: '로그아웃' },
+    { method: 'GET', path: '/api/auth/me', description: '사용자 정보 조회' },
+    { method: 'POST', path: '/api/auth/refresh', description: '토큰 갱신' },
     { method: 'GET', path: '/docs', description: 'Swagger UI 문서' },
     { method: 'GET', path: '/api/openapi.json', description: 'OpenAPI 스펙' }
   ];

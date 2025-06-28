@@ -12,46 +12,47 @@ export const openApiSpec = {
     }
   ],
   paths: {
-    "/api/users": {
-      get: {
-        summary: "사용자 목록 조회",
-        description: "등록된 모든 사용자의 목록을 반환합니다.",
-        responses: {
-          "200": {
-            description: "사용자 목록 조회 성공",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "array",
-                  items: {
-                    $ref: "#/components/schemas/User"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
+    "/api/auth/google/login": {
       post: {
-        summary: "새 사용자 생성",
-        description: "새로운 사용자를 생성합니다.",
+        summary: "Google OAuth 로그인",
+        description: "Google ID 토큰을 사용하여 로그인하고 JWT 토큰을 받습니다.",
         requestBody: {
           required: true,
           content: {
             "application/json": {
               schema: {
-                $ref: "#/components/schemas/CreateUser"
+                $ref: "#/components/schemas/GoogleLoginRequest"
               }
             }
           }
         },
         responses: {
-          "201": {
-            description: "사용자 생성 성공",
+          "200": {
+            description: "로그인 성공",
             content: {
               "application/json": {
                 schema: {
-                  $ref: "#/components/schemas/User"
+                  $ref: "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "잘못된 요청",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -59,52 +60,75 @@ export const openApiSpec = {
         }
       }
     },
-    "/api/users/{id}": {
-      get: {
-        summary: "특정 사용자 조회",
-        description: "ID로 특정 사용자 정보를 조회합니다.",
-        parameters: [
+    "/api/auth/logout": {
+      post: {
+        summary: "로그아웃",
+        description: "현재 세션을 종료합니다.",
+        security: [
           {
-            name: "id",
-            in: "path",
-            required: true,
-            description: "사용자 ID",
-            schema: {
-              type: "integer"
-            }
+            bearerAuth: []
           }
         ],
         responses: {
           "200": {
-            description: "사용자 조회 성공",
+            description: "로그아웃 성공",
             content: {
               "application/json": {
                 schema: {
-                  $ref: "#/components/schemas/User"
+                  $ref: "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      get: {
+        summary: "사용자 정보 조회",
+        description: "현재 로그인한 사용자의 정보를 조회합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        responses: {
+          "200": {
+            description: "사용자 정보 조회 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/UserInfoResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
                 }
               }
             }
           },
           "404": {
-            description: "사용자를 찾을 수 없음"
-          }
-        }
-      }
-    },
-    "/api/comments": {
-      get: {
-        summary: "댓글 목록 조회",
-        description: "D1 데이터베이스에서 댓글 목록을 조회합니다.",
-        responses: {
-          "200": {
-            description: "댓글 목록 조회 성공",
+            description: "사용자를 찾을 수 없음",
             content: {
               "application/json": {
                 schema: {
-                  type: "array",
-                  items: {
-                    $ref: "#/components/schemas/Comment"
-                  }
+                  $ref: "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -112,45 +136,32 @@ export const openApiSpec = {
         }
       }
     },
-    "/api/saju/calculate": {
+    "/api/auth/refresh": {
       post: {
-        summary: "사주 계산",
-        description: "생년월일과 시간을 입력받아 사주를 계산합니다.",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: {
-                $ref: "#/components/schemas/SajuRequest"
-              }
-            }
+        summary: "토큰 갱신",
+        description: "만료되기 전에 JWT 토큰을 갱신합니다.",
+        security: [
+          {
+            bearerAuth: []
           }
-        },
+        ],
         responses: {
           "200": {
-            description: "사주 계산 성공",
+            description: "토큰 갱신 성공",
             content: {
               "application/json": {
                 schema: {
-                  $ref: "#/components/schemas/SajuResult"
+                  $ref: "#/components/schemas/RefreshTokenResponse"
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/api/health": {
-      get: {
-        summary: "헬스체크",
-        description: "서버 상태를 확인합니다.",
-        responses: {
-          "200": {
-            description: "서버 정상",
+          },
+          "401": {
+            description: "인증 실패",
             content: {
               "application/json": {
                 schema: {
-                  $ref: "#/components/schemas/HealthCheck"
+                  $ref: "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -160,6 +171,13 @@ export const openApiSpec = {
     }
   },
   components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT"
+      }
+    },
     schemas: {
       User: {
         type: "object",
@@ -285,6 +303,121 @@ export const openApiSpec = {
           version: {
             type: "string",
             description: "API 버전"
+          }
+        }
+      },
+      GoogleLoginRequest: {
+        type: "object",
+        required: ["token"],
+        properties: {
+          token: {
+            type: "string",
+            description: "Google ID 토큰"
+          }
+        }
+      },
+      LoginResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "로그인 성공 여부"
+          },
+          token: {
+            type: "string",
+            description: "JWT 토큰"
+          },
+          user: {
+            $ref: "#/components/schemas/AuthUser"
+          }
+        }
+      },
+      AuthUser: {
+        type: "object",
+        properties: {
+          id: {
+            type: "integer",
+            description: "사용자 ID"
+          },
+          email: {
+            type: "string",
+            format: "email",
+            description: "이메일 주소"
+          },
+          name: {
+            type: "string",
+            description: "사용자 이름"
+          },
+          picture: {
+            type: "string",
+            description: "프로필 이미지 URL"
+          }
+        }
+      },
+      UserInfoResponse: {
+        type: "object",
+        properties: {
+          user: {
+            type: "object",
+            properties: {
+              id: {
+                type: "integer",
+                description: "사용자 ID"
+              },
+              email: {
+                type: "string",
+                format: "email",
+                description: "이메일 주소"
+              },
+              name: {
+                type: "string",
+                description: "사용자 이름"
+              },
+              picture: {
+                type: "string",
+                description: "프로필 이미지 URL"
+              },
+              created_at: {
+                type: "string",
+                format: "date-time",
+                description: "계정 생성일"
+              }
+            }
+          }
+        }
+      },
+      RefreshTokenResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "토큰 갱신 성공 여부"
+          },
+          token: {
+            type: "string",
+            description: "새로운 JWT 토큰"
+          }
+        }
+      },
+      SuccessResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "작업 성공 여부"
+          },
+          message: {
+            type: "string",
+            description: "성공 메시지"
+          }
+        }
+      },
+      ErrorResponse: {
+        type: "object",
+        properties: {
+          error: {
+            type: "string",
+            description: "오류 메시지"
           }
         }
       }

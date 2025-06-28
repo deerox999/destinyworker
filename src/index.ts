@@ -1,7 +1,7 @@
 import { openApiSpec } from "./openapi";
 import { generateSwaggerHTML, generateApiListHTML } from "./html/swaggerUI";
-import { sampleApiHandlers } from "./api/sampleApi";
 import { databaseApiHandlers } from "./api/databaseApi";
+import { googleAuthApiHandlers } from "./api/auth/googleAuthApi";
 import { jsonResponse, htmlResponse, corsHeaders, route} from "./common/utils";
 
 export default {
@@ -30,31 +30,26 @@ export default {
         return jsonResponse(openApiSpec);
       }
 
-      // 샘플 API 라우팅
-      if (route(url, request, "/api/users", "GET")) {
-        return await sampleApiHandlers.getUsers(request);
-      }
-
-      if (route(url, request, "/api/users", "POST")) {
-        return await sampleApiHandlers.createUser(request);
-      }
-
-      if (route(url, request, "/api/users", "GET")) {
-        const userId = parseInt(url.pathname.split("/").pop()!);
-        return await sampleApiHandlers.getUserById(request, userId);
-      }
-
-      if (route(url, request, "/api/saju/calculate", "POST")) {
-        return await sampleApiHandlers.calculateSaju(request);
-      }
-
-      if (route(url, request, "/api/health", "GET")) {
-        return await sampleApiHandlers.healthCheck(request);
-      }
-
       // D1 데이터베이스 API 라우팅
       if (route(url, request, "/api/comments", "GET")) {
         return await databaseApiHandlers.getComments(request, env);
+      }
+
+      // Google OAuth 로그인 API 라우팅
+      if (route(url, request, "/api/auth/google/login", "POST")) {
+        return await googleAuthApiHandlers.googleLogin(request, env);
+      }
+
+      if (route(url, request, "/api/auth/logout", "POST")) {
+        return await googleAuthApiHandlers.logout(request, env);
+      }
+
+      if (route(url, request, "/api/auth/me", "GET")) {
+        return await googleAuthApiHandlers.getUserInfo(request, env);
+      }
+
+      if (route(url, request, "/api/auth/refresh", "POST")) {
+        return await googleAuthApiHandlers.refreshToken(request, env);
       }
 
       // 404 처리
