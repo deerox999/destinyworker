@@ -26,7 +26,7 @@
     "cf-typegen": "wrangler types",
     "check": "tsc && wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --remote",
     "predeploy": "wrangler d1 migrations apply DB --remote",
     "seedLocalD1": "wrangler d1 migrations apply DB --local"
   }
