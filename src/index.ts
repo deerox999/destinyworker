@@ -1,13 +1,11 @@
-import { openApiSpec } from "./openapi";
-import { generateSwaggerHTML, generateApiListHTML } from "./html/swaggerUI";
-import { databaseApiHandlers } from "./api/databaseApi";
-import { googleAuthApiHandlers } from "./api/auth/googleAuthApi";
-import { jsonResponse, htmlResponse, corsHeaders, route} from "./common/utils";
+import { corsHeaders } from "./common/utils";
+import { createAppRouter } from "./common/routes";
+
+// 애플리케이션 라우터 초기화
+const appRouter = createAppRouter();
 
 export default {
   async fetch(request: Request, env: any): Promise<Response> {
-    const url = new URL(request.url);
-
     // CORS preflight 처리
     if (request.method === "OPTIONS") {
       return new Response(null, {
@@ -17,63 +15,25 @@ export default {
     }
 
     try {
-      // 기본 라우팅 (문서 및 스펙)
-      if (route(url, request, "/", "GET")) {
-        return htmlResponse(generateApiListHTML());
-      }
-
-      if (route(url, request, "/docs", "GET")) {
-        return htmlResponse(generateSwaggerHTML());
-      }
-
-      if (route(url, request, "/api/openapi.json", "GET")) {
-        return jsonResponse(openApiSpec);
-      }
-
-      // D1 데이터베이스 API 라우팅
-      if (route(url, request, "/api/comments", "GET")) {
-        return await databaseApiHandlers.getComments(request, env);
-      }
-
-      // JSON 저장/조회 API 라우팅
-      if (route(url, request, "/api/json", "POST")) {
-        return await databaseApiHandlers.saveJson(request, env);
-      }
-
-      // JSON 조회 API (URL 파라미터에서 userId 추출)
-      if (url.pathname.startsWith("/api/json/") && request.method === "GET") {
-        const userId = url.pathname.split("/api/json/")[1];
-        if (userId) {
-          return await databaseApiHandlers.getJson(request, env, userId);
-        }
-      }
-
-      // Google OAuth 로그인 API 라우팅
-      if (route(url, request, "/api/auth/google/login", "POST")) {
-        return await googleAuthApiHandlers.googleLogin(request, env);
-      }
-
-      if (route(url, request, "/api/auth/logout", "POST")) {
-        return await googleAuthApiHandlers.logout(request, env);
-      }
-
-      if (route(url, request, "/api/auth/me", "GET")) {
-        return await googleAuthApiHandlers.getUserInfo(request, env);
-      }
-
-      if (route(url, request, "/api/auth/refresh", "POST")) {
-        return await googleAuthApiHandlers.refreshToken(request, env);
-      }
+      // 모든 라우팅을 라우터에 위임 - 단 1줄로 완벽하게!
+      const response = await appRouter.handle(request, env);
+      if (response) return response;
 
       // 404 처리
-      return jsonResponse({ error: "엔드포인트를 찾을 수 없습니다." }, 404);
+      return new Response(JSON.stringify({ error: "엔드포인트를 찾을 수 없습니다." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" }
+      });
 
     } catch (error) {
-      console.error("API Error:", error);
-      return jsonResponse({ 
+      console.error("Global Error:", error);
+      return new Response(JSON.stringify({ 
         error: "서버 내부 오류가 발생했습니다.",
         message: error instanceof Error ? error.message : "Unknown error"
-      }, 500);
+      }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      });
     }
   },
 } satisfies ExportedHandler<Env>;

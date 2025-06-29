@@ -135,81 +135,51 @@ async function verifyGoogleToken(
   clientId?: string
 ): Promise<GoogleUserInfo | null> {
   try {
-    console.log("토큰 검증 시작:", token.substring(0, 50) + "...");
-    console.log("설정된 클라이언트 ID:", clientId);
-
-    // 두 가지 방법으로 토큰 검증 시도
-    // 1. tokeninfo 엔드포인트 사용 (id_token)
+    // tokeninfo 엔드포인트 시도 (id_token)
     let response = await fetch(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${token}`
     );
-
-    console.log("Google tokeninfo API 응답 상태:", response.status);
-
-    // tokeninfo가 실패하면 userinfo 엔드포인트 시도 (access_token)
+    
+    // 실패시 userinfo 엔드포인트 시도 (access_token)
     if (!response.ok) {
-      console.log("tokeninfo 실패, userinfo 시도...");
       response = await fetch(
         `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`
       );
-      console.log("Google userinfo API 응답 상태:", response.status);
     }
-
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Google API 오류 응답:", errorText);
       return null;
     }
 
     const data = (await response.json()) as any;
-    console.log("Google API 응답 데이터:", JSON.stringify(data, null, 2));
 
     // 필수 필드 확인
     if (!data.sub && !data.id) {
-      console.error("사용자 ID가 없습니다");
       return null;
     }
 
     if (!data.email) {
-      console.error("이메일이 없습니다");
       return null;
     }
 
-    // 클라이언트 ID 검증 (선택사항) - 임시로 경고만 출력
+    // 클라이언트 ID 검증
     if (clientId && data.aud && data.aud !== clientId) {
-      console.warn(
-        "클라이언트 ID 불일치 (임시로 허용):",
-        data.aud,
-        "vs",
-        clientId
-      );
-      // return null; // 임시로 주석 처리
+      console.error("클라이언트 ID 불일치");
+      return null;
     }
 
-    // 이메일 인증 확인 (유연하게 처리)
-    const emailVerified =
-      data.email_verified === true ||
-      data.email_verified === "true" ||
-      data.verified_email === true ||
-      data.verified_email === "true";
+    // 이메일 인증 확인
+    const emailVerified = data.email_verified === true || 
+                         data.email_verified === "true" || 
+                         data.verified_email === true ||
+                         data.verified_email === "true";
 
-    if (!emailVerified) {
-      console.error(
-        "이메일 인증되지 않음:",
-        data.email_verified,
-        data.verified_email
-      );
-      // 이메일 인증이 필수가 아닐 수도 있으니 경고만 출력
-      console.warn("이메일 인증 없이 진행합니다.");
-    }
-
-    console.log("토큰 검증 성공", data);
     return {
       sub: data.sub || data.id,
       email: data.email,
       name: data.name || data.given_name + " " + data.family_name || data.email,
       picture: data.picture,
-      email_verified: emailVerified,
+      email_verified: emailVerified
     };
   } catch (error) {
     console.error("Google token verification failed:", error);
@@ -265,7 +235,7 @@ async function findOrCreateUser(
       return result as User;
     }
   } catch (error) {
-    console.error("Database error in findOrCreateUser:", error);
+    console.error("Database error:", error);
     return null;
   }
 }
@@ -302,7 +272,7 @@ async function cleanupExpiredSessions(db: any): Promise<void> {
   }
 }
 
-// 로그아웃 (세션 삭제)
+// 세션 삭제
 async function deleteSession(db: any, jwtToken: string): Promise<boolean> {
   try {
     const stmt = db.prepare("DELETE FROM sessions WHERE jwt_token = ?");
@@ -316,7 +286,7 @@ async function deleteSession(db: any, jwtToken: string): Promise<boolean> {
 
 // Google OAuth API 핸들러들
 export const googleAuthApiHandlers = {
-  // Google OAuth 로그인
+  // Google 로그인
   async googleLogin(request: Request, env: any): Promise<Response> {
     if (!env.DB) {
       return jsonResponse(
@@ -338,10 +308,7 @@ export const googleAuthApiHandlers = {
       }
 
       // Google 토큰 검증
-      const googleUserInfo = await verifyGoogleToken(
-        token,
-        env.GOOGLE_CLIENT_ID
-      );
+      const googleUserInfo = await verifyGoogleToken(token, env.GOOGLE_CLIENT_ID);
       if (!googleUserInfo) {
         return jsonResponse({ error: "유효하지 않은 Google 토큰입니다." }, 401);
       }
@@ -362,7 +329,7 @@ export const googleAuthApiHandlers = {
       );
 
       // 세션 저장
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7일 후
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await saveSession(env.DB, user.id, jwtToken, expiresAt);
 
       // 만료된 세션 정리
@@ -505,7 +472,7 @@ export const googleAuthApiHandlers = {
       );
 
       // 새 세션 저장
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7일 후
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await saveSession(env.DB, payload.userId, newJwtToken, expiresAt);
 
       return jsonResponse({
