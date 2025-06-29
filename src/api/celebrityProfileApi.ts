@@ -21,7 +21,7 @@ const createPrismaClient = (db: D1Database) => {
   });
 };
 
-// JWT 토큰에서 사용자 정보 추출 (관리자 체크용)
+// JWT 토큰에서 사용자 정보 추출
 const getUserFromToken = async (request: Request): Promise<{ id: number; role: string } | null> => {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
@@ -62,7 +62,7 @@ const isAdmin = async (request: Request, env: any): Promise<boolean> => {
   }
 };
 
-// 한글 -> 영어 필드 변환
+// 한글 -> 영어 필드 변환 (유명인물)
 const toDbFields = (data: any) => ({
   id: data.id,
   name: data.이름,
@@ -76,7 +76,7 @@ const toDbFields = (data: any) => ({
   thumbnail: data.썸네일,
 });
 
-// 영어 -> 한글 필드 변환
+// 영어 -> 한글 필드 변환 (유명인물)
 const toKoreanFields = (profile: any) => ({
   id: profile.id,
   이름: profile.name,
@@ -88,11 +88,24 @@ const toKoreanFields = (profile: any) => ({
   직업: profile.occupation,
   설명: profile.description,
   썸네일: profile.thumbnail,
+  조회수: profile.viewCount,
   createdAt: profile.createdAt,
   updatedAt: profile.updatedAt,
 });
 
-// 데이터 검증
+// 댓글 데이터 변환
+const toCommentFields = (comment: any) => ({
+  id: comment.id,
+  내용: comment.content,
+  작성자: comment.user?.name || '알 수 없음',
+  작성자ID: comment.userId,
+  부모댓글ID: comment.parentId,
+  답글: comment.replies?.map(toCommentFields) || [],
+  작성일: comment.createdAt,
+  수정일: comment.updatedAt,
+});
+
+// 유명인물 데이터 검증
 const validateCelebrityData = (data: any): boolean => {
   return data?.이름?.trim() && 
          data?.id?.trim() &&
@@ -105,43 +118,93 @@ const validateCelebrityData = (data: any): boolean => {
          data?.설명?.trim();
 };
 
+// 댓글 데이터 검증
+const validateCommentData = (data: any): boolean => {
+  return data?.내용?.trim();
+};
+
+// 조회수 증가 함수
+const incrementViewCount = async (prisma: PrismaClient, celebrityId: string): Promise<number> => {
+  try {
+    const viewCount = await prisma.celebrityViewCount.upsert({
+      where: { celebrityId },
+      update: { viewCount: { increment: 1 } },
+      create: { celebrityId, viewCount: 1 }
+    });
+    return viewCount.viewCount;
+  } catch (error) {
+    console.error('Failed to increment view count:', error);
+    return 0;
+  }
+};
+
+// 조회수 조회 함수
+const getViewCount = async (prisma: PrismaClient, celebrityId: string): Promise<number> => {
+  try {
+    const viewCount = await prisma.celebrityViewCount.findUnique({
+      where: { celebrityId },
+      select: { viewCount: true }
+    });
+    return viewCount?.viewCount || 0;
+  } catch (error) {
+    console.error('Failed to get view count:', error);
+    return 0;
+  }
+};
+
 export const celebrityProfileApiHandlers = {
-  // 유명인물 목록 조회 (페이징 지원, 인증 불필요)
-  async getCelebrites(request: Request, env: any): Promise<Response> {
+  // 유명인물 댓글 목록 조회 (페이징 지원, 계층 구조, 조회수 증가)
+  async getCelebrityComments(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
     try {
+      const celebrityId = params?.id;
+      if (!celebrityId) return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
+
       const url = new URL(request.url);
       const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
       const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '20')));
-      const search = url.searchParams.get('search')?.trim() || '';
       const skip = (page - 1) * limit;
 
       const prisma = createPrismaClient(env.DB);
-      
-      // 검색 조건
-      const where = search ? {
-        OR: [
-          { name: { contains: search } },
-          { occupation: { contains: search } },
-          { description: { contains: search } }
-        ]
-      } : {};
 
-      // 총 개수와 데이터를 동시에 조회
-      const [total, profiles] = await Promise.all([
-        prisma.celebrityProfile.count({ where }),
-        prisma.celebrityProfile.findMany({
-          where,
+      // 조회수 증가
+      const viewCount = await incrementViewCount(prisma, celebrityId);
+
+      // 최상위 댓글만 조회 (대댓글은 중첩으로 포함)
+      const [total, comments] = await Promise.all([
+        prisma.celebrityComment.count({
+          where: { celebrityId, parentId: null }
+        }),
+        prisma.celebrityComment.findMany({
+          where: { celebrityId, parentId: null },
           skip,
           take: limit,
-          orderBy: { createdAt: 'desc' }
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: { select: { name: true } },
+            replies: {
+              include: {
+                user: { select: { name: true } },
+                replies: {
+                  include: {
+                    user: { select: { name: true } },
+                    replies: true // 3단계까지만 지원
+                  },
+                  orderBy: { createdAt: 'asc' }
+                }
+              },
+              orderBy: { createdAt: 'asc' }
+            }
+          }
         })
       ]);
-      
+
       await prisma.$disconnect();
 
       return jsonResponse({
         success: true,
-        profiles: profiles.map(toKoreanFields),
+        celebrityId,
+        조회수: viewCount,
+        comments: comments.map(toCommentFields),
         pagination: {
           page,
           limit,
@@ -152,146 +215,141 @@ export const celebrityProfileApiHandlers = {
         }
       });
     } catch (error) {
-      return jsonResponse({ error: "조회 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
+      return jsonResponse({ error: "댓글 조회 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
     }
   },
 
-  // 특정 유명인물 조회 (인증 불필요)
-  async getCelebrity(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
+  // 유명인물 댓글 작성 (로그인 필요)
+  async createCelebrityComment(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
     try {
-      const profileId = params?.id;
-      if (!profileId) return jsonResponse({ error: "ID가 필요합니다." }, 400);
+      const user = await getUserFromToken(request);
+      if (!user) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
 
-      const prisma = createPrismaClient(env.DB);
-      const profile = await prisma.celebrityProfile.findUnique({
-        where: { id: profileId }
-      });
-      await prisma.$disconnect();
+      const celebrityId = params?.id;
+      if (!celebrityId) return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
 
-      if (!profile) return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
-
-      return jsonResponse({
-        success: true,
-        profile: toKoreanFields(profile)
-      });
-    } catch (error) {
-      return jsonResponse({ error: "조회 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
-    }
-  },
-
-  // 유명인물 생성 (관리자만)
-  async createCelebrity(request: Request, env: any): Promise<Response> {
-    try {
-      if (!(await isAdmin(request, env))) {
-        return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
-      }
-
-      const body = await request.json();
-      if (!validateCelebrityData(body)) {
-        return jsonResponse({ error: "잘못된 데이터입니다." }, 400);
+      const body = await request.json() as any;
+      if (!validateCommentData(body)) {
+        return jsonResponse({ error: "댓글 내용이 필요합니다." }, 400);
       }
 
       const prisma = createPrismaClient(env.DB);
-      
-      // ID 중복 체크
-      const existing = await prisma.celebrityProfile.findUnique({
-        where: { id: (body as any).id }
-      });
-      if (existing) {
-        await prisma.$disconnect();
-        return jsonResponse({ error: "이미 존재하는 ID입니다." }, 409);
-      }
 
-      const profile = await prisma.celebrityProfile.create({
-        data: toDbFields(body)
-      });
-      await prisma.$disconnect();
-
-      return jsonResponse({ 
-        success: true, 
-        id: profile.id,
-        message: "유명인물이 생성되었습니다."
-      }, 201);
-    } catch (error) {
-      return jsonResponse({ error: "생성 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
-    }
-  },
-
-  // 유명인물 수정 (관리자만)
-  async updateCelebrity(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
-    try {
-      if (!(await isAdmin(request, env))) {
-        return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
-      }
-
-      const profileId = params?.id;
-      if (!profileId) return jsonResponse({ error: "ID가 필요합니다." }, 400);
-
-      const body = await request.json();
-      if (!validateCelebrityData(body)) {
-        return jsonResponse({ error: "잘못된 데이터입니다." }, 400);
-      }
-
-      const prisma = createPrismaClient(env.DB);
-      
-      // 존재 여부 확인
-      const existing = await prisma.celebrityProfile.findUnique({
-        where: { id: profileId }
-      });
-      if (!existing) {
-        await prisma.$disconnect();
-        return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
-      }
-
-      // ID 변경 시 중복 체크
-      if ((body as any).id !== profileId) {
-        const duplicate = await prisma.celebrityProfile.findUnique({
-          where: { id: (body as any).id }
+      // 부모 댓글 존재 확인 (대댓글인 경우)
+      if (body.부모댓글ID) {
+        const parentComment = await prisma.celebrityComment.findUnique({
+          where: { id: body.부모댓글ID },
+          select: { celebrityId: true }
         });
-        if (duplicate) {
+        if (!parentComment || parentComment.celebrityId !== celebrityId) {
           await prisma.$disconnect();
-          return jsonResponse({ error: "변경하려는 ID가 이미 존재합니다." }, 409);
+          return jsonResponse({ error: "부모 댓글을 찾을 수 없습니다." }, 404);
         }
       }
 
-      await prisma.celebrityProfile.update({
-        where: { id: profileId },
-        data: toDbFields(body)
+      const comment = await prisma.celebrityComment.create({
+        data: {
+          celebrityId,
+          userId: user.id,
+          content: body.내용,
+          parentId: body.부모댓글ID || null
+        },
+        include: {
+          user: { select: { name: true } }
+        }
       });
+
       await prisma.$disconnect();
 
-      return jsonResponse({ success: true, message: "유명인물 정보가 수정되었습니다." });
+      return jsonResponse({
+        success: true,
+        comment: toCommentFields(comment),
+        message: "댓글이 작성되었습니다."
+      }, 201);
     } catch (error) {
-      return jsonResponse({ error: "수정 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
+      return jsonResponse({ error: "댓글 작성 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
     }
   },
 
-  // 유명인물 삭제 (관리자만)
-  async deleteCelebrity(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
+  // 유명인물 댓글 수정 (본인만)
+  async updateCelebrityComment(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
     try {
-      if (!(await isAdmin(request, env))) {
-        return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
-      }
+      const user = await getUserFromToken(request);
+      if (!user) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
 
-      const profileId = params?.id;
-      if (!profileId) return jsonResponse({ error: "ID가 필요합니다." }, 400);
+      const commentId = parseInt(params?.commentId || '0');
+      if (!commentId) return jsonResponse({ error: "댓글 ID가 필요합니다." }, 400);
+
+      const body = await request.json() as any;
+      if (!validateCommentData(body)) {
+        return jsonResponse({ error: "댓글 내용이 필요합니다." }, 400);
+      }
 
       const prisma = createPrismaClient(env.DB);
-      
-      const existing = await prisma.celebrityProfile.findUnique({
-        where: { id: profileId }
+
+      // 댓글 존재 및 소유권 확인
+      const comment = await prisma.celebrityComment.findUnique({
+        where: { id: commentId },
+        select: { userId: true }
       });
-      if (!existing) {
+      if (!comment) {
         await prisma.$disconnect();
-        return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
+        return jsonResponse({ error: "댓글을 찾을 수 없습니다." }, 404);
+      }
+      if (comment.userId !== user.id) {
+        await prisma.$disconnect();
+        return jsonResponse({ error: "본인의 댓글만 수정할 수 있습니다." }, 403);
       }
 
-      await prisma.celebrityProfile.delete({ where: { id: profileId } });
+      await prisma.celebrityComment.update({
+        where: { id: commentId },
+        data: { content: body.내용 }
+      });
+
       await prisma.$disconnect();
 
-      return jsonResponse({ success: true, message: "유명인물이 삭제되었습니다." });
+      return jsonResponse({ success: true, message: "댓글이 수정되었습니다." });
     } catch (error) {
-      return jsonResponse({ error: "삭제 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
+      return jsonResponse({ error: "댓글 수정 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
+    }
+  },
+
+  // 유명인물 댓글 삭제 (본인 또는 관리자)
+  async deleteCelebrityComment(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
+    try {
+      const user = await getUserFromToken(request);
+      if (!user) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+
+      const commentId = parseInt(params?.commentId || '0');
+      if (!commentId) return jsonResponse({ error: "댓글 ID가 필요합니다." }, 400);
+
+      const prisma = createPrismaClient(env.DB);
+
+      // 댓글 존재 확인
+      const comment = await prisma.celebrityComment.findUnique({
+        where: { id: commentId },
+        select: { userId: true }
+      });
+      if (!comment) {
+        await prisma.$disconnect();
+        return jsonResponse({ error: "댓글을 찾을 수 없습니다." }, 404);
+      }
+
+      // 본인 또는 관리자인지 확인
+      const isOwner = comment.userId === user.id;
+      const isUserAdmin = await isAdmin(request, env);
+      
+      if (!isOwner && !isUserAdmin) {
+        await prisma.$disconnect();
+        return jsonResponse({ error: "댓글을 삭제할 권한이 없습니다." }, 403);
+      }
+
+      await prisma.celebrityComment.delete({ where: { id: commentId } });
+      await prisma.$disconnect();
+
+      return jsonResponse({ success: true, message: "댓글이 삭제되었습니다." });
+    } catch (error) {
+      return jsonResponse({ error: "댓글 삭제 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
     }
   }
 }; 

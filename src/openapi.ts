@@ -583,11 +583,21 @@ const baseOpenApiSpec = {
         }
       }
     },
-    "/api/celebrities": {
+
+    "/api/celebrities/{id}/comments": {
       get: {
-        summary: "유명인물 목록 조회",
-        description: "유명인물 사주 프로필 목록을 페이징과 검색 기능으로 조회합니다. 인증이 필요하지 않습니다.",
+        summary: "유명인물 댓글 목록 조회",
+        description: "특정 유명인물에 달린 댓글 목록을 조회합니다. 대댓글은 계층 구조로 포함되며, 조회 시 해당 유명인물의 조회수가 자동으로 1 증가합니다.",
         parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "유명인물 ID",
+            schema: {
+              type: "string"
+            }
+          },
           {
             name: "page",
             in: "query",
@@ -601,36 +611,28 @@ const baseOpenApiSpec = {
           {
             name: "limit",
             in: "query",
-            description: "페이지당 항목 수 (기본값: 20, 최대: 50)",
+            description: "페이지당 댓글 수 (기본값: 20, 최대: 50)",
             schema: {
               type: "integer",
               minimum: 1,
               maximum: 50,
               default: 20
             }
-          },
-          {
-            name: "search",
-            in: "query",
-            description: "검색어 (이름, 직업, 설명에서 검색)",
-            schema: {
-              type: "string"
-            }
           }
         ],
         responses: {
           "200": {
-            description: "유명인물 목록 조회 성공",
+            description: "댓글 목록 조회 성공",
             content: {
               "application/json": {
                 schema: {
-                  $ref: "#/components/schemas/CelebrityListResponse"
+                  $ref: "#/components/schemas/CelebrityCommentsResponse"
                 }
               }
             }
           },
-          "500": {
-            description: "서버 오류",
+          "404": {
+            description: "유명인물을 찾을 수 없음",
             content: {
               "application/json": {
                 schema: {
@@ -642,11 +644,22 @@ const baseOpenApiSpec = {
         }
       },
       post: {
-        summary: "유명인물 생성",
-        description: "새로운 유명인물 사주 프로필을 생성합니다. 관리자 권한이 필요합니다.",
+        summary: "유명인물 댓글 작성",
+        description: "특정 유명인물에 댓글을 작성합니다. 로그인이 필요합니다.",
         security: [
           {
             bearerAuth: []
+          }
+        ],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "유명인물 ID",
+            schema: {
+              type: "string"
+            }
           }
         ],
         requestBody: {
@@ -654,18 +667,18 @@ const baseOpenApiSpec = {
           content: {
             "application/json": {
               schema: {
-                $ref: "#/components/schemas/CelebrityRequest"
+                $ref: "#/components/schemas/CelebrityCommentRequest"
               }
             }
           }
         },
         responses: {
           "201": {
-            description: "유명인물 생성 성공",
+            description: "댓글 작성 성공",
             content: {
               "application/json": {
                 schema: {
-                  $ref: "#/components/schemas/CelebrityCreateResponse"
+                  $ref: "#/components/schemas/CelebrityCommentCreateResponse"
                 }
               }
             }
@@ -680,8 +693,8 @@ const baseOpenApiSpec = {
               }
             }
           },
-          "403": {
-            description: "관리자 권한 필요",
+          "401": {
+            description: "로그인 필요",
             content: {
               "application/json": {
                 schema: {
@@ -690,8 +703,8 @@ const baseOpenApiSpec = {
               }
             }
           },
-          "409": {
-            description: "이미 존재하는 ID",
+          "404": {
+            description: "유명인물 또는 부모 댓글을 찾을 수 없음",
             content: {
               "application/json": {
                 schema: {
@@ -703,47 +716,10 @@ const baseOpenApiSpec = {
         }
       }
     },
-    "/api/celebrities/{id}": {
-      get: {
-        summary: "특정 유명인물 조회",
-        description: "특정 유명인물의 사주 프로필을 조회합니다. 인증이 필요하지 않습니다.",
-        parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            description: "유명인물 ID",
-            schema: {
-              type: "string"
-            }
-          }
-        ],
-        responses: {
-          "200": {
-            description: "유명인물 조회 성공",
-            content: {
-              "application/json": {
-                schema: {
-                  $ref: "#/components/schemas/CelebrityResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            description: "유명인물을 찾을 수 없음",
-            content: {
-              "application/json": {
-                schema: {
-                  $ref: "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
+    "/api/celebrities/{id}/comments/{commentId}": {
       put: {
-        summary: "유명인물 수정",
-        description: "기존 유명인물 사주 프로필을 수정합니다. 관리자 권한이 필요합니다.",
+        summary: "유명인물 댓글 수정",
+        description: "특정 댓글을 수정합니다. 본인의 댓글만 수정할 수 있습니다.",
         security: [
           {
             bearerAuth: []
@@ -758,6 +734,15 @@ const baseOpenApiSpec = {
             schema: {
               type: "string"
             }
+          },
+          {
+            name: "commentId",
+            in: "path",
+            required: true,
+            description: "댓글 ID",
+            schema: {
+              type: "integer"
+            }
           }
         ],
         requestBody: {
@@ -765,14 +750,14 @@ const baseOpenApiSpec = {
           content: {
             "application/json": {
               schema: {
-                $ref: "#/components/schemas/CelebrityRequest"
+                $ref: "#/components/schemas/CelebrityCommentUpdateRequest"
               }
             }
           }
         },
         responses: {
           "200": {
-            description: "유명인물 수정 성공",
+            description: "댓글 수정 성공",
             content: {
               "application/json": {
                 schema: {
@@ -791,8 +776,18 @@ const baseOpenApiSpec = {
               }
             }
           },
+          "401": {
+            description: "로그인 필요",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "403": {
-            description: "관리자 권한 필요",
+            description: "본인의 댓글만 수정 가능",
             content: {
               "application/json": {
                 schema: {
@@ -802,17 +797,7 @@ const baseOpenApiSpec = {
             }
           },
           "404": {
-            description: "유명인물을 찾을 수 없음",
-            content: {
-              "application/json": {
-                schema: {
-                  $ref: "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            description: "변경하려는 ID가 이미 존재",
+            description: "댓글을 찾을 수 없음",
             content: {
               "application/json": {
                 schema: {
@@ -824,8 +809,8 @@ const baseOpenApiSpec = {
         }
       },
       delete: {
-        summary: "유명인물 삭제",
-        description: "기존 유명인물 사주 프로필을 삭제합니다. 관리자 권한이 필요합니다.",
+        summary: "유명인물 댓글 삭제",
+        description: "특정 댓글을 삭제합니다. 본인의 댓글이거나 관리자 권한이 필요합니다.",
         security: [
           {
             bearerAuth: []
@@ -840,11 +825,20 @@ const baseOpenApiSpec = {
             schema: {
               type: "string"
             }
+          },
+          {
+            name: "commentId",
+            in: "path",
+            required: true,
+            description: "댓글 ID",
+            schema: {
+              type: "integer"
+            }
           }
         ],
         responses: {
           "200": {
-            description: "유명인물 삭제 성공",
+            description: "댓글 삭제 성공",
             content: {
               "application/json": {
                 schema: {
@@ -853,8 +847,18 @@ const baseOpenApiSpec = {
               }
             }
           },
+          "401": {
+            description: "로그인 필요",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "403": {
-            description: "관리자 권한 필요",
+            description: "댓글 삭제 권한 없음",
             content: {
               "application/json": {
                 schema: {
@@ -864,7 +868,7 @@ const baseOpenApiSpec = {
             }
           },
           "404": {
-            description: "유명인물을 찾을 수 없음",
+            description: "댓글을 찾을 수 없음",
             content: {
               "application/json": {
                 schema: {
@@ -1364,125 +1368,94 @@ const baseOpenApiSpec = {
           }
         }
       },
-      CelebrityRequest: {
-        type: "object",
-        required: ["id", "이름", "년", "월", "일", "달력", "성별", "직업", "설명"],
-        properties: {
-          id: {
-            type: "string",
-            description: "유명인물 고유 ID (예: lee-seung-man)"
-          },
-          "이름": {
-            type: "string",
-            description: "이름"
-          },
-          "년": {
-            type: "string",
-            pattern: "^\\d{4}$",
-            description: "출생년도 (4자리)"
-          },
-          "월": {
-            type: "string",
-            pattern: "^(0[1-9]|1[0-2])$",
-            description: "출생월 (01-12)"
-          },
-          "일": {
-            type: "string",
-            pattern: "^(0[1-9]|[12]\\d|3[01])$",
-            description: "출생일 (01-31)"
-          },
-          "달력": {
-            type: "string",
-            enum: ["양력", "음력"],
-            description: "달력 종류"
-          },
-          "성별": {
-            type: "string",
-            enum: ["남자", "여자"],
-            description: "성별"
-          },
-          "직업": {
-            type: "string",
-            description: "직업"
-          },
-          "설명": {
-            type: "string",
-            description: "설명"
-          },
-          "썸네일": {
-            type: "string",
-            description: "썸네일 이미지 URL (선택사항)"
-          }
-        }
-      },
-      CelebrityProfile: {
+      
+      CelebrityComment: {
         type: "object",
         properties: {
           id: {
-            type: "string",
-            description: "유명인물 고유 ID"
+            type: "integer",
+            description: "댓글 ID"
           },
-          "이름": {
+          "내용": {
             type: "string",
-            description: "이름"
+            description: "댓글 내용"
           },
-          "년": {
+          "작성자": {
             type: "string",
-            description: "출생년도"
+            description: "작성자 이름"
           },
-          "월": {
-            type: "string",
-            description: "출생월"
+          "작성자ID": {
+            type: "integer",
+            description: "작성자 ID"
           },
-          "일": {
-            type: "string",
-            description: "출생일"
+          "부모댓글ID": {
+            type: "integer",
+            description: "부모 댓글 ID (대댓글인 경우)"
           },
-          "달력": {
-            type: "string",
-            description: "달력 종류"
+          "답글": {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/CelebrityComment"
+            },
+            description: "대댓글 목록"
           },
-          "성별": {
-            type: "string",
-            description: "성별"
-          },
-          "직업": {
-            type: "string",
-            description: "직업"
-          },
-          "설명": {
-            type: "string",
-            description: "설명"
-          },
-          "썸네일": {
-            type: "string",
-            description: "썸네일 이미지 URL"
-          },
-          createdAt: {
+          "작성일": {
             type: "string",
             format: "date-time",
-            description: "생성 일시"
+            description: "작성 일시"
           },
-          updatedAt: {
+          "수정일": {
             type: "string",
             format: "date-time",
             description: "수정 일시"
           }
         }
       },
-      CelebrityListResponse: {
+      CelebrityCommentRequest: {
+        type: "object",
+        required: ["내용"],
+        properties: {
+          "내용": {
+            type: "string",
+            description: "댓글 내용"
+          },
+          "부모댓글ID": {
+            type: "integer",
+            description: "부모 댓글 ID (대댓글 작성 시)"
+          }
+        }
+      },
+      CelebrityCommentUpdateRequest: {
+        type: "object",
+        required: ["내용"],
+        properties: {
+          "내용": {
+            type: "string",
+            description: "수정할 댓글 내용"
+          }
+        }
+      },
+      CelebrityCommentsResponse: {
         type: "object",
         properties: {
           success: {
             type: "boolean",
             description: "조회 성공 여부"
           },
-          profiles: {
+          celebrityId: {
+            type: "string",
+            description: "유명인물 ID"
+          },
+          "조회수": {
+            type: "integer",
+            description: "유명인물 조회수"
+          },
+          comments: {
             type: "array",
             items: {
-              $ref: "#/components/schemas/CelebrityProfile"
+              $ref: "#/components/schemas/CelebrityComment"
             },
-            description: "유명인물 프로필 목록"
+            description: "댓글 목록"
           },
           pagination: {
             type: "object",
@@ -1493,11 +1466,11 @@ const baseOpenApiSpec = {
               },
               limit: {
                 type: "integer",
-                description: "페이지당 항목 수"
+                description: "페이지당 댓글 수"
               },
               total: {
                 type: "integer",
-                description: "총 항목 수"
+                description: "총 댓글 수"
               },
               totalPages: {
                 type: "integer",
@@ -1515,28 +1488,15 @@ const baseOpenApiSpec = {
           }
         }
       },
-      CelebrityResponse: {
+      CelebrityCommentCreateResponse: {
         type: "object",
         properties: {
           success: {
             type: "boolean",
-            description: "조회 성공 여부"
+            description: "댓글 작성 성공 여부"
           },
-          profile: {
-            $ref: "#/components/schemas/CelebrityProfile"
-          }
-        }
-      },
-      CelebrityCreateResponse: {
-        type: "object",
-        properties: {
-          success: {
-            type: "boolean",
-            description: "생성 성공 여부"
-          },
-          id: {
-            type: "string",
-            description: "생성된 유명인물 ID"
+          comment: {
+            $ref: "#/components/schemas/CelebrityComment"
           },
           message: {
             type: "string",
