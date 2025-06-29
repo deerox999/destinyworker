@@ -109,13 +109,34 @@ migrations_backup/               # 기존 SQL 마이그레이션 백업
 
 모든 API가 기존 URL을 유지하면서 내부적으로 Prisma ORM을 사용합니다:
 
-- `GET /api/comments` - 댓글 조회 (Prisma 기반)
-- `POST /api/json` - JSON 데이터 저장 (Prisma 기반)
-- `GET /api/json/{userId}` - JSON 데이터 조회 (Prisma 기반)
+#### 🔐 인증 API
 - `POST /api/auth/google/login` - Google OAuth 로그인
 - `POST /api/auth/logout` - 로그아웃
 - `GET /api/auth/me` - 사용자 정보 조회
 - `POST /api/auth/refresh` - 토큰 갱신
+
+#### 👤 사주 프로필 API (로그인 필요)
+- `GET /api/saju-profiles` - 내 사주 프로필 목록 조회
+- `POST /api/saju-profiles` - 사주 프로필 생성
+- `GET /api/saju-profiles/:id` - 특정 사주 프로필 조회
+- `PUT /api/saju-profiles/:id` - 사주 프로필 수정
+- `DELETE /api/saju-profiles/:id` - 사주 프로필 삭제
+
+#### 🎭 유명인물 API
+- `GET /api/celebrities` - 유명인물 목록 조회
+- `GET /api/celebrities/:id` - 특정 유명인물 조회
+- `POST /api/celebrities/:id/comments` - 댓글 작성 (로그인 필요)
+- `GET /api/celebrities/:id/comments` - 댓글 목록 조회
+
+#### 👨‍💼 관리자 API (관리자 권한 필요)
+- `GET /api/admin/users` - 가입한 유저 목록 조회 (페이지네이션, 검색 지원)
+- `GET /api/admin/users/:userId/profiles` - 특정 유저의 프로필 조회
+- `GET /api/admin/stats` - 전체 통계 정보 조회
+
+#### 📊 기타 API
+- `GET /api/comments` - 댓글 조회 (Prisma 기반)
+- `POST /api/json` - JSON 데이터 저장 (Prisma 기반)
+- `GET /api/json/{userId}` - JSON 데이터 조회 (Prisma 기반)
 
 ### 📊 마이그레이션 전후 비교
 
@@ -236,3 +257,107 @@ if (response) return response;
 - **코드 재사용성** - 공통 기능들이 모듈화되어 재사용 가능합니다
 
 > **참고**: 기존 SQL 마이그레이션 파일들은 `migrations_backup/` 폴더에 백업되어 있습니다.
+
+### 👨‍💼 관리자 API 사용 예시
+
+#### 1. 가입한 유저 목록 조회
+```bash
+# 기본 조회 (페이지네이션)
+GET /api/admin/users?page=1&limit=20
+
+# 검색 기능 사용
+GET /api/admin/users?search=홍길동&page=1&limit=10
+
+# 응답 예시
+{
+  "success": true,
+  "users": [
+    {
+      "id": 1,
+      "email": "user@example.com",
+      "name": "홍길동",
+      "picture": "https://...",
+      "role": "user",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "updatedAt": "2024-01-01T00:00:00Z",
+      "profileCount": 3
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 100,
+    "totalPages": 5
+  }
+}
+```
+
+#### 2. 특정 유저의 프로필 조회
+```bash
+GET /api/admin/users/123/profiles
+
+# 응답 예시
+{
+  "success": true,
+  "user": {
+    "id": 123,
+    "email": "user@example.com",
+    "name": "홍길동",
+    "picture": "https://...",
+    "role": "user",
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  "profiles": [
+    {
+      "id": 1,
+      "이름": "홍길동",
+      "년": "1990",
+      "월": "01",
+      "일": "15",
+      "시간": "14",
+      "분": "30",
+      "달력": "양력",
+      "성별": "남자",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "updatedAt": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### 3. 전체 통계 정보 조회
+```bash
+GET /api/admin/stats
+
+# 응답 예시
+{
+  "success": true,
+  "stats": {
+    "totalUsers": 100,
+    "totalProfiles": 250,
+    "adminUsers": 3,
+    "averageProfilesPerUser": "2.50"
+  }
+}
+```
+
+### 🔐 관리자 권한 설정
+
+관리자 API를 사용하려면 사용자의 `role` 필드가 `admin`으로 설정되어야 합니다:
+
+```sql
+-- 데이터베이스에서 직접 설정
+UPDATE users SET role = 'admin' WHERE id = 123;
+
+-- 또는 Prisma Studio 사용
+npx prisma studio
+```
+
+### 🚀 관리자 API 특징
+
+- **보안**: 모든 엔드포인트에 관리자 권한 체크
+- **페이지네이션**: 대용량 데이터 처리 지원
+- **검색**: 이름/이메일 기반 검색 기능
+- **통계**: 전체 시스템 통계 정보 제공
+- **관계 조회**: User ↔ SajuProfile 관계 자동 조인

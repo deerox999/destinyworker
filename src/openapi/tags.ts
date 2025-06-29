@@ -10,6 +10,10 @@ export const API_TAGS = [
   {
     name: "유명인물",
     description: "유명인물 사주 프로필 (공개 조회, 관리자 편집)"
+  },
+  {
+    name: "관리자",
+    description: "관리자 전용 API (관리자 권한 필요)"
   }
 ] as const;
 
@@ -18,5 +22,6 @@ export function getTagFromPath(path: string): string {
   if (path.startsWith('/api/auth')) return '인증';
   if (path.startsWith('/api/saju-profiles')) return '사주 프로필';
   if (path.startsWith('/api/celebrities')) return '유명인물';
+  if (path.startsWith('/api/admin')) return '관리자';
   return '기타';
 } 
