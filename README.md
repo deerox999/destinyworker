@@ -177,7 +177,6 @@ export function createAppRouter(): Router {
   const router = new Router();
   
   registerStaticRoutes(router);     // 정적 페이지
-  registerDatabaseRoutes(router);   // 데이터베이스 API
   registerAuthRoutes(router);       // 인증 API
   registerMyRoutes(router);         // ← 이 한 줄만 추가!
   

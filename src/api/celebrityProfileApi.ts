@@ -62,37 +62,6 @@ const isAdmin = async (request: Request, env: any): Promise<boolean> => {
   }
 };
 
-// 한글 -> 영어 필드 변환 (유명인물)
-const toDbFields = (data: any) => ({
-  id: data.id,
-  name: data.이름,
-  year: data.년,
-  month: data.월,
-  day: data.일,
-  calendar: data.달력,
-  gender: data.성별,
-  occupation: data.직업,
-  description: data.설명,
-  thumbnail: data.썸네일,
-});
-
-// 영어 -> 한글 필드 변환 (유명인물)
-const toKoreanFields = (profile: any) => ({
-  id: profile.id,
-  이름: profile.name,
-  년: profile.year,
-  월: profile.month,
-  일: profile.day,
-  달력: profile.calendar,
-  성별: profile.gender,
-  직업: profile.occupation,
-  설명: profile.description,
-  썸네일: profile.thumbnail,
-  조회수: profile.viewCount,
-  createdAt: profile.createdAt,
-  updatedAt: profile.updatedAt,
-});
-
 // 댓글 데이터 변환
 const toCommentFields = (comment: any) => ({
   id: comment.id,
