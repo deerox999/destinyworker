@@ -123,9 +123,49 @@ const validateCommentData = (data: any): boolean => {
   return data?.내용?.trim();
 };
 
-// 조회수 증가 함수
-const incrementViewCount = async (prisma: PrismaClient, celebrityId: string): Promise<number> => {
+// 중복 조회 방지를 위한 메모리 캐시 (30분 유지)
+const viewCache = new Map<string, number>();
+const CACHE_DURATION = 30 * 60 * 1000; // 30분
+
+// 클라이언트 식별자 생성
+const getClientFingerprint = (request: Request): string => {
+  const ip = request.headers.get('CF-Connecting-IP') || 
+             request.headers.get('X-Forwarded-For') || 
+             request.headers.get('X-Real-IP') || 
+             'unknown';
+  const userAgent = request.headers.get('User-Agent') || 'unknown';
+  return `${ip}:${userAgent.substring(0, 50)}`;
+};
+
+// 조회수 증가 함수 (중복 방지)
+const incrementViewCount = async (prisma: PrismaClient, celebrityId: string, request: Request): Promise<number> => {
   try {
+    const fingerprint = getClientFingerprint(request);
+    const cacheKey = `${celebrityId}:${fingerprint}`;
+    const now = Date.now();
+    
+    // 캐시에서 최근 조회 기록 확인
+    const lastView = viewCache.get(cacheKey);
+    if (lastView && (now - lastView) < CACHE_DURATION) {
+      // 30분 이내 동일 사용자의 조회는 조회수 증가 안함
+      const existingCount = await getViewCount(prisma, celebrityId);
+      return existingCount;
+    }
+    
+    // 캐시에 조회 기록 저장
+    viewCache.set(cacheKey, now);
+    
+    // 오래된 캐시 항목들 정리 (메모리 절약)
+    if (viewCache.size > 1000) {
+      const cutoff = now - CACHE_DURATION;
+      for (const [key, timestamp] of viewCache.entries()) {
+        if (timestamp < cutoff) {
+          viewCache.delete(key);
+        }
+      }
+    }
+    
+    // 조회수 증가
     const viewCount = await prisma.celebrityViewCount.upsert({
       where: { celebrityId },
       update: { viewCount: { increment: 1 } },
@@ -167,7 +207,7 @@ export const celebrityProfileApiHandlers = {
       const prisma = createPrismaClient(env.DB);
 
       // 조회수 증가
-      const viewCount = await incrementViewCount(prisma, celebrityId);
+      const viewCount = await incrementViewCount(prisma, celebrityId, request);
 
       // 최상위 댓글만 조회 (대댓글은 중첩으로 포함)
       const [total, comments] = await Promise.all([
