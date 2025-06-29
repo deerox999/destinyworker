@@ -1,4 +1,7 @@
-export const openApiSpec = {
+import { API_TAGS } from './openapi/tags';
+import { addTagsToOpenApiSpec } from './openapi/utils';
+
+const baseOpenApiSpec = {
   openapi: "3.0.0",
   info: {
     title: "Destiny API",
@@ -11,6 +14,7 @@ export const openApiSpec = {
       description: "로컬 개발 서버"
     }
   ],
+  tags: API_TAGS,
   paths: {
     "/api/comments": {
       get: {
@@ -276,6 +280,591 @@ export const openApiSpec = {
           },
           "401": {
             description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/saju-profiles": {
+      get: {
+        summary: "사주 프로필 목록 조회",
+        description: "로그인한 사용자의 모든 사주 프로필을 최신순으로 조회합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        responses: {
+          "200": {
+            description: "사주 프로필 목록 조회 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SajuProfileListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      post: {
+        summary: "사주 프로필 생성",
+        description: "새로운 사주 프로필을 생성합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/SajuProfileRequest"
+              }
+            }
+          }
+        },
+        responses: {
+          "201": {
+            description: "사주 프로필 생성 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SajuProfileCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "잘못된 요청",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/saju-profiles/{id}": {
+      get: {
+        summary: "특정 사주 프로필 조회",
+        description: "특정 사주 프로필의 상세 정보를 조회합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "사주 프로필 ID",
+            schema: {
+              type: "integer"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "사주 프로필 조회 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SajuProfileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            description: "권한 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "프로필을 찾을 수 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      put: {
+        summary: "사주 프로필 수정",
+        description: "기존 사주 프로필을 수정합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "사주 프로필 ID",
+            schema: {
+              type: "integer"
+            }
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/SajuProfileRequest"
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "사주 프로필 수정 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SajuProfileUpdateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "잘못된 요청",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            description: "권한 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "프로필을 찾을 수 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      delete: {
+        summary: "사주 프로필 삭제",
+        description: "기존 사주 프로필을 삭제합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "사주 프로필 ID",
+            schema: {
+              type: "integer"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "사주 프로필 삭제 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            description: "인증 실패",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            description: "권한 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "프로필을 찾을 수 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/celebrities": {
+      get: {
+        summary: "유명인물 목록 조회",
+        description: "유명인물 사주 프로필 목록을 페이징과 검색 기능으로 조회합니다. 인증이 필요하지 않습니다.",
+        parameters: [
+          {
+            name: "page",
+            in: "query",
+            description: "페이지 번호 (기본값: 1)",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              default: 1
+            }
+          },
+          {
+            name: "limit",
+            in: "query",
+            description: "페이지당 항목 수 (기본값: 20, 최대: 50)",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 50,
+              default: 20
+            }
+          },
+          {
+            name: "search",
+            in: "query",
+            description: "검색어 (이름, 직업, 설명에서 검색)",
+            schema: {
+              type: "string"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "유명인물 목록 조회 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CelebrityListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            description: "서버 오류",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      post: {
+        summary: "유명인물 생성",
+        description: "새로운 유명인물 사주 프로필을 생성합니다. 관리자 권한이 필요합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/CelebrityRequest"
+              }
+            }
+          }
+        },
+        responses: {
+          "201": {
+            description: "유명인물 생성 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CelebrityCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "잘못된 요청",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            description: "관리자 권한 필요",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            description: "이미 존재하는 ID",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/celebrities/{id}": {
+      get: {
+        summary: "특정 유명인물 조회",
+        description: "특정 유명인물의 사주 프로필을 조회합니다. 인증이 필요하지 않습니다.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "유명인물 ID",
+            schema: {
+              type: "string"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "유명인물 조회 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CelebrityResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "유명인물을 찾을 수 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      put: {
+        summary: "유명인물 수정",
+        description: "기존 유명인물 사주 프로필을 수정합니다. 관리자 권한이 필요합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "유명인물 ID",
+            schema: {
+              type: "string"
+            }
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/CelebrityRequest"
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "유명인물 수정 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            description: "잘못된 요청",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            description: "관리자 권한 필요",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "유명인물을 찾을 수 없음",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            description: "변경하려는 ID가 이미 존재",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      delete: {
+        summary: "유명인물 삭제",
+        description: "기존 유명인물 사주 프로필을 삭제합니다. 관리자 권한이 필요합니다.",
+        security: [
+          {
+            bearerAuth: []
+          }
+        ],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "유명인물 ID",
+            schema: {
+              type: "string"
+            }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "유명인물 삭제 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            description: "관리자 권한 필요",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            description: "유명인물을 찾을 수 없음",
             content: {
               "application/json": {
                 schema: {
@@ -612,7 +1201,352 @@ export const openApiSpec = {
             description: "수정 일시"
           }
         }
+      },
+      SajuProfileRequest: {
+        type: "object",
+        required: ["이름", "년", "월", "일", "시간", "분", "달력", "성별"],
+        properties: {
+          "이름": {
+            type: "string",
+            description: "이름"
+          },
+          "년": {
+            type: "string",
+            pattern: "^\\d{4}$",
+            description: "출생년도 (4자리)"
+          },
+          "월": {
+            type: "string",
+            pattern: "^(0[1-9]|1[0-2])$",
+            description: "출생월 (01-12)"
+          },
+          "일": {
+            type: "string",
+            pattern: "^(0[1-9]|[12]\\d|3[01])$",
+            description: "출생일 (01-31)"
+          },
+          "시간": {
+            type: "string",
+            pattern: "^([01]\\d|2[0-3])$",
+            description: "출생시간 (00-23)"
+          },
+          "분": {
+            type: "string",
+            pattern: "^[0-5]\\d$",
+            description: "출생분 (00-59)"
+          },
+          "달력": {
+            type: "string",
+            enum: ["양력", "음력"],
+            description: "달력 종류"
+          },
+          "성별": {
+            type: "string",
+            enum: ["남자", "여자"],
+            description: "성별"
+          }
+        }
+      },
+      SajuProfile: {
+        type: "object",
+        properties: {
+          id: {
+            type: "integer",
+            description: "프로필 ID"
+          },
+          "이름": {
+            type: "string",
+            description: "이름"
+          },
+          "년": {
+            type: "string",
+            description: "출생년도"
+          },
+          "월": {
+            type: "string",
+            description: "출생월"
+          },
+          "일": {
+            type: "string",
+            description: "출생일"
+          },
+          "시간": {
+            type: "string",
+            description: "출생시간"
+          },
+          "분": {
+            type: "string",
+            description: "출생분"
+          },
+          "달력": {
+            type: "string",
+            description: "달력 종류"
+          },
+          "성별": {
+            type: "string",
+            description: "성별"
+          },
+          createdAt: {
+            type: "string",
+            format: "date-time",
+            description: "생성 일시"
+          },
+          updatedAt: {
+            type: "string",
+            format: "date-time",
+            description: "수정 일시"
+          }
+        }
+      },
+      SajuProfileListResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "조회 성공 여부"
+          },
+          profiles: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/SajuProfile"
+            },
+            description: "사주 프로필 목록"
+          },
+          count: {
+            type: "integer",
+            description: "총 프로필 수"
+          }
+        }
+      },
+      SajuProfileResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "조회 성공 여부"
+          },
+          profile: {
+            $ref: "#/components/schemas/SajuProfile"
+          }
+        }
+      },
+      SajuProfileCreateResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "생성 성공 여부"
+          },
+          id: {
+            type: "integer",
+            description: "생성된 프로필 ID"
+          },
+          message: {
+            type: "string",
+            description: "성공 메시지"
+          }
+        }
+      },
+      SajuProfileUpdateResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "수정 성공 여부"
+          },
+          id: {
+            type: "integer",
+            description: "수정된 프로필 ID"
+          },
+          message: {
+            type: "string",
+            description: "성공 메시지"
+          }
+        }
+      },
+      CelebrityRequest: {
+        type: "object",
+        required: ["id", "이름", "년", "월", "일", "달력", "성별", "직업", "설명"],
+        properties: {
+          id: {
+            type: "string",
+            description: "유명인물 고유 ID (예: lee-seung-man)"
+          },
+          "이름": {
+            type: "string",
+            description: "이름"
+          },
+          "년": {
+            type: "string",
+            pattern: "^\\d{4}$",
+            description: "출생년도 (4자리)"
+          },
+          "월": {
+            type: "string",
+            pattern: "^(0[1-9]|1[0-2])$",
+            description: "출생월 (01-12)"
+          },
+          "일": {
+            type: "string",
+            pattern: "^(0[1-9]|[12]\\d|3[01])$",
+            description: "출생일 (01-31)"
+          },
+          "달력": {
+            type: "string",
+            enum: ["양력", "음력"],
+            description: "달력 종류"
+          },
+          "성별": {
+            type: "string",
+            enum: ["남자", "여자"],
+            description: "성별"
+          },
+          "직업": {
+            type: "string",
+            description: "직업"
+          },
+          "설명": {
+            type: "string",
+            description: "설명"
+          },
+          "썸네일": {
+            type: "string",
+            description: "썸네일 이미지 URL (선택사항)"
+          }
+        }
+      },
+      CelebrityProfile: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "유명인물 고유 ID"
+          },
+          "이름": {
+            type: "string",
+            description: "이름"
+          },
+          "년": {
+            type: "string",
+            description: "출생년도"
+          },
+          "월": {
+            type: "string",
+            description: "출생월"
+          },
+          "일": {
+            type: "string",
+            description: "출생일"
+          },
+          "달력": {
+            type: "string",
+            description: "달력 종류"
+          },
+          "성별": {
+            type: "string",
+            description: "성별"
+          },
+          "직업": {
+            type: "string",
+            description: "직업"
+          },
+          "설명": {
+            type: "string",
+            description: "설명"
+          },
+          "썸네일": {
+            type: "string",
+            description: "썸네일 이미지 URL"
+          },
+          createdAt: {
+            type: "string",
+            format: "date-time",
+            description: "생성 일시"
+          },
+          updatedAt: {
+            type: "string",
+            format: "date-time",
+            description: "수정 일시"
+          }
+        }
+      },
+      CelebrityListResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "조회 성공 여부"
+          },
+          profiles: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/CelebrityProfile"
+            },
+            description: "유명인물 프로필 목록"
+          },
+          pagination: {
+            type: "object",
+            properties: {
+              page: {
+                type: "integer",
+                description: "현재 페이지"
+              },
+              limit: {
+                type: "integer",
+                description: "페이지당 항목 수"
+              },
+              total: {
+                type: "integer",
+                description: "총 항목 수"
+              },
+              totalPages: {
+                type: "integer",
+                description: "총 페이지 수"
+              },
+              hasNext: {
+                type: "boolean",
+                description: "다음 페이지 존재 여부"
+              },
+              hasPrev: {
+                type: "boolean",
+                description: "이전 페이지 존재 여부"
+              }
+            }
+          }
+        }
+      },
+      CelebrityResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "조회 성공 여부"
+          },
+          profile: {
+            $ref: "#/components/schemas/CelebrityProfile"
+          }
+        }
+      },
+      CelebrityCreateResponse: {
+        type: "object",
+        properties: {
+          success: {
+            type: "boolean",
+            description: "생성 성공 여부"
+          },
+          id: {
+            type: "string",
+            description: "생성된 유명인물 ID"
+          },
+          message: {
+            type: "string",
+            description: "성공 메시지"
+          }
+        }
       }
     }
   }
-}; 
+};
+
+// 자동으로 태그를 추가하여 최종 OpenAPI 스펙 생성
+export const openApiSpec = addTagsToOpenApiSpec(baseOpenApiSpec); 

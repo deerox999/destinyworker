@@ -3,6 +3,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -36,6 +37,8 @@ model User {
   name      String
   /// 사용자 프로필 사진 URL (Google 계정 프로필 사진, 선택사항)
   picture   String?
+  /// 사용자 역할 (user, admin)
+  role      String   @default("user")
   /// 계정 생성 시간
   createdAt DateTime @default(now()) @map("created_at")
   /// 계정 정보 마지막 업데이트 시간
@@ -43,6 +46,8 @@ model User {
 
   /// 관계: 한 사용자는 여러 세션을 가질 수 있음
   sessions Session[]
+  /// 관계: 한 사용자는 여러 사주 프로필을 가질 수 있음
+  sajuProfiles SajuProfile[]
 
   @@map("users")
 }
@@ -82,4 +87,69 @@ model JsonStorage {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("json_storage")
+}
+
+/// 사주 프로필 테이블 - 사용자별 사주 정보 저장
+/// 한 사용자는 여러 개의 사주 프로필을 가질 수 있음 (가족, 친구 등)
+model SajuProfile {
+  /// 사주 프로필 고유 ID (자동 증가)
+  id        Int      @id @default(autoincrement())
+  /// 프로필 소유자의 사용자 ID (User 테이블과 연결)
+  userId    Int      @map("user_id")
+  /// 이름
+  name      String
+  /// 출생년도 (4자리)
+  year      String
+  /// 출생월 (2자리)
+  month     String
+  /// 출생일 (2자리)
+  day       String
+  /// 출생시간 (24시간 형식, 2자리)
+  hour      String
+  /// 출생분 (2자리)
+  minute    String
+  /// 달력 종류 (양력/음력)
+  calendar  String
+  /// 성별 (남자/여자)
+  gender    String
+  /// 프로필 생성 시간
+  createdAt DateTime @default(now()) @map("created_at")
+  /// 프로필 마지막 업데이트 시간
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// 관계: 사주 프로필은 하나의 사용자에 속함 (사용자 삭제 시 프로필도 삭제)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("saju_profiles")
+}
+
+/// 유명인물 사주 프로필 테이블 - 공개적으로 제공되는 유명인물들의 사주 정보
+/// 모든 사용자가 조회 가능하며, 관리자만 추가/수정/삭제 가능
+model CelebrityProfile {
+  /// 유명인물 고유 ID (문자열, 예: "lee-seung-man")
+  id          String   @id
+  /// 이름
+  name        String
+  /// 출생년도 (4자리)
+  year        String
+  /// 출생월 (2자리)
+  month       String
+  /// 출생일 (2자리)
+  day         String
+  /// 달력 종류 (양력/음력)
+  calendar    String
+  /// 성별 (남자/여자)
+  gender      String
+  /// 직업
+  occupation  String
+  /// 설명
+  description String
+  /// 썸네일 이미지 URL (선택사항)
+  thumbnail   String?
+  /// 프로필 생성 시간
+  createdAt   DateTime @default(now()) @map("created_at")
+  /// 프로필 마지막 업데이트 시간
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("celebrity_profiles")
 } 

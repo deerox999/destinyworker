@@ -1,6 +1,8 @@
 import { Router } from './router';
 import { registerDatabaseRoutes } from '../api/routes/databaseRoutes';
 import { registerAuthRoutes } from '../api/routes/authRoutes';
+import { registerSajuProfileRoutes } from '../api/routes/sajuProfileRoutes';
+import { registerCelebrityProfileRoutes } from '../api/routes/celebrityProfileRoutes';
 import { registerStaticRoutes } from './staticRoutes';
 
 /**
@@ -17,6 +19,12 @@ export function createAppRouter(): Router {
   
   // 인증 관련 라우트 등록
   registerAuthRoutes(router);
+  
+  // 사주 프로필 관련 라우트 등록
+  registerSajuProfileRoutes(router);
+  
+  // 유명인물 사주 프로필 관련 라우트 등록
+  registerCelebrityProfileRoutes(router);
 
   return router;
 } 

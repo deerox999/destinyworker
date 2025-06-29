@@ -21,7 +21,8 @@
   "devDependencies": {
     "lunar-javascript": "^1.7.3",
     "typescript": "5.8.3",
-    "wrangler": "4.16.1"
+    "wrangler": "4.16.1",
+    "swagger-typescript-api": "^13.2.7"
   },
   "dependencies": {
     "@prisma/adapter-d1": "^6.10.1",
@@ -39,6 +40,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "generate:swagger": "swagger-typescript-api -p http://localhost:9393/openapi.json -o ./src/generated --name api.ts --module-name-first-tag --axios"
   }
 }
