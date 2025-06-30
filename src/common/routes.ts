@@ -2,6 +2,7 @@ import { registerAuthRoutes } from "../api/routes/authRoutes";
 import { registerCelebrityProfileRoutes } from "../api/routes/celebrityProfileRoutes";
 import { registerSajuProfileRoutes } from "../api/routes/sajuProfileRoutes";
 import { registerAdminRoutes } from "../api/routes/adminRoutes";
+import { registerAiRoutes } from "../api/routes/aiRoutes";
 import { Router } from "./router";
 import { registerStaticRoutes } from "./staticRoutes";
 
@@ -15,6 +16,7 @@ export function createAppRouter(): Router {
   registerSajuProfileRoutes(router); // 사주 프로필 관련 라우트 등록
   registerCelebrityProfileRoutes(router); // 유명인물 사주 프로필 관련 라우트 등록
   registerAdminRoutes(router); // 관리자 관련 라우트 등록
+  registerAiRoutes(router); // AI 관련 라우트 등록
   
   // 디버깅: 등록된 라우트들 출력
   console.log("=== 등록된 라우트 목록 ===");
