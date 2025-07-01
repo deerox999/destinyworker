@@ -7,10 +7,22 @@ export interface RouteHandler {
   (request: Request, env: any, params?: Record<string, string>): Promise<Response>;
 }
 
+// Swagger 메타데이터 인터페이스
+export interface SwaggerMeta {
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  auth?: boolean;
+  requestBody?: any;
+  responses?: any;
+  parameters?: any[];
+}
+
 export interface Route {
   method: string;
   path: string;
   handler: RouteHandler;
+  swagger?: SwaggerMeta; // Swagger 메타데이터 추가
 }
 
 export class Router {
@@ -19,36 +31,36 @@ export class Router {
   /**
    * 라우트를 등록합니다
    */
-  register(method: string, path: string, handler: RouteHandler) {
-    this.routes.push({ method, path, handler });
+  register(method: string, path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
+    this.routes.push({ method, path, handler, swagger });
   }
 
   /**
    * GET 메서드 라우트를 등록합니다
    */
-  get(path: string, handler: RouteHandler) {
-    this.register('GET', path, handler);
+  get(path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
+    this.register('GET', path, handler, swagger);
   }
 
   /**
    * POST 메서드 라우트를 등록합니다
    */
-  post(path: string, handler: RouteHandler) {
-    this.register('POST', path, handler);
+  post(path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
+    this.register('POST', path, handler, swagger);
   }
 
   /**
    * PUT 메서드 라우트를 등록합니다
    */
-  put(path: string, handler: RouteHandler) {
-    this.register('PUT', path, handler);
+  put(path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
+    this.register('PUT', path, handler, swagger);
   }
 
   /**
    * DELETE 메서드 라우트를 등록합니다
    */
-  delete(path: string, handler: RouteHandler) {
-    this.register('DELETE', path, handler);
+  delete(path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
+    this.register('DELETE', path, handler, swagger);
   }
 
   /**

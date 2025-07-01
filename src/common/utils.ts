@@ -1,3 +1,6 @@
+import { createAppRouter } from "./routes";
+import { generateOpenApiFromRouter } from "./autoOpenApi";
+
 // CORS 헤더 추가 함수
 export function corsHeaders() {
   return {
@@ -29,25 +32,13 @@ export function htmlResponse(html: string, status = 200) {
   });
 }
 
-export function route(
-  url: URL,
-  request: Request,
-  path: string,
-  method: string
-) {
-  return url.pathname === path && request.method === method ? true : false;
+// OpenAPI 스펙 생성 함수
+export function generateOpenApiSpec() {
+  // 라우터 기반으로 OpenAPI 스펙 자동 생성
+  const appRouter = createAppRouter();
+  return generateOpenApiFromRouter(appRouter, {
+    title: "Destiny API",
+    version: "1.0.0",
+    description: "사주 서비스를 위한 백엔드 API",
+  });
 }
-
-// export async function route2(
-//   url: URL,
-//   request: Request,
-//   path: string,
-//   method: string,
-//   doSomething: () => Promise<Response>
-// ): Promise<Response | false> {
-//   const isMatch = url.pathname === path && request.method === method;
-//   if (isMatch) {
-//     return await doSomething();
-//   }
-//   return false;
-// }

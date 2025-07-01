@@ -1,27 +1,18 @@
 import { Router } from './router';
-import { API_TAGS } from '../openapi/tags';
 
 interface ApiConfig {
   title: string;
   version: string;
-  description: string;
-  tags: { name: string; description: string }[];
-}
-
-interface RouteConfig {
-  summary: string;
-  description: string;
-  tags: string[];
-  auth?: boolean;
-  requestBody?: any;
-  responses?: any;
-  parameters?: any[];
+  description: string
 }
 
 // 라우터에서 OpenAPI 스펙 자동 생성
 export function generateOpenApiFromRouter(router: Router, config: ApiConfig) {
   const paths: Record<string, any> = {};
   const routes = router.getRoutes();
+  
+  // 태그 목록 자동 수집
+  const tagSet = new Set<string>();
   
   // 각 라우트를 OpenAPI paths로 변환
   for (const route of routes) {
@@ -31,103 +22,67 @@ export function generateOpenApiFromRouter(router: Router, config: ApiConfig) {
       paths[pathKey] = {};
     }
     
-    // 기본적인 OpenAPI 스펙 생성
+    // swagger 메타데이터가 있으면 우선 사용, 없으면 자동 생성
+    const swagger = route.swagger;
+    
+    const autoTag = extractTagFromPath(route.path);
+    const autoAuth = inferAuthRequirement(route.path);
+    
     const operation: any = {
-      summary: getOperationSummary(route.method, route.path),
-      description: getOperationDescription(route.method, route.path),
-      tags: [getTagFromPath(route.path)],
-      responses: {
-        "200": {
-          description: "성공",
-          content: {
-            "application/json": {
-              schema: {
-                type: "object"
-              }
-            }
-          }
-        },
-        "400": {
-          description: "잘못된 요청",
-          content: {
-            "application/json": {
-              schema: {
-                $ref: "#/components/schemas/ErrorResponse"
-              }
-            }
-          }
-        },
-        "401": {
-          description: "인증 필요",
-          content: {
-            "application/json": {
-              schema: {
-                $ref: "#/components/schemas/ErrorResponse"
-              }
-            }
-          }
-        },
-        "403": {
-          description: "권한 없음",
-          content: {
-            "application/json": {
-              schema: {
-                $ref: "#/components/schemas/ErrorResponse"
-              }
-            }
-          }
-        },
-        "500": {
-          description: "서버 오류",
-          content: {
-            "application/json": {
-              schema: {
-                $ref: "#/components/schemas/ErrorResponse"
-              }
-            }
-          }
-        }
-      }
+      summary: swagger?.summary || generateAutoSummary(route.method, route.path),
+      description: swagger?.description || generateAutoDescription(route.method, route.path),
+      tags: swagger?.tags || [autoTag],
+      responses: swagger?.responses || getStandardResponses()
     };
     
-    // 인증이 필요한 경로에 보안 스키마 추가
-    if (isAuthRequired(route.path)) {
+    // 태그 수집
+    const tags = swagger?.tags || [autoTag];
+    tags.forEach(tag => tagSet.add(tag));
+    
+    // 인증 정보
+    const authRequired = swagger?.auth !== undefined ? swagger.auth : autoAuth;
+    if (authRequired) {
       operation.security = [{ bearerAuth: [] }];
     }
     
-    // POST 요청에 requestBody 추가
-    if (route.method === 'POST' || route.method === 'PUT') {
+    // requestBody
+    if (swagger?.requestBody) {
+      operation.requestBody = swagger.requestBody;
+    } else if (route.method === 'POST' || route.method === 'PUT') {
       operation.requestBody = {
         required: true,
         content: {
           "application/json": {
-            schema: {
-              type: "object"
-            }
+            schema: { type: "object" }
           }
         }
       };
     }
     
-    // 경로 파라미터가 있는 경우 parameters 추가
-    const pathParams = extractPathParameters(route.path);
-    if (pathParams.length > 0) {
-      operation.parameters = pathParams.map(param => ({
-        name: param,
-        in: "path",
-        required: true,
-        description: `${param} 파라미터`,
-        schema: {
-          type: "string"
-        }
-      }));
-    }
-    
-    // 쿼리 파라미터 추가
-    const queryParams = getQueryParameters(route.path);
-    if (queryParams.length > 0) {
-      if (!operation.parameters) operation.parameters = [];
-      operation.parameters.push(...queryParams);
+    // parameters
+    if (swagger?.parameters) {
+      operation.parameters = swagger.parameters;
+    } else {
+      // 경로 파라미터 자동 추가
+      const pathParams = extractPathParameters(route.path);
+      if (pathParams.length > 0) {
+        operation.parameters = pathParams.map(param => ({
+          name: param,
+          in: "path",
+          required: true,
+          description: generateParamDescription(param, route.path),
+          schema: { type: "string" }
+        }));
+      }
+      
+      // 쿼리 파라미터 자동 추가 (특정 패턴에서)
+      const queryParams = inferQueryParameters(route.path, route.method);
+      if (queryParams.length > 0) {
+        operation.parameters = [
+          ...(operation.parameters || []),
+          ...queryParams
+        ];
+      }
     }
     
     paths[pathKey][route.method.toLowerCase()] = operation;
@@ -135,18 +90,14 @@ export function generateOpenApiFromRouter(router: Router, config: ApiConfig) {
   
   return {
     openapi: "3.0.0",
-    info: {
-      title: config.title,
-      version: config.version,
-      description: config.description,
-    },
+    info: config,
     servers: [
       {
         url: "http://localhost:9393",
         description: "로컬 개발 서버"
       }
     ],
-    tags: config.tags,
+    tags: generateTagDescriptions(Array.from(tagSet)),
     paths,
     components: {
       securitySchemes: {
@@ -171,140 +122,157 @@ export function generateOpenApiFromRouter(router: Router, config: ApiConfig) {
   };
 }
 
-// 경로에서 태그 추출
-function getTagFromPath(path: string): string {
-  if (path.startsWith('/api/auth')) {
-    return "인증";
-  } else if (path.startsWith('/api/saju-profiles')) {
-    return "사주 프로필";
-  } else if (path.startsWith('/api/celebrities')) {
-    return "유명인물";
-  } else if (path.startsWith('/api/admin')) {
-    return "관리자";
-  } else if (path.startsWith('/api/json') || path.startsWith('/api/comments')) {
-    return "데이터베이스";
-  } else {
-    return "기타";
+// 경로에서 태그 자동 추출
+function extractTagFromPath(path: string): string {
+  const segments = path.split('/').filter(segment => segment && !segment.startsWith(':'));
+  
+  if (segments.length >= 2 && segments[0] === 'api') {
+    const mainSegment = segments[1];
+    
+    // 복합 단어를 한글로 변환
+    const tagMap: Record<string, string> = {
+      'auth': '인증',
+      'saju-profiles': '사주 프로필',
+      'celebrities': '유명인물',
+      'admin': '관리자',
+      'detailed-fortune-telling': 'AI 운세',
+      'ai-models': 'AI 모델'
+    };
+    
+    return tagMap[mainSegment] || capitalizeFirst(mainSegment.replace(/-/g, ' '));
   }
+  
+  return '기타';
 }
 
-// 인증이 필요한 경로인지 확인
-function isAuthRequired(path: string): boolean {
-  const authPaths = [
-    '/api/auth/logout',
-    '/api/auth/me',
-    '/api/auth/refresh',
-    '/api/saju-profiles',
-    '/api/celebrities',
-    '/api/admin'
+// 인증 필요 여부 자동 추론
+function inferAuthRequirement(path: string): boolean {
+  // 공개 API 패턴들
+  const publicPatterns = [
+    '/api/auth/google/login',
+    '/api/celebrities/request', // 유명인물 요청은 공개
+    '/docs',
+    '/',
+    '/api/openapi.json'
   ];
   
-  return authPaths.some(authPath => path.startsWith(authPath));
+  // 명시적으로 공개인 경우
+  if (publicPatterns.some(pattern => path === pattern)) {
+    return false;
+  }
+  
+  // auth 관련이지만 로그인이 아닌 경우는 인증 필요
+  if (path.startsWith('/api/auth/') && !path.includes('/login')) {
+    return true;
+  }
+  
+  // admin, profiles 등은 인증 필요
+  if (path.includes('/admin') || path.includes('/profiles')) {
+    return true;
+  }
+  
+  // 기본적으로 /api/로 시작하는 것들은 인증 필요로 추정
+  return path.startsWith('/api/');
 }
 
 // 경로에서 파라미터 추출
 function extractPathParameters(path: string): string[] {
-  const params: string[] = [];
-  const parts = path.split('/');
-  
-  for (const part of parts) {
-    if (part.startsWith(':')) {
-      params.push(part.slice(1));
-    }
-  }
-  
-  return params;
+  return path.split('/').filter(part => part.startsWith(':')).map(part => part.slice(1));
 }
 
-// API 요약 정보 생성
-function getOperationSummary(method: string, path: string): string {
-  if (path === '/api/admin/users') {
-    return '가입한 유저 목록 조회';
-  } else if (path === '/api/admin/users/:userId/profiles') {
-    return '특정 유저의 프로필 조회';
-  } else if (path === '/api/admin/stats') {
-    return '전체 통계 정보 조회';
-  } else if (path === '/api/saju-profiles') {
-    return method === 'GET' ? '내 사주 프로필 목록 조회' : '사주 프로필 생성';
-  } else if (path.startsWith('/api/saju-profiles/')) {
-    if (method === 'GET') return '특정 사주 프로필 조회';
-    if (method === 'PUT') return '사주 프로필 수정';
-    if (method === 'DELETE') return '사주 프로필 삭제';
-  } else if (path === '/api/auth/google/login') {
-    return 'Google OAuth 로그인';
-  } else if (path === '/api/auth/logout') {
-    return '로그아웃';
-  } else if (path === '/api/auth/me') {
-    return '사용자 정보 조회';
-  } else if (path === '/api/auth/refresh') {
-    return '토큰 갱신';
-  }
-  
-  return `${method} ${path}`;
+// 자동 요약 생성
+function generateAutoSummary(method: string, path: string): string {
+  const action = getActionFromMethod(method);
+  const resource = extractResourceFromPath(path);
+  return `${resource} ${action}`;
 }
 
-// API 상세 설명 생성
-function getOperationDescription(method: string, path: string): string {
-  if (path === '/api/admin/users') {
-    return '가입한 모든 유저의 목록을 조회합니다. 페이지네이션과 검색 기능을 지원합니다.';
-  } else if (path === '/api/admin/users/:userId/profiles') {
-    return '특정 유저가 보유한 모든 사주 프로필을 조회합니다.';
-  } else if (path === '/api/admin/stats') {
-    return '전체 시스템의 통계 정보를 조회합니다. (총 사용자 수, 프로필 수, 관리자 수 등)';
-  } else if (path === '/api/saju-profiles') {
-    return method === 'GET' ? '현재 로그인한 사용자의 사주 프로필 목록을 조회합니다.' : '새로운 사주 프로필을 생성합니다.';
-  } else if (path.startsWith('/api/saju-profiles/')) {
-    if (method === 'GET') return '특정 사주 프로필의 상세 정보를 조회합니다.';
-    if (method === 'PUT') return '기존 사주 프로필을 수정합니다.';
-    if (method === 'DELETE') return '사주 프로필을 삭제합니다.';
-  } else if (path === '/api/auth/google/login') {
-    return 'Google OAuth를 통해 로그인합니다.';
-  } else if (path === '/api/auth/logout') {
-    return '현재 세션을 종료합니다.';
-  } else if (path === '/api/auth/me') {
-    return '현재 로그인한 사용자의 정보를 조회합니다.';
-  } else if (path === '/api/auth/refresh') {
-    return 'JWT 토큰을 갱신합니다.';
-  }
-  
-  return `${method} 요청을 처리합니다.`;
+// 자동 설명 생성
+function generateAutoDescription(method: string, path: string): string {
+  const action = getActionFromMethod(method);
+  const resource = extractResourceFromPath(path);
+  return `${resource}을(를) ${action}합니다.`;
 }
 
-// 쿼리 파라미터 정보 생성
-function getQueryParameters(path: string): any[] {
-  if (path === '/api/admin/users') {
+// HTTP 메서드에서 액션 추출
+function getActionFromMethod(method: string): string {
+  const methodMap: Record<string, string> = {
+    'GET': '조회',
+    'POST': '생성',
+    'PUT': '수정',
+    'DELETE': '삭제',
+    'PATCH': '부분 수정'
+  };
+  return methodMap[method] || method.toLowerCase();
+}
+
+// 경로에서 리소스명 자동 추출
+function extractResourceFromPath(path: string): string {
+  const segments = path.split('/').filter(segment => segment && !segment.startsWith(':'));
+  
+  // 특별한 경우들 처리
+  if (path.includes('/comments')) return '댓글';
+  if (path.includes('/request')) return '요청';
+  if (path.includes('/stats')) return '통계';
+  if (path.includes('/auth/me')) return '사용자 정보';
+  if (path.includes('/auth/refresh')) return '토큰';
+  if (path.includes('/auth/logout')) return '세션';
+  if (path.includes('/auth/login')) return '로그인';
+  
+  // 마지막 의미있는 세그먼트 사용
+  if (segments.length >= 2) {
+    const lastSegment = segments[segments.length - 1];
+    
+    // 복합 단어 처리
+    const resourceMap: Record<string, string> = {
+      'profiles': '프로필',
+      'celebrities': '유명인물',
+      'users': '사용자',
+      'requests': '요청 목록',
+      'models': '모델 목록',
+      'detailed-fortune-telling': '상세 운세'
+    };
+    
+    return resourceMap[lastSegment] || lastSegment;
+  }
+  
+  return '데이터';
+}
+
+// 파라미터 설명 자동 생성
+function generateParamDescription(param: string, path: string): string {
+  const paramMap: Record<string, string> = {
+    'id': '식별자',
+    'userId': '사용자 ID',
+    'commentId': '댓글 ID'
+  };
+  
+  return paramMap[param] || `${param} 값`;
+}
+
+// 쿼리 파라미터 자동 추론
+function inferQueryParameters(path: string, method: string): any[] {
+  // 목록 조회 API에 대해서만 페이징 파라미터 추가
+  if (method === 'GET' && (
+    path.includes('/users') || 
+    path.includes('/requests') ||
+    path.endsWith('/profiles') ||
+    path.endsWith('/celebrities')
+  )) {
     return [
       {
         name: 'page',
         in: 'query',
         required: false,
-        description: '페이지 번호 (기본값: 1)',
-        schema: {
-          type: 'integer',
-          default: 1,
-          minimum: 1
-        }
+        description: '페이지 번호',
+        schema: { type: 'integer', default: 1, minimum: 1 }
       },
       {
         name: 'limit',
         in: 'query',
         required: false,
-        description: '페이지당 항목 수 (기본값: 20)',
-        schema: {
-          type: 'integer',
-          default: 20,
-          minimum: 1,
-          maximum: 100
-        }
-      },
-      {
-        name: 'search',
-        in: 'query',
-        required: false,
-        description: '검색어 (이름 또는 이메일)',
-        schema: {
-          type: 'string'
-        }
+        description: '페이지당 항목 수',
+        schema: { type: 'integer', default: 20, minimum: 1, maximum: 100 }
       }
     ];
   }
@@ -312,38 +280,74 @@ function getQueryParameters(path: string): any[] {
   return [];
 }
 
-// JSDoc 주석에서 OpenAPI 정보 추출
-export function parseJSDocToOpenApi(comment: string): RouteConfig {
-  const lines = comment.split('\n').map(line => line.trim());
-  
-  const config: RouteConfig = {
-    summary: '',
-    description: '',
-    tags: [],
-  };
-  
-  for (const line of lines) {
-    if (line.startsWith('@summary')) {
-      config.summary = line.replace('@summary', '').trim();
-    } else if (line.startsWith('@description')) {
-      config.description = line.replace('@description', '').trim();
-    } else if (line.startsWith('@tags')) {
-      config.tags = line.replace('@tags', '').split(',').map(t => t.trim());
-    } else if (line.startsWith('@auth')) {
-      config.auth = true;
-    }
-  }
-  
-  return config;
+// 태그 설명 자동 생성
+function generateTagDescriptions(tags: string[]): any[] {
+  return tags.map(tag => {
+    const descriptionMap: Record<string, string> = {
+      '인증': 'Google OAuth 로그인 및 세션 관리',
+      '사주 프로필': '개인 사주 프로필 관리',
+      '유명인물': '유명인물 사주 프로필 및 댓글',
+      '관리자': '관리자 전용 API',
+      'AI 운세': 'AI 기반 상세 운세 분석',
+      'AI 모델': 'AI 모델 정보'
+    };
+    
+    return {
+      name: tag,
+      description: descriptionMap[tag] || `${tag} 관련 API`
+    };
+  });
 }
 
-// 사용 예시:
-/*
-router.get('/api/celebrities', 
-  // JSDoc 주석으로 API 정보 정의
-  // @summary 유명인물 목록 조회
-  // @description 유명인물 사주 프로필 목록을 페이징과 검색 기능으로 조회합니다.
-  // @tags 유명인물
-  celebrityProfileApiHandlers.getCelebrites
-);
-*/ 
+// 문자열 첫 글자 대문자화
+function capitalizeFirst(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// 표준 응답 정의
+function getStandardResponses() {
+  return {
+    "200": {
+      description: "성공",
+      content: {
+        "application/json": {
+          schema: { type: "object" }
+        }
+      }
+    },
+    "400": {
+      description: "잘못된 요청",
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
+    "401": {
+      description: "인증 필요",
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
+    "403": {
+      description: "권한 없음", 
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
+    "500": {
+      description: "서버 오류",
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+        }
+      }
+    }
+  };
+}
+
+ 
