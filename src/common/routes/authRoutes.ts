@@ -1,5 +1,5 @@
-import { Router } from '../../common/router';
-import { googleAuthApiHandlers } from '../auth/googleAuthApi';
+import { Router } from '../router';
+import { googleAuthApiHandlers } from '../../api/googleAuthApi';
 
 /**
  * 인증 관련 API 라우트들을 등록합니다

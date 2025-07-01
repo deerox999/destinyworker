@@ -1,5 +1,5 @@
-import { Router } from '../../common/router';
-import { sajuProfileApiHandlers } from '../sajuProfileApi';
+import { Router } from '../router';
+import { sajuProfileApiHandlers } from '../../api/sajuProfileApi';
 
 /**
  * 사주 프로필 관련 라우트를 등록합니다
