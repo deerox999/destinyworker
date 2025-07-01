@@ -49,8 +49,27 @@ export default {
         // AI 인스턴스 준비 (Gateway 사용 시 향상된 기능 제공)
         let aiInstance: any = env.AI;
 
-        if (useGateway && gatewayId) {
-          aiInstance = env.AI.gateway(gatewayId);
+        if (
+          useGateway &&
+          gatewayId &&
+          typeof gatewayId === "string" &&
+          gatewayId.trim().length > 0
+        ) {
+          try {
+            console.log("AI Gateway 초기화:", gatewayId);
+            aiInstance = env.AI.gateway(gatewayId.trim());
+            console.log("AI Gateway 초기화 성공");
+          } catch (gatewayError) {
+            console.warn(
+              "AI Gateway 초기화 실패, 기본 AI 인스턴스 사용:",
+              gatewayError
+            );
+            aiInstance = env.AI; // 폴백으로 기본 AI 사용
+          }
+        } else if (useGateway) {
+          console.warn(
+            "Gateway ID가 유효하지 않습니다. 기본 AI 인스턴스를 사용합니다."
+          );
         }
 
         // 사용할 모델 결정 (폴백 체계 포함)
@@ -62,44 +81,153 @@ export default {
           "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
         ];
 
-        // 고급 옵션 구성
-        const advancedOptions: any = {
+        // AI Gateway는 파라미터에 대해 더 엄격하므로 기본/고급 옵션 분리
+        const baseOptions: any = {
           messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+            {
+              role: "system",
+              content: systemPrompt || "당신은 전문 사주명리학자입니다.",
+            },
+            { role: "user", content: userPrompt || "사주 분석을 해주세요." },
           ],
-          // 기본 파라미터
-          max_tokens: max_tokens || 1500,
-          temperature: temperature !== undefined ? temperature : 0.3,
+          max_tokens: Math.max(1, Math.min(max_tokens || 1500, 32000)),
+          temperature: Math.max(
+            0,
+            Math.min(temperature !== undefined ? temperature : 0.3, 2.0)
+          ),
         };
 
-        // 고급 파라미터들을 조건부로 추가
-        if (top_p !== undefined) advancedOptions.top_p = top_p; // 0.0~1.0, 더 다양한 응답을 원할 때
-        if (frequency_penalty !== undefined) advancedOptions.frequency_penalty = frequency_penalty; // -2.0~2.0, 반복 줄이기
-        if (presence_penalty !== undefined) advancedOptions.presence_penalty = presence_penalty; // -2.0~2.0, 새로운 주제 장려
-        if (seed !== undefined) advancedOptions.seed = seed; // 재현 가능한 결과
-        if (stream) advancedOptions.stream = true; // 스트리밍 응답
-        if (returnRawResponse) advancedOptions.returnRawResponse = true; // 원시 응답 반환 설정
+        // Gateway 사용 시와 아닐 때 다른 옵션 구성
+        let advancedOptions: any;
+
+        if (useGateway) {
+          // Gateway 사용 시: 기본 파라미터만 사용 (안정성 우선)
+          console.log("Gateway 모드: 기본 파라미터만 사용");
+          advancedOptions = { ...baseOptions };
+
+          // Gateway에서도 안전한 파라미터만 추가
+          if (stream === true) {
+            advancedOptions.stream = true;
+          }
+        } else {
+          // 일반 모드: 모든 고급 파라미터 사용 가능
+          console.log("일반 모드: 고급 파라미터 사용");
+          advancedOptions = { ...baseOptions };
+
+          // 고급 파라미터들을 조건부로 추가 (유효한 값만)
+          if (typeof top_p === "number" && top_p >= 0 && top_p <= 1) {
+            advancedOptions.top_p = top_p;
+          }
+          if (
+            typeof frequency_penalty === "number" &&
+            frequency_penalty >= -2 &&
+            frequency_penalty <= 2
+          ) {
+            advancedOptions.frequency_penalty = frequency_penalty;
+          }
+          if (
+            typeof presence_penalty === "number" &&
+            presence_penalty >= -2 &&
+            presence_penalty <= 2
+          ) {
+            advancedOptions.presence_penalty = presence_penalty;
+          }
+          if (typeof seed === "number" && Number.isInteger(seed)) {
+            advancedOptions.seed = seed;
+          }
+          if (stream === true) {
+            advancedOptions.stream = true;
+          }
+          if (returnRawResponse === true) {
+            advancedOptions.returnRawResponse = true;
+          }
+        }
+
+        console.log(
+          "AI 요청 파라미터:",
+          JSON.stringify(
+            {
+              model: primaryModel,
+              options: advancedOptions,
+              useGateway: useGateway,
+              gatewayId: gatewayId,
+            },
+            null,
+            2
+          )
+        );
 
         const result = await aiInstance.run(
           primaryModel as any,
           advancedOptions
         );
 
-        // 스트리밍 응답인 경우 직접 반환
-        if (stream && result instanceof Response) {
-          // 스트리밍 응답에 추가 헤더 설정
-          const headers = new Headers(result.headers);
-          headers.set("X-AI-Model", primaryModel);
-          headers.set("X-Gateway-Enabled", useGateway.toString());
-          headers.set("Access-Control-Allow-Origin", "*");
-          headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-          headers.set("Access-Control-Allow-Headers", "Content-Type");
+        console.log(
+          "AI 응답 타입:",
+          typeof result,
+          "instanceof Response:",
+          result instanceof Response
+        );
+        console.log("AI 응답 내용:", result);
+        console.log("AI 응답 constructor:", result?.constructor?.name);
 
-          return new Response(result.body, {
-            status: result.status,
-            headers: headers,
-          });
+        // 스트리밍 응답 처리 - ReadableStream 또는 Response 객체 감지
+        if (
+          stream &&
+          (result instanceof Response ||
+            result instanceof ReadableStream ||
+            result?.constructor?.name === "ReadableStream")
+        ) {
+          console.log("스트리밍 응답 처리");
+
+          // ReadableStream인 경우 Response로 래핑
+          if (
+            result instanceof ReadableStream ||
+            result?.constructor?.name === "ReadableStream"
+          ) {
+            console.log("ReadableStream을 Response로 래핑");
+
+            return new Response(result, {
+              status: 200,
+              headers: {
+                "Content-Type": "text/plain; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "X-AI-Model": primaryModel,
+                "X-Gateway-Enabled": useGateway.toString(),
+                "X-Stream-Response": "true",
+              },
+            });
+          }
+
+          // Response 객체인 경우
+          if (result instanceof Response) {
+            console.log("Response 객체 스트리밍 처리");
+            const headers = new Headers(result.headers);
+            headers.set("X-AI-Model", primaryModel);
+            headers.set("X-Gateway-Enabled", useGateway.toString());
+            headers.set("Access-Control-Allow-Origin", "*");
+            headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+            headers.set("Access-Control-Allow-Headers", "Content-Type");
+
+            return new Response(result.body, {
+              status: result.status,
+              headers: headers,
+            });
+          }
+        }
+
+        // 스트리밍이 아닌 응답 처리
+        console.log("일반 응답 처리");
+
+        // result가 null이거나 빈 객체인 경우 검증
+        if (
+          !result ||
+          (typeof result === "object" && Object.keys(result).length === 0)
+        ) {
+          console.warn("AI 응답이 비어있습니다:", result);
+          throw new Error("AI 모델로부터 유효한 응답을 받지 못했습니다.");
         }
 
         /**
@@ -116,6 +244,7 @@ export default {
             gateway_enabled: useGateway,
             timestamp: new Date().toISOString(),
             stream_enabled: stream,
+            response_type: typeof result,
             // 추가 메타데이터는 여기에
           },
         };
@@ -190,7 +319,10 @@ export default {
             total_count: availableModels.length,
             recommended_models: recommendedForSaju
               .filter((m: any) => m.recommended_for_saju)
-              .sort((a: any, b: any) => b.saju_suitability_score - a.saju_suitability_score)
+              .sort(
+                (a: any, b: any) =>
+                  b.saju_suitability_score - a.saju_suitability_score
+              )
               .slice(0, 5),
           }),
           {
