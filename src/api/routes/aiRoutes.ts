@@ -10,13 +10,7 @@ export function registerAiRoutes(router: Router): void {
     return await DestinyTellerApi.fetch(request, env);
   });
   
-  // 🔄 기존 간단한 사주 풀이 API (하위 호환성)
-  router.post("/api/fortune-telling", async (request: Request, env: any) => {
-    return await DestinyTellerApi.fetch(request, env);
-  });
-  
-  // AI 데이터 처리 API (기존 D1 관련)
-  router.get("/api/data/*", async (request: Request, env: any) => {
+  router.get("/api/ai-models", async (request: Request, env: any) => {
     return await DestinyTellerApi.fetch(request, env);
   });
 }
