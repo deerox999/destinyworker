@@ -44,21 +44,12 @@ export default {
           frequency_penalty, // 빈도 페널티
           presence_penalty, // 존재 페널티
           seed, // 재현 가능한 결과를 위한 시드
-          enableFallback = true, // 폴백 모델 사용 여부
         }: any = await request.json();
 
         // AI 인스턴스 준비 (Gateway 사용 시 향상된 기능 제공)
         let aiInstance: any = env.AI;
 
         if (useGateway && gatewayId) {
-          /**
-           * AI Gateway 사용의 장점:
-           * - 요청/응답 로깅 및 모니터링
-           * - 자동 캐싱으로 성능 향상
-           * - 재시도 로직과 폴백 모델 설정
-           * - 사용량 분석 및 비용 최적화
-           * - A/B 테스트를 위한 트래픽 분할
-           */
           aiInstance = env.AI.gateway(gatewayId);
         }
 
@@ -84,106 +75,68 @@ export default {
 
         // 고급 파라미터들을 조건부로 추가
         if (top_p !== undefined) advancedOptions.top_p = top_p; // 0.0~1.0, 더 다양한 응답을 원할 때
-        if (frequency_penalty !== undefined)
-          advancedOptions.frequency_penalty = frequency_penalty; // -2.0~2.0, 반복 줄이기
-        if (presence_penalty !== undefined)
-          advancedOptions.presence_penalty = presence_penalty; // -2.0~2.0, 새로운 주제 장려
+        if (frequency_penalty !== undefined) advancedOptions.frequency_penalty = frequency_penalty; // -2.0~2.0, 반복 줄이기
+        if (presence_penalty !== undefined) advancedOptions.presence_penalty = presence_penalty; // -2.0~2.0, 새로운 주제 장려
         if (seed !== undefined) advancedOptions.seed = seed; // 재현 가능한 결과
         if (stream) advancedOptions.stream = true; // 스트리밍 응답
         if (returnRawResponse) advancedOptions.returnRawResponse = true; // 원시 응답 반환 설정
 
-        // 메인 모델로 시도
-        try {
-          const result = await aiInstance.run(
-            primaryModel as any,
-            advancedOptions
-          );
+        const result = await aiInstance.run(
+          primaryModel as any,
+          advancedOptions
+        );
 
-          /**
-           * 응답 후처리 및 메타데이터 추가
-           * - 사용된 모델 정보
-           * - 토큰 사용량 (가능한 경우)
-           * - 응답 시간 측정
-           * - 품질 지표
-           */
-          const enhancedResponse = {
-            ...result,
-            metadata: {
-              model_used: primaryModel,
-              gateway_enabled: useGateway,
-              timestamp: new Date().toISOString(),
-              // 추가 메타데이터는 여기에
-            },
-          };
+        // 스트리밍 응답인 경우 직접 반환
+        if (stream && result instanceof Response) {
+          // 스트리밍 응답에 추가 헤더 설정
+          const headers = new Headers(result.headers);
+          headers.set("X-AI-Model", primaryModel);
+          headers.set("X-Gateway-Enabled", useGateway.toString());
+          headers.set("Access-Control-Allow-Origin", "*");
+          headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+          headers.set("Access-Control-Allow-Headers", "Content-Type");
 
-          return new Response(JSON.stringify(enhancedResponse), {
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "POST, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type",
-              // 사용된 모델 정보를 헤더로 전달
-              "X-AI-Model": primaryModel,
-              "X-Gateway-Enabled": useGateway.toString(),
-            },
+          return new Response(result.body, {
+            status: result.status,
+            headers: headers,
           });
-        } catch (primaryError) {
-          console.warn(`주 모델 ${primaryModel} 실패:`, primaryError);
-
-          // 폴백 모델 시도 (enableFallback이 true인 경우)
-          if (enableFallback) {
-            for (const fallbackModel of fallbackModels) {
-              try {
-                console.log(`폴백 모델 시도: ${fallbackModel}`);
-
-                const fallbackResult = await aiInstance.run(
-                  fallbackModel as any,
-                  {
-                    ...advancedOptions,
-                    // 폴백 모델에서는 더 보수적인 설정 사용
-                    max_tokens: Math.min(advancedOptions.max_tokens, 1000),
-                    temperature: Math.min(advancedOptions.temperature, 0.5),
-                  }
-                );
-
-                const enhancedResponse = {
-                  ...fallbackResult,
-                  metadata: {
-                    model_used: fallbackModel,
-                    fallback_used: true,
-                    primary_model_failed: primaryModel,
-                    gateway_enabled: useGateway,
-                    timestamp: new Date().toISOString(),
-                  },
-                };
-
-                return new Response(JSON.stringify(enhancedResponse), {
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "POST, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type",
-                    "X-AI-Model": fallbackModel,
-                    "X-Fallback-Used": "true",
-                    "X-Gateway-Enabled": useGateway.toString(),
-                  },
-                });
-              } catch (fallbackError) {
-                console.warn(`폴백 모델 ${fallbackModel} 실패:`, fallbackError);
-                continue; // 다음 폴백 모델 시도
-              }
-            }
-          }
-
-          // 모든 모델이 실패한 경우
-          throw primaryError;
         }
+
+        /**
+         * 응답 후처리 및 메타데이터 추가
+         * - 사용된 모델 정보
+         * - 토큰 사용량 (가능한 경우)
+         * - 응답 시간 측정
+         * - 품질 지표
+         */
+        const enhancedResponse = {
+          ...(result || {}), // result가 null/undefined일 경우 빈 객체 사용
+          metadata: {
+            model_used: primaryModel,
+            gateway_enabled: useGateway,
+            timestamp: new Date().toISOString(),
+            stream_enabled: stream,
+            // 추가 메타데이터는 여기에
+          },
+        };
+
+        return new Response(JSON.stringify(enhancedResponse), {
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+            // 사용된 모델 정보를 헤더로 전달
+            "X-AI-Model": primaryModel,
+            "X-Gateway-Enabled": useGateway.toString(),
+          },
+        });
       } catch (error) {
         console.error("상세 사주 풀이 오류:", error);
-
         return new Response(
           JSON.stringify({
-            error: "상세 사주 풀이 중 오류가 발생했습니다",
+            message: "상세 사주 풀이 중 오류가 발생했습니다",
+            error: error,
             details: error instanceof Error ? error.message : "알 수 없는 오류",
             timestamp: new Date().toISOString(),
             // 디버깅을 위한 추가 정보
@@ -224,12 +177,12 @@ export default {
 
         // 사주 분석에 특히 적합한 모델들을 표시
         const recommendedForSaju = availableModels.map((model: any) => ({
-          ...model,
+          ...(model || {}), // model이 null/undefined일 경우 빈 객체 사용
           recommended_for_saju:
-            model.name?.includes("coder") ||
-            model.name?.includes("instruct") ||
-            model.description?.toLowerCase().includes("reasoning"),
-          saju_suitability_score: calculateSajuSuitability(model),
+            model?.name?.includes("coder") ||
+            model?.name?.includes("instruct") ||
+            model?.description?.toLowerCase()?.includes("reasoning"),
+          saju_suitability_score: calculateSajuSuitability(model || {}),
         }));
 
         return new Response(
@@ -237,10 +190,7 @@ export default {
             total_count: availableModels.length,
             recommended_models: recommendedForSaju
               .filter((m: any) => m.recommended_for_saju)
-              .sort(
-                (a: any, b: any) =>
-                  b.saju_suitability_score - a.saju_suitability_score
-              )
+              .sort((a: any, b: any) => b.saju_suitability_score - a.saju_suitability_score)
               .slice(0, 5),
           }),
           {
@@ -282,10 +232,15 @@ export default {
  * @returns 0-100 사이의 점수
  */
 function calculateSajuSuitability(model: any): number {
+  // model이 null/undefined인 경우 기본 점수 반환
+  if (!model || typeof model !== "object") {
+    return 30; // 기본 최소 점수
+  }
+
   let score = 50; // 기본 점수
 
-  const name = model.name?.toLowerCase() || "";
-  const description = model.description?.toLowerCase() || "";
+  const name = (model.name || "").toLowerCase();
+  const description = (model.description || "").toLowerCase();
 
   // 논리적 사고에 강한 모델들 가점
   if (name.includes("coder")) score += 20;
@@ -297,12 +252,18 @@ function calculateSajuSuitability(model: any): number {
   if (name.includes("chat") || name.includes("assistant")) score += 10;
 
   // 큰 모델일수록 복잡한 사주 분석에 유리
-  const parameterMatch = name.match(/(\d+)b/);
-  if (parameterMatch) {
-    const params = parseInt(parameterMatch[1]);
-    if (params >= 30) score += 15;
-    else if (params >= 13) score += 10;
-    else if (params >= 7) score += 5;
+  try {
+    const parameterMatch = name.match(/(\d+)b/);
+    if (parameterMatch && parameterMatch[1]) {
+      const params = parseInt(parameterMatch[1]);
+      if (!isNaN(params)) {
+        if (params >= 30) score += 15;
+        else if (params >= 13) score += 10;
+        else if (params >= 7) score += 5;
+      }
+    }
+  } catch (error) {
+    console.warn("파라미터 매칭 중 오류:", error);
   }
 
   return Math.min(100, Math.max(0, score));
