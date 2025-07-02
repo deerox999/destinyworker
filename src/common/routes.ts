@@ -4,6 +4,7 @@ import { celebrityProfileApiHandlers } from "../api/celebrityProfileApi";
 import { celebrityRequestApiHandlers } from "../api/celebrityRequestApi";
 import { googleAuthApiHandlers } from "../api/googleAuthApi";
 import { sajuProfileApiHandlers } from "../api/sajuProfileApi";
+import { userApiHandlers } from "../api/userApi";
 import { generateApiListHTML, generateSwaggerHTML } from "../html/swaggerUI";
 
 import { Router } from "./router";
@@ -62,6 +63,35 @@ export function createAppRouter(): Router {
     description: 'JWT 토큰을 갱신합니다.',
     tags: ['인증'],
     auth: true
+  });
+
+  // 사용자 프로필 관련 라우트
+  router.get('/api/user/profile', userApiHandlers.getUserProfile, {
+    summary: '사용자 프로필 조회',
+    description: '현재 로그인한 사용자의 프로필 정보를 조회합니다.',
+    tags: ['사용자'],
+    auth: true
+  });
+
+  router.put('/api/user/profile/name', userApiHandlers.updateUserName, {
+    summary: '프로필 이름 수정',
+    description: '사용자의 프로필 이름을 수정합니다.',
+    tags: ['사용자'],
+    auth: true,
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              프로필이름: { type: 'string', description: '새로운 프로필 이름 (1-50자)' }
+            },
+            required: ['프로필이름']
+          }
+        }
+      }
+    }
   });
 
   // 사주 프로필 관련 라우트 (swagger 메타데이터 포함)
@@ -131,6 +161,30 @@ export function createAppRouter(): Router {
   router.post('/api/celebrities/:id/comments', celebrityProfileApiHandlers.createCelebrityComment);
   router.put('/api/celebrities/:id/comments/:commentId', celebrityProfileApiHandlers.updateCelebrityComment);
   router.delete('/api/celebrities/:id/comments/:commentId', celebrityProfileApiHandlers.deleteCelebrityComment);
+  
+  // 댓글 추천 토글 라우트
+  router.post('/api/celebrities/:id/comments/:commentId/like', celebrityProfileApiHandlers.toggleCelebrityCommentLike, {
+    summary: '댓글 추천 토글',
+    description: '유명인물 댓글을 추천하거나 추천을 취소합니다. 이미 추천한 댓글이면 추천 취소, 추천하지 않은 댓글이면 추천합니다.',
+    tags: ['유명인물'],
+    auth: true,
+    parameters: [
+      {
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: '유명인물 ID',
+        schema: { type: 'string' }
+      },
+      {
+        name: 'commentId',
+        in: 'path',
+        required: true,
+        description: '댓글 ID',
+        schema: { type: 'integer' }
+      }
+    ]
+  });
   
   // 유명인물 요청 관련 라우트
   router.post("/api/celebrities/request", celebrityRequestApiHandlers.createCelebrityRequest, {

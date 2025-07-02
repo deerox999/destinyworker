@@ -338,12 +338,7 @@ export const googleAuthApiHandlers = {
       return jsonResponse({
         success: true,
         token: jwtToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          picture: user.picture,
-        },
+        user: user,
       });
     } catch (error) {
       console.error("Login error:", error);

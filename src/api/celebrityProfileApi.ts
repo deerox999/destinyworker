@@ -62,30 +62,32 @@ const isAdmin = async (request: Request, env: any): Promise<boolean> => {
   }
 };
 
-// 댓글 데이터 변환
-const toCommentFields = (comment: any) => ({
+// 중첩된 댓글에서 모든 댓글 ID 추출
+const getAllCommentIds = (comments: any[]): number[] => {
+  const ids: number[] = [];
+  const extractIds = (comment: any) => {
+    ids.push(comment.id);
+    if (comment.replies) {
+      comment.replies.forEach(extractIds);
+    }
+  };
+  comments.forEach(extractIds);
+  return ids;
+};
+
+// 댓글 데이터 변환 (사용자의 추천 여부 포함)
+const toCommentFields = (comment: any, userLikes?: Set<number>) => ({
   id: comment.id,
   내용: comment.content,
-  작성자: comment.user?.name || '알 수 없음',
+  작성자: comment.user?.userName || comment.user?.name || '알 수 없음', // 프로필 이름 우선, 없으면 실제 이름
   작성자ID: comment.userId,
   부모댓글ID: comment.parentId,
-  답글: comment.replies?.map(toCommentFields) || [],
+  추천수: comment.likeCount || 0,
+  내가추천함: userLikes ? userLikes.has(comment.id) : false,
+  답글: comment.replies?.map((reply: any) => toCommentFields(reply, userLikes)) || [],
   작성일: comment.createdAt,
   수정일: comment.updatedAt,
 });
-
-// 유명인물 데이터 검증
-const validateCelebrityData = (data: any): boolean => {
-  return data?.이름?.trim() && 
-         data?.id?.trim() &&
-         /^\d{4}$/.test(data.년) && 
-         /^(0[1-9]|1[0-2])$/.test(data.월) && 
-         /^(0[1-9]|[12]\d|3[01])$/.test(data.일) && 
-         ['양력', '음력'].includes(data.달력) && 
-         ['남자', '여자'].includes(data.성별) &&
-         data?.직업?.trim() &&
-         data?.설명?.trim();
-};
 
 // 댓글 데이터 검증
 const validateCommentData = (data: any): boolean => {
@@ -162,7 +164,7 @@ const getViewCount = async (prisma: PrismaClient, celebrityId: string): Promise<
 };
 
 export const celebrityProfileApiHandlers = {
-  // 유명인물 댓글 목록 조회 (페이징 지원, 계층 구조, 조회수 증가)
+  // 유명인물 댓글 목록 조회 (페이징 지원, 계층 구조, 조회수 증가, 정렬 기능, 추천 여부 포함)
   async getCelebrityComments(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
     try {
       const celebrityId = params?.id;
@@ -171,7 +173,23 @@ export const celebrityProfileApiHandlers = {
       const url = new URL(request.url);
       const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
       const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '20')));
+      const sort = url.searchParams.get('sort') || 'latest'; // latest, likes
       const skip = (page - 1) * limit;
+
+      // 현재 사용자 정보 (로그인 여부 확인, 필수 아님)
+      const currentUser = await getUserFromToken(request);
+
+      // 정렬 옵션 설정
+      let orderBy: any;
+      switch (sort) {
+        case 'likes':
+          orderBy = [{ likeCount: 'desc' }, { createdAt: 'desc' }];
+          break;
+        case 'latest':
+        default:
+          orderBy = { createdAt: 'desc' };
+          break;
+      }
 
       const prisma = createPrismaClient(env.DB);
 
@@ -187,16 +205,21 @@ export const celebrityProfileApiHandlers = {
           where: { celebrityId, parentId: null },
           skip,
           take: limit,
-          orderBy: { createdAt: 'desc' },
+          orderBy,
           include: {
-            user: { select: { name: true } },
+            user: { select: { name: true, userName: true } },
             replies: {
               include: {
-                user: { select: { name: true } },
+                user: { select: { name: true, userName: true } },
                 replies: {
                   include: {
-                    user: { select: { name: true } },
-                    replies: true // 3단계까지만 지원
+                    user: { select: { name: true, userName: true } },
+                    replies: {
+                      include: {
+                        user: { select: { name: true, userName: true } }
+                      },
+                      orderBy: { createdAt: 'asc' }
+                    } // 3단계까지만 지원
                   },
                   orderBy: { createdAt: 'asc' }
                 }
@@ -207,13 +230,27 @@ export const celebrityProfileApiHandlers = {
         })
       ]);
 
+      // 현재 사용자가 로그인한 경우 추천 정보 조회
+      let userLikes: Set<number> = new Set();
+      if (currentUser) {
+        const allCommentIds = getAllCommentIds(comments);
+        const likes = await prisma.celebrityCommentLike.findMany({
+          where: {
+            userId: currentUser.id,
+            commentId: { in: allCommentIds }
+          },
+          select: { commentId: true }
+        });
+        userLikes = new Set(likes.map(like => like.commentId));
+      }
+
       await prisma.$disconnect();
 
       return jsonResponse({
         success: true,
         celebrityId,
         조회수: viewCount,
-        comments: comments.map(toCommentFields),
+        comments: comments.map(comment => toCommentFields(comment, userLikes)),
         pagination: {
           page,
           limit,
@@ -264,7 +301,7 @@ export const celebrityProfileApiHandlers = {
           parentId: body.부모댓글ID || null
         },
         include: {
-          user: { select: { name: true } }
+          user: { select: { name: true, userName: true } }
         }
       });
 
@@ -272,7 +309,7 @@ export const celebrityProfileApiHandlers = {
 
       return jsonResponse({
         success: true,
-        comment: toCommentFields(comment),
+        comment: toCommentFields(comment, new Set()), // 새로 작성한 댓글은 추천하지 않은 상태
         message: "댓글이 작성되었습니다."
       }, 201);
     } catch (error) {
@@ -359,6 +396,93 @@ export const celebrityProfileApiHandlers = {
       return jsonResponse({ success: true, message: "댓글이 삭제되었습니다." });
     } catch (error) {
       return jsonResponse({ error: "댓글 삭제 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
+    }
+  },
+
+  // 댓글 추천 토글 (추천 <-> 추천 취소)
+  async toggleCelebrityCommentLike(request: Request, env: any, params?: Record<string, string>): Promise<Response> {
+    try {
+      const user = await getUserFromToken(request);
+      if (!user) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+
+      const commentId = parseInt(params?.commentId || '0');
+      if (!commentId) return jsonResponse({ error: "댓글 ID가 필요합니다." }, 400);
+
+      const prisma = createPrismaClient(env.DB);
+
+      // 댓글 존재 확인
+      const comment = await prisma.celebrityComment.findUnique({
+        where: { id: commentId },
+        select: { id: true, likeCount: true }
+      });
+      if (!comment) {
+        await prisma.$disconnect();
+        return jsonResponse({ error: "댓글을 찾을 수 없습니다." }, 404);
+      }
+
+      // 사용자가 이미 추천했는지 확인
+      const existingLike = await prisma.celebrityCommentLike.findUnique({
+        where: {
+          userId_commentId: {
+            userId: user.id,
+            commentId: commentId
+          }
+        }
+      });
+
+      let isLiked: boolean;
+      let newLikeCount: number;
+
+      if (existingLike) {
+        // 이미 추천한 경우 - 추천 취소
+        await prisma.celebrityCommentLike.delete({
+          where: {
+            userId_commentId: {
+              userId: user.id,
+              commentId: commentId
+            }
+          }
+        });
+
+        // 추천수 감소
+        const updatedComment = await prisma.celebrityComment.update({
+          where: { id: commentId },
+          data: { likeCount: { decrement: 1 } },
+          select: { likeCount: true }
+        });
+
+        isLiked = false;
+        newLikeCount = updatedComment.likeCount;
+      } else {
+        // 추천하지 않은 경우 - 추천 추가
+        await prisma.celebrityCommentLike.create({
+          data: {
+            userId: user.id,
+            commentId: commentId
+          }
+        });
+
+        // 추천수 증가
+        const updatedComment = await prisma.celebrityComment.update({
+          where: { id: commentId },
+          data: { likeCount: { increment: 1 } },
+          select: { likeCount: true }
+        });
+
+        isLiked = true;
+        newLikeCount = updatedComment.likeCount;
+      }
+
+      await prisma.$disconnect();
+
+      return jsonResponse({ 
+        success: true, 
+        message: isLiked ? "댓글을 추천했습니다." : "댓글 추천을 취소했습니다.",
+        추천수: newLikeCount,
+        내가추천함: isLiked
+      });
+    } catch (error) {
+      return jsonResponse({ error: "댓글 추천 처리 실패", message: error instanceof Error ? error.message : "Unknown error" }, 500);
     }
   }
 }; 
