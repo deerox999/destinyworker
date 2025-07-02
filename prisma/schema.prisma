@@ -1,4 +1,8 @@
-
+/*
+  삭제할 때는 수동외엔 방법이 없음
+  npx wrangler d1 execute destiny --remote --command "DROP TABLE IF EXISTS comments;"
+  추가할 떄는 npm run db:migrate:remote
+*/
 generator client {
   provider = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
@@ -9,15 +13,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// 댓글 테이블 - 사용자들이 작성한 댓글을 저장
-/// 간단한 게시판 형태의 댓글 시스템
-model Comment {
-  id      Int    @id @default(autoincrement()) /// 댓글 고유 ID (자동 증가)
-  author  String /// 댓글 작성자 이름
-  content String /// 댓글 내용
-  @@map("comments")
-}
-
 /// 사용자 테이블 - Google OAuth로 로그인한 사용자 정보 저장
 /// Google 계정과 연동된 사용자 관리 시스템
 model User {
@@ -25,6 +20,7 @@ model User {
   googleId  String   @unique @map("google_id") /// Google 계정 고유 ID (Google에서 제공)
   email     String   @unique /// 사용자 이메일 주소 (Google 계정 이메일)
   name      String /// 사용자 이름 (Google 계정 이름)
+  userName  String? /// 사용자 프로필 이름 (선택사항)
   picture   String? /// 사용자 프로필 사진 URL (Google 계정 프로필 사진, 선택사항)
   role      String   @default("user") /// 사용자 역할 (user, admin)
   createdAt DateTime @default(now()) @map("created_at") /// 계정 생성 시간
@@ -45,17 +41,6 @@ model Session {
   createdAt DateTime @default(now()) @map("created_at") /// 세션 생성 시간
   user User @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 세션은 하나의 사용자에 속함 (사용자 삭제 시 세션도 삭제)
   @@map("sessions")
-}
-
-/// JSON 저장 테이블 - 사용자별 임의의 JSON 데이터 저장
-/// 유연한 데이터 저장을 위한 NoSQL 스타일 저장소
-model JsonStorage {
-  id        Int      @id @default(autoincrement()) /// JSON 데이터 고유 ID (자동 증가)
-  userId    String   @map("user_id") /// 데이터 소유자 ID (문자열 타입으로 저장)
-  jsonData  String   @map("json_data") /// JSON 데이터 (문자열로 직렬화되어 저장)
-  createdAt DateTime @default(now()) @map("created_at") /// 데이터 생성 시간
-  updatedAt DateTime @updatedAt @map("updated_at") /// 데이터 마지막 업데이트 시간
-  @@map("json_storage")
 }
 
 /// 사주 프로필 테이블 - 사용자별 사주 정보 저장

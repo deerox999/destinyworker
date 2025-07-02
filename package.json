@@ -38,6 +38,8 @@
     "db:migrate": "node scripts/migrate-d1.js",
     "db:migrate:local": "node scripts/migrate-d1.js --local",
     "db:migrate:remote": "node scripts/migrate-d1.js --remote",
+    "db:migrate:force": "node scripts/migrate-d1.js --force",
+
     "generate:swagger": "swagger-typescript-api -p http://localhost:9393/openapi.json -o ./src/generated --name api.ts --module-name-first-tag --axios"
   }
 }
