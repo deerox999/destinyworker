@@ -14,7 +14,8 @@
     "binding": "AI"
   },
   "vars": {
-    "GOOGLE_CLIENT_ID": "337392205026-edu53b4l8cb843u6vq1s2aniljfhq0e4.apps.googleusercontent.com"
+    "GOOGLE_CLIENT_ID": "337392205026-edu53b4l8cb843u6vq1s2aniljfhq0e4.apps.googleusercontent.com",
+    "JWT_SECRET": "your-super-secure-jwt-secret-key-minimum-32-characters-long"
   },
   "observability": {
     "enabled": true

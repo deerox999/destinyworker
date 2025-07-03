@@ -34,10 +34,9 @@ export function createAppRouter(): Router {
           schema: {
             type: 'object',
             properties: {
-              code: { type: 'string', description: 'Google OAuth 인증 코드' },
-              redirectUri: { type: 'string', description: '리다이렉트 URI' }
+              token: { type: 'string', description: 'Google OAuth 토큰 (id_token 또는 access_token)' }
             },
-            required: ['code', 'redirectUri']
+            required: ['token']
           }
         }
       }

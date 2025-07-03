@@ -135,36 +135,57 @@ async function verifyGoogleToken(
   clientId?: string
 ): Promise<GoogleUserInfo | null> {
   try {
+    console.log("토큰 검증 시작, 클라이언트 ID:", clientId ? "설정됨" : "없음");
+    
     // tokeninfo 엔드포인트 시도 (id_token)
+    console.log("tokeninfo 엔드포인트 시도");
     let response = await fetch(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${token}`
     );
     
+    let isAccessToken = false;
+    
     // 실패시 userinfo 엔드포인트 시도 (access_token)
     if (!response.ok) {
+      console.log("tokeninfo 실패, userinfo 엔드포인트 시도");
       response = await fetch(
         `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`
       );
+      isAccessToken = true;
     }
     
     if (!response.ok) {
+      console.error("토큰 검증 실패:", response.status, response.statusText);
+      const errorText = await response.text();
+      console.error("에러 응답:", errorText);
       return null;
     }
 
     const data = (await response.json()) as any;
+    console.log("토큰 검증 응답 데이터:", {
+      hasId: !!data.id,
+      hasSub: !!data.sub,
+      hasEmail: !!data.email,
+      hasName: !!data.name,
+      emailVerified: data.email_verified,
+      verifiedEmail: data.verified_email,
+      isAccessToken
+    });
 
     // 필수 필드 확인
     if (!data.sub && !data.id) {
+      console.error("sub 또는 id 필드가 없음");
       return null;
     }
 
     if (!data.email) {
+      console.error("email 필드가 없음");
       return null;
     }
 
     // 클라이언트 ID 검증
     if (clientId && data.aud && data.aud !== clientId) {
-      console.error("클라이언트 ID 불일치");
+      console.error("클라이언트 ID 불일치:", data.aud, "vs", clientId);
       return null;
     }
 
@@ -173,16 +194,27 @@ async function verifyGoogleToken(
                          data.email_verified === "true" || 
                          data.verified_email === true ||
                          data.verified_email === "true";
+                         
+    console.log("이메일 인증 상태:", emailVerified);
 
-    return {
+    const userInfo = {
       sub: data.sub || data.id,
       email: data.email,
       name: data.name || data.given_name + " " + data.family_name || data.email,
       picture: data.picture,
       email_verified: emailVerified
     };
+    
+    console.log("사용자 정보 반환:", {
+      email: userInfo.email,
+      name: userInfo.name,
+      emailVerified: userInfo.email_verified
+    });
+    
+    return userInfo;
   } catch (error) {
     console.error("Google token verification failed:", error);
+    console.error("Error details:", error instanceof Error ? error.message : "Unknown error");
     return null;
   }
 }
@@ -288,7 +320,10 @@ async function deleteSession(db: any, jwtToken: string): Promise<boolean> {
 export const googleAuthApiHandlers = {
   // Google 로그인
   async googleLogin(request: Request, env: any): Promise<Response> {
+    console.log("=== Google Login 요청 시작 ===");
+    
     if (!env.DB) {
+      console.error("DB 바인딩이 없음");
       return jsonResponse(
         { error: "데이터베이스가 설정되지 않았습니다." },
         500
@@ -296,54 +331,102 @@ export const googleAuthApiHandlers = {
     }
 
     if (!env.GOOGLE_CLIENT_ID || !env.JWT_SECRET) {
+      console.error("환경 변수 누락:", { 
+        hasGoogleClientId: !!env.GOOGLE_CLIENT_ID, 
+        hasJwtSecret: !!env.JWT_SECRET 
+      });
       return jsonResponse({ error: "OAuth 설정이 누락되었습니다." }, 500);
     }
 
     try {
+      const contentType = request.headers.get("Content-Type");
+      console.log("요청 Content-Type:", contentType);
+      
       const body = (await request.json()) as { token?: string };
       const { token } = body;
+      
+      console.log("받은 토큰 존재 여부:", !!token);
+      if (token) {
+        console.log("토큰 앞 10자:", token.substring(0, 10));
+      }
 
       if (!token) {
+        console.error("토큰이 없음");
         return jsonResponse({ error: "Google 토큰이 필요합니다." }, 400);
       }
 
       // Google 토큰 검증
+      console.log("Google 토큰 검증 시작");
       const googleUserInfo = await verifyGoogleToken(token, env.GOOGLE_CLIENT_ID);
       if (!googleUserInfo) {
+        console.error("Google 토큰 검증 실패");
         return jsonResponse({ error: "유효하지 않은 Google 토큰입니다." }, 401);
       }
+      
+      console.log("Google 사용자 정보:", { 
+        email: googleUserInfo.email, 
+        name: googleUserInfo.name,
+        sub: googleUserInfo.sub
+      });
 
       // 사용자 조회 또는 생성
+      console.log("사용자 조회/생성 시작");
       const user = await findOrCreateUser(env.DB, googleUserInfo);
       if (!user) {
+        console.error("사용자 처리 실패");
         return jsonResponse(
           { error: "사용자 처리 중 오류가 발생했습니다." },
           500
         );
       }
+      
+      console.log("사용자 처리 성공:", { userId: user.id, email: user.email });
 
       // JWT 토큰 생성
+      console.log("JWT 토큰 생성 시작");
       const jwtToken = await generateJWT(
         { userId: user.id, email: user.email },
         env.JWT_SECRET
       );
+      console.log("JWT 토큰 생성 완료");
 
       // 세션 저장
+      console.log("세션 저장 시작");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      await saveSession(env.DB, user.id, jwtToken, expiresAt);
+      const sessionSaved = await saveSession(env.DB, user.id, jwtToken, expiresAt);
+      
+      if (!sessionSaved) {
+        console.error("세션 저장 실패");
+        return jsonResponse(
+          { error: "세션 저장 중 오류가 발생했습니다." },
+          500
+        );
+      }
+      
+      console.log("세션 저장 완료");
 
       // 만료된 세션 정리
       await cleanupExpiredSessions(env.DB);
+      console.log("=== Google Login 성공 ===");
 
       return jsonResponse({
         success: true,
         token: jwtToken,
-        user: user,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          picture: user.picture
+        },
       });
     } catch (error) {
       console.error("Login error:", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
       return jsonResponse(
-        { error: "로그인 처리 중 오류가 발생했습니다." },
+        { 
+          error: "로그인 처리 중 오류가 발생했습니다.",
+          details: error instanceof Error ? error.message : "Unknown error"
+        },
         500
       );
     }
