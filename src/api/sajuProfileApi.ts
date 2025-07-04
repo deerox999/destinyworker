@@ -44,8 +44,8 @@ const toDbFields = (data: any) => ({
   year: data.년,
   month: data.월,
   day: data.일,
-  hour: data.시간 === "" ? null : data.시간,
-  minute: data.분 === "" ? null : data.분,
+  hour: data.시간 === "" || data.시간 === null ? null : data.시간,
+  minute: data.분 === "" || data.분 === null ? null : data.분,
   calendar: data.달력,
   gender: data.성별,
 });
