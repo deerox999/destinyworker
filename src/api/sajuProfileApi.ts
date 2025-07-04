@@ -44,8 +44,8 @@ const toDbFields = (data: any) => ({
   year: data.년,
   month: data.월,
   day: data.일,
-  hour: data.시간,
-  minute: data.분,
+  hour: data.시간 === "" ? null : data.시간,
+  minute: data.분 === "" ? null : data.분,
   calendar: data.달력,
   gender: data.성별,
 });
@@ -71,8 +71,8 @@ const validateSajuData = (data: any): boolean => {
          /^\d{4}$/.test(data.년) && 
          /^(0[1-9]|1[0-2])$/.test(data.월) && 
          /^(0[1-9]|[12]\d|3[01])$/.test(data.일) && 
-         /^([01]\d|2[0-3])$/.test(data.시간) && 
-         /^[0-5]\d$/.test(data.분) && 
+         (data.시간 === null || data.시간 === "" || /^([01]\d|2[0-3])$/.test(data.시간)) && 
+         (data.분 === null || data.분 === "" || /^[0-5]\d$/.test(data.분)) && 
          ['양력', '음력'].includes(data.달력) && 
          ['남자', '여자'].includes(data.성별);
 };
