@@ -67,12 +67,15 @@ const toKoreanFields = (profile: any) => ({
 
 // 데이터 검증
 const validateSajuData = (data: any): boolean => {
+  const isHourValid = data.시간 === undefined || data.시간 === null || data.시간 === "" || /^([01]\d|2[0-3])$/.test(data.시간);
+  const isMinuteValid = data.분 === undefined || data.분 === null || data.분 === "" || /^[0-5]\d$/.test(data.분);
+
   return data?.이름?.trim() && 
          /^\d{4}$/.test(data.년) && 
          /^(0[1-9]|1[0-2])$/.test(data.월) && 
          /^(0[1-9]|[12]\d|3[01])$/.test(data.일) && 
-         (data.시간 === null || data.시간 === "" || /^([01]\d|2[0-3])$/.test(data.시간)) && 
-         (data.분 === null || data.분 === "" || /^[0-5]\d$/.test(data.분)) && 
+         isHourValid && 
+         isMinuteValid &&
          ['양력', '음력'].includes(data.달력) && 
          ['남자', '여자'].includes(data.성별);
 };
