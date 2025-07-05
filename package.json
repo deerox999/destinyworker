@@ -20,12 +20,12 @@
   },
   "devDependencies": {
     "lunar-javascript": "^1.7.3",
+    "swagger-typescript-api": "^13.2.7",
     "typescript": "5.8.3",
-    "wrangler": "4.16.1",
-    "swagger-typescript-api": "^13.2.7"
+    "wrangler": "4.16.1"
   },
   "dependencies": {
-    "@prisma/adapter-d1": "^6.10.1",
+    "@prisma/adapter-d1": "^6.11.1",
     "@prisma/client": "^6.10.1",
     "@types/swagger-ui-dist": "^3.30.5",
     "prisma": "^6.10.1"
@@ -39,7 +39,6 @@
     "db:migrate:local": "node scripts/migrate-d1.js --local",
     "db:migrate:remote": "node scripts/migrate-d1.js --remote",
     "db:migrate:force": "node scripts/migrate-d1.js --force",
-
     "generate:swagger": "swagger-typescript-api -p http://localhost:9393/openapi.json -o ./src/generated --name api.ts --module-name-first-tag --axios"
   }
 }

@@ -30,6 +30,7 @@ model User {
   sajuProfiles SajuProfile[] /// 관계: 한 사용자는 여러 사주 프로필을 가질 수 있음
   celebrityComments CelebrityComment[] /// 관계: 한 사용자는 여러 유명인물 댓글을 작성할 수 있음
   celebrityCommentLikes CelebrityCommentLike[] /// 관계: 한 사용자는 여러 댓글 추천을 할 수 있음
+  conversationHistories ConversationHistory[] /// 관계: 한 사용자는 여러 대화 기록을 가질 수 있음
   @@map("users")
 }
 
@@ -119,4 +120,28 @@ model CelebrityRequest {
   createdAt   DateTime @default(now()) @map("created_at") /// 요청 생성 시간
   updatedAt   DateTime @updatedAt @map("updated_at") /// 요청 마지막 업데이트 시간
   @@map("celebrity_requests")
+}
+
+/// RAG 문서 테이블 - AI가 답변을 생성할 때 참고하는 문서 저장
+model Document {
+  id        Int      @id @default(autoincrement()) /// 문서 고유 ID (자동 증가)
+  text      String   /// 문서 원본 텍스트
+  createdAt DateTime @default(now()) @map("created_at") /// 문서 생성 시간
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") /// 문서 마지막 업데이트 시간
+
+  @@map("documents")
+}
+
+/// 대화 기록 테이블 - AI와의 채팅 내역을 저장
+model ConversationHistory {
+  id              Int      @id @default(autoincrement()) /// 메시지 고유 ID
+  conversationId  String   @map("conversation_id") /// 대화 세션 ID (UUID)
+  userId          Int      @map("user_id") /// 대화 소유자 ID
+  role            String   /// 메시지 역할 ('user' 또는 'assistant')
+  content         String   /// 메시지 내용
+  createdAt       DateTime @default(now()) @map("created_at") /// 메시지 생성 시간
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("conversation_histories")
 } 

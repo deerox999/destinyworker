@@ -132,4 +132,12 @@ export class Router {
   getRoutes(): Route[] {
     return [...this.routes];
   }
+
+  /**
+   * 다른 라우터의 경로들을 현재 라우터에 병합합니다.
+   * @param router 병합할 라우터 인스턴스
+   */
+  merge(router: Router) {
+    this.routes.push(...router.getRoutes());
+  }
 } 

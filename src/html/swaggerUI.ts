@@ -1,49 +1,48 @@
-
 export function generateSwaggerHTML(): string {
+  const apiGroups = [
+    { name: "전체", tags: [] },
+    { name: "AI", tags: ["AI", "AI - RAG", "AI - 대화형 RAG"] },
+    { name: "인증", tags: ["인증"] },
+    { name: "사용자", tags: ["사용자"] },
+    { name: "사주 프로필", tags: ["사주 프로필"] },
+    { name: "유명인물", tags: ["유명인물"] },
+    { name: "관리자", tags: ["관리자"] },
+  ];
+
+  const swaggerUrls = apiGroups.map(group => {
+    const url = group.tags.length > 0
+      ? `/api/openapi.json?tags=${group.tags.join(',')}`
+      : `/api/openapi.json`;
+    return { url, name: group.name };
+  });
+
   return `
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Destiny API Documentation</title>
-  <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui.css" />
-  <style>
-    html {
-      box-sizing: border-box;
-      overflow: -moz-scrollbars-vertical;
-      overflow-y: scroll;
-    }
-    *, *:before, *:after {
-      box-sizing: inherit;
-    }
-    body {
-      margin:0;
-      background: #fafafa;
-    }
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Destiny API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
 </head>
 <body>
   <div id="swagger-ui"></div>
-  
-  <script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-bundle.js"></script>
-  <script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-standalone-preset.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" crossorigin></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js" crossorigin></script>
   <script>
-    window.onload = function() {
-      const ui = SwaggerUIBundle({
-        url: '/api/openapi.json',
-        dom_id: '#swagger-ui',
-        deepLinking: true,
-        presets: [
-          SwaggerUIBundle.presets.apis,
-          SwaggerUIStandalonePreset
-        ],
-        plugins: [
-          SwaggerUIBundle.plugins.DownloadUrl
-        ],
-        layout: "StandaloneLayout"
-      });
-    };
+    window.ui = SwaggerUIBundle({
+      urls: ${JSON.stringify(swaggerUrls)},
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      presets: [
+        SwaggerUIBundle.presets.apis,
+        SwaggerUIStandalonePreset
+      ],
+      plugins: [
+        SwaggerUIBundle.plugins.DownloadUrl
+      ],
+      layout: "StandaloneLayout"
+    });
   </script>
 </body>
 </html>`;

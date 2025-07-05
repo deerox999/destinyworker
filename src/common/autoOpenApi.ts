@@ -7,7 +7,11 @@ interface ApiConfig {
 }
 
 // 라우터에서 OpenAPI 스펙 자동 생성
-export function generateOpenApiFromRouter(router: Router, config: ApiConfig) {
+export function generateOpenApiFromRouter(
+  router: Router,
+  config: ApiConfig,
+  filterTags?: string[]
+) {
   const paths: Record<string, any> = {};
   const routes = router.getRoutes();
   
@@ -16,6 +20,19 @@ export function generateOpenApiFromRouter(router: Router, config: ApiConfig) {
   
   // 각 라우트를 OpenAPI paths로 변환
   for (const route of routes) {
+    const swagger = route.swagger;
+    const autoTag = extractTagFromPath(route.path);
+    const routeTags = swagger?.tags || [autoTag];
+    
+    // 태그 필터링 로직
+    if (
+      filterTags &&
+      filterTags.length > 0 &&
+      !routeTags.some((tag) => filterTags.includes(tag))
+    ) {
+      continue; // 필터에 포함되지 않으면 건너뜁니다.
+    }
+    
     const pathKey = route.path;
     
     if (!paths[pathKey]) {
@@ -23,23 +40,18 @@ export function generateOpenApiFromRouter(router: Router, config: ApiConfig) {
     }
     
     // swagger 메타데이터가 있으면 우선 사용, 없으면 자동 생성
-    const swagger = route.swagger;
-    
-    const autoTag = extractTagFromPath(route.path);
-    const autoAuth = inferAuthRequirement(route.path);
-    
     const operation: any = {
       summary: swagger?.summary || generateAutoSummary(route.method, route.path),
       description: swagger?.description || generateAutoDescription(route.method, route.path),
-      tags: swagger?.tags || [autoTag],
+      tags: routeTags,
       responses: swagger?.responses || getStandardResponses()
     };
     
     // 태그 수집
-    const tags = swagger?.tags || [autoTag];
-    tags.forEach(tag => tagSet.add(tag));
+    routeTags.forEach((tag) => tagSet.add(tag));
     
     // 인증 정보
+    const autoAuth = inferAuthRequirement(route.path);
     const authRequired = swagger?.auth !== undefined ? swagger.auth : autoAuth;
     if (authRequired) {
       operation.security = [{ bearerAuth: [] }];

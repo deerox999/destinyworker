@@ -142,10 +142,10 @@ export const adminApiHandlers = {
           profileCount: user._count.sajuProfiles
         })),
         pagination: {
-          page,
-          limit,
-          total: totalCount,
-          totalPages: Math.ceil(totalCount / limit)
+          totalItems: totalCount,
+          totalPages: Math.ceil(totalCount / limit),
+          currentPage: page,
+          pageSize: limit,
         }
       });
     } catch (error) {

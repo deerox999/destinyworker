@@ -1,7 +1,15 @@
-import { Ai } from "@cloudflare/workers-types";
+import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import {
+  createEmbedding,
+  findSimilarVectors,
+  getDocumentsFromD1,
+  RagEnv,
+} from "../../common/ragUtils";
 
-export interface Env {
+export interface Env extends RagEnv {
   AI: Ai;
+  VECTORIZE_INDEX: VectorizeIndex;
+  DB: D1Database;
 }
 
 /**
@@ -191,19 +199,48 @@ async function handleDetailedFortuneTelling(
     const body: DetailedFortuneTellingRequest = await request.json();
 
     const model = body.model || "@cf/qwen/qwen2.5-coder-32b-instruct";
-    const aiParams = buildAiParams(body);
-    const gatewayConfig = buildGatewayConfig(body);
+    
+    // RAG 파이프라인 실행
+    // 1. 사용자의 프롬프트를 기반으로 관련 문서 검색
+    const queryVector = await createEmbedding(env.AI, body.userPrompt || "");
+    const similarDocIds = await findSimilarVectors(
+      env.VECTORIZE_INDEX,
+      queryVector
+    );
+    const contextDocs = await getDocumentsFromD1(env.DB, similarDocIds);
+
+    // 2. 검색된 문서를 시스템 프롬프트에 컨텍스트로 추가
+    const ragContext =
+      contextDocs.length > 0
+        ? `Here is some context from my knowledge base, use it to answer the user's question:\n${contextDocs.join(
+            "\n---\n"
+          )}`
+        : "";
+
+    const originalSystemPrompt =
+      body.systemPrompt || "당신은 전문 사주명리학자입니다.";
+    const finalSystemPrompt = `${ragContext}\n\n${originalSystemPrompt}`;
+
+    // 3. RAG 컨텍스트가 포함된 프롬프트로 AI 파라미터 빌드
+    const aiParams = buildAiParams({
+      ...body,
+      systemPrompt: finalSystemPrompt,
+    });
 
     console.log(
-      "AI 요청 파라미터:",
+      "AI 요청 파라미터 (RAG 적용):",
       JSON.stringify(
-        { model, params: aiParams, gateway: gatewayConfig?.gateway },
+        { model, params: aiParams, gateway: buildGatewayConfig(body)?.gateway },
         null,
         2
       )
     );
 
-    const result = await env.AI.run(model as any, aiParams, gatewayConfig);
+    const result = await env.AI.run(
+      model as any,
+      aiParams,
+      buildGatewayConfig(body)
+    );
 
     console.log("AI 응답 수신:", {
       type: typeof result,
@@ -278,56 +315,6 @@ function calculateSajuSuitability(model: any): number {
 }
 
 /**
- * 사용 가능한 AI 모델 목록을 조회합니다.
- */
-async function handleAiModels(request: Request, env: Env): Promise<Response> {
-  try {
-    const searchParams = new URL(request.url).searchParams;
-    const modelsSearchParams: any = {};
-    if (searchParams.has("category"))
-      modelsSearchParams.task = searchParams.get("category");
-    if (searchParams.has("provider"))
-      modelsSearchParams.provider = searchParams.get("provider");
-
-    const availableModels = await env.AI.models(modelsSearchParams);
-
-    const recommendedForSaju = availableModels.map((model: any) => ({
-      ...(model || {}),
-      recommended_for_saju:
-        model?.name?.includes("coder") ||
-        model?.name?.includes("instruct") ||
-        model?.description?.toLowerCase()?.includes("reasoning"),
-      saju_suitability_score: calculateSajuSuitability(model || {}),
-    }));
-
-    return new Response(
-      JSON.stringify({
-        total_count: availableModels.length,
-        recommended_models: recommendedForSaju
-          .filter((m: any) => m.recommended_for_saju)
-          .sort(
-            (a: any, b: any) =>
-              b.saju_suitability_score - a.saju_suitability_score
-          )
-          .slice(0, 5),
-      }),
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
-    );
-  } catch (error) {
-    console.error("모델 목록 조회 오류:", error);
-    return new Response(JSON.stringify({ error: "모델 목록 조회 실패" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-}
-
-/**
  * CORS Preflight 요청을 처리합니다.
  */
 function handleOptionsRequest(): Response {
@@ -353,11 +340,6 @@ export default {
       case "/api/detailed-fortune-telling":
         if (request.method === "POST") {
           return handleDetailedFortuneTelling(request, env);
-        }
-        break;
-      case "/api/ai-models":
-        if (request.method === "GET") {
-          return handleAiModels(request, env);
         }
         break;
     }
