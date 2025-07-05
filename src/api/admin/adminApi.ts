@@ -252,5 +252,80 @@ export const adminApiHandlers = {
         message: error instanceof Error ? error.message : "Unknown error" 
       }, 500);
     }
+  },
+
+  // 로그인/로그아웃 기록 조회
+  async getLoginHistory(request: Request, env: any): Promise<Response> {
+    try {
+      if (!(await isAdmin(request, env))) {
+        return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+      }
+
+      const prisma = createPrismaClient(env.DB);
+      
+      const url = new URL(request.url);
+      const page = parseInt(url.searchParams.get('page') || '1');
+      const limit = parseInt(url.searchParams.get('limit') || '20');
+      const search = url.searchParams.get('search') || '';
+      const action = url.searchParams.get('action') || ''; // 'login' or 'logout'
+
+      const skip = (page - 1) * limit;
+
+      const whereCondition: any = {};
+      if (search) {
+        whereCondition.user = {
+          OR: [
+            { name: { contains: search } },
+            { email: { contains: search } }
+          ]
+        };
+      }
+      if (action === 'login' || action === 'logout') {
+        whereCondition.action = action;
+      }
+
+      const [history, totalCount] = await Promise.all([
+        prisma.loginHistory.findMany({
+          where: whereCondition,
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                picture: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.loginHistory.count({ where: whereCondition })
+      ]);
+
+      await prisma.$disconnect();
+
+      return jsonResponse({
+        success: true,
+        history: history.map(h => ({
+          id: h.id,
+          action: h.action,
+          createdAt: h.createdAt,
+          user: h.user
+        })),
+        pagination: {
+          totalItems: totalCount,
+          totalPages: Math.ceil(totalCount / limit),
+          currentPage: page,
+          pageSize: limit,
+        }
+      });
+    } catch (error) {
+      return jsonResponse({ 
+        error: "로그인 기록 조회 실패", 
+        message: error instanceof Error ? error.message : "Unknown error" 
+      }, 500);
+    }
   }
 }; 

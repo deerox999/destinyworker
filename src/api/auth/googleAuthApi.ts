@@ -335,6 +335,18 @@ export const googleAuthApiHandlers = {
       // 만료된 세션 정리
       await cleanupExpiredSessions(env.DB);
 
+      // 로그인 기록 추가
+      try {
+        const stmt = env.DB.prepare(`
+          INSERT INTO login_histories (user_id, action) 
+          VALUES (?, 'login')
+        `);
+        await stmt.bind(user.id).run();
+      } catch(e) {
+        console.error("Login history save error:", e);
+        // 이 에러는 로그인 자체를 실패시키지는 않음
+      }
+
       return jsonResponse({
         success: true,
         token: jwtToken,
@@ -351,9 +363,9 @@ export const googleAuthApiHandlers = {
 
   // 로그아웃
   async logout(request: Request, env: any): Promise<Response> {
-    if (!env.DB) {
+    if (!env.DB || !env.JWT_SECRET) {
       return jsonResponse(
-        { error: "데이터베이스가 설정되지 않았습니다." },
+        { error: "데이터베이스가 설정되지 않았거나 JWT 시크릿이 없습니다." },
         500
       );
     }
@@ -365,9 +377,28 @@ export const googleAuthApiHandlers = {
       }
 
       const token = authHeader.substring(7);
+
+      // 토큰에서 사용자 정보 추출
+      const payload = await verifyJWT(token, env.JWT_SECRET);
+      if (!payload) {
+        // 토큰이 유효하지 않아도 세션은 삭제 시도
+        await deleteSession(env.DB, token);
+        return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401);
+      }
+      
       const deleted = await deleteSession(env.DB, token);
 
       if (deleted) {
+        // 로그아웃 기록 추가
+        try {
+          const stmt = env.DB.prepare(`
+            INSERT INTO login_histories (user_id, action) 
+            VALUES (?, 'logout')
+          `);
+          await stmt.bind(payload.userId).run();
+        } catch (e) {
+          console.error("Logout history save error:", e);
+        }
         return jsonResponse({ success: true, message: "로그아웃되었습니다." });
       } else {
         return jsonResponse({ error: "유효하지 않은 세션입니다." }, 401);

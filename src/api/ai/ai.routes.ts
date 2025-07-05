@@ -8,14 +8,35 @@ export function createAiRouter(): Router {
 
   // 상세 사주 풀이
   router.post(
-    "/api/detailed-fortune-telling",
+    "/api/ai/detailed-fortune-telling",
     async (request: Request, env: any) =>
       await DestinyTellerApi.fetch(request, env),
     {
-      summary: "상세 사주 풀이",
-      description: "사주 정보를 기반으로 AI가 상세한 운세 풀이를 제공합니다.",
+      summary: "상세 사주 풀이 (RAG 결합)",
+      description: "사용자 프롬프트와 사주 지식 베이스(RAG)를 결합하여 AI가 상세한 운세 풀이를 제공합니다. 스트리밍 응답을 지원합니다.",
       tags: ["AI"],
       auth: true,
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                systemPrompt: { type: "string", description: "AI의 역할을 정의하는 시스템 프롬프트" },
+                userPrompt: { type: "string", description: "사주 분석을 위한 사용자의 질문 또는 정보" },
+                stream: { type: "boolean", description: "스트리밍 응답 여부", default: false }
+                // 기타 고급 파라미터(max_tokens, temperature 등)는 DestinyTellerApi.ts 참조
+              },
+              required: ["userPrompt"]
+            }
+          }
+        }
+      },
+      responses: {
+        "200": { description: "성공. stream=true일 경우 text/event-stream, false일 경우 application/json." },
+        "400": { description: "잘못된 요청" },
+        "500": { description: "AI 모델 실행 오류" }
+      }
     }
   );
 
@@ -27,19 +48,26 @@ export function createAiRouter(): Router {
       summary: "[RAG] 문서 추가",
       description: "RAG 시스템에 지식 문서를 추가하고 벡터 인덱싱을 수행합니다.",
       tags: ["AI - RAG"],
-      auth: true,
+      auth: true, // 관리자 권한 필요
       requestBody: {
         content: {
           "application/json": {
             schema: {
               type: "object",
               properties: {
-                text: { type: "string", description: "저장할 텍스트" },
+                text: { type: "string", description: "저장할 텍스트 내용" },
               },
+              required: ["text"]
             },
           },
         },
       },
+      responses: {
+        "201": { description: "문서 추가 및 인덱싱 성공" },
+        "400": { description: "잘못된 요청" },
+        "409": { description: "이미 존재하는 문서" },
+        "500": { description: "서버 오류" }
+      }
     }
   );
 
@@ -52,7 +80,7 @@ export function createAiRouter(): Router {
       description:
         "RAG 시스템에 저장된 모든 문서를 페이지네이션 및 검색 기능과 함께 조회합니다.",
       tags: ["AI - RAG"],
-      auth: true,
+      auth: true, // 관리자 권한 필요
       parameters: [
         {
           name: "page",
@@ -76,38 +104,9 @@ export function createAiRouter(): Router {
       responses: {
         "200": {
           description: "성공적인 응답",
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  data: {
-                    type: "array",
-                    items: {
-                      // 여기에 Document 모델의 스키마를 정의할 수 있습니다.
-                      type: "object",
-                      properties: {
-                        id: { type: "integer" },
-                        text: { type: "string" },
-                        created_at: { type: "string", format: "date-time" },
-                        updated_at: { type: "string", format: "date-time" },
-                      },
-                    },
-                  },
-                  pagination: {
-                    type: "object",
-                    properties: {
-                      totalItems: { type: "integer" },
-                      totalPages: { type: "integer" },
-                      currentPage: { type: "integer" },
-                      pageSize: { type: "integer" },
-                    },
-                  },
-                },
-              },
-            },
-          },
+          // 상세 스키마는 common/paginationUtils.ts에 의해 결정됨
         },
+        "500": { description: "서버 오류" }
       },
     }
   );
@@ -121,16 +120,22 @@ export function createAiRouter(): Router {
       description:
         "특정 문서를 ID를 이용해 D1과 Vectorize 인덱스에서 모두 삭제합니다.",
       tags: ["AI - RAG"],
-      auth: true,
+      auth: true, // 관리자 권한 필요
       parameters: [
         {
           name: "id",
           in: "path",
           required: true,
           description: "삭제할 문서의 ID",
-          schema: { type: "string" },
+          schema: { type: "integer" },
         },
       ],
+      responses: {
+        "200": { description: "삭제 성공" },
+        "400": { description: "잘못된 ID" },
+        "404": { description: "문서를 찾을 수 없음" },
+        "500": { description: "서버 오류" }
+      }
     }
   );
 
@@ -151,10 +156,29 @@ export function createAiRouter(): Router {
               properties: {
                 query: { type: "string", description: "질문 내용" },
               },
+              required: ["query"]
             },
           },
         },
       },
+      responses: {
+        "200": {
+          description: "질의 성공",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  answer: { type: "string", description: "AI의 답변" },
+                  context: { type: "array", items: { type: "string" }, description: "답변에 사용된 컨텍스트 문서들" }
+                }
+              }
+            }
+          }
+        },
+        "400": { description: "질문 누락" },
+        "500": { description: "서버 오류" }
+      }
     }
   );
 
@@ -179,6 +203,7 @@ export function createAiRouter(): Router {
                 systemPrompt: {
                   type: "string",
                   description: "AI의 역할을 정의하는 시스템 프롬프트 (선택사항)",
+                  nullable: true
                 },
               },
               required: ["message"],
@@ -186,6 +211,24 @@ export function createAiRouter(): Router {
           },
         },
       },
+      responses: {
+        "200": {
+          description: "새 대화 시작 성공",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  conversationId: { type: "string", format: "uuid" },
+                  answer: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        "400": { description: "메시지 누락" },
+        "500": { description: "서버 오류" }
+      }
     }
   );
 
@@ -206,7 +249,7 @@ export function createAiRouter(): Router {
           in: "path",
           required: true,
           description: "대화 ID (conversationId)",
-          schema: { type: "string" },
+          schema: { type: "string", format: "uuid" },
         },
       ],
       requestBody: {
@@ -219,6 +262,7 @@ export function createAiRouter(): Router {
                 systemPrompt: {
                   type: "string",
                   description: "AI의 역할을 정의하는 시스템 프롬프트 (선택사항)",
+                  nullable: true
                 },
               },
               required: ["message"],
@@ -226,6 +270,24 @@ export function createAiRouter(): Router {
           },
         },
       },
+      responses: {
+        "200": {
+          description: "대화 성공",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  conversationId: { type: "string", format: "uuid" },
+                  answer: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        "400": { description: "메시지 누락" },
+        "500": { description: "서버 오류" }
+      }
     }
   );
 
