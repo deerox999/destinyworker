@@ -1,362 +1,238 @@
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
+import { Ai } from "@cloudflare/workers-types";
 
-    /**
-     * Cloudflare Workers AI 고급 사용법 가이드
-     *
-     * 1. AI Gateway: 요청 로깅, 캐싱, 재시도, 폴백 모델 설정 가능
-     * 2. 타입 안전성: 모델별 특화된 입력/출력 타입 활용
-     * 3. 다양한 옵션: returnRawResponse, stream, 모델별 특수 파라미터
-     * 4. AutoRAG: 자동 검색 증강 생성 (RAG) 기능
-     * 5. 모델 검색: 사용 가능한 모델 동적 탐색
-     *
-     * @cf/qwen/qwen2.5-coder-32b-instruct는 'Coder'로서의 논리적, 구조적 사고에 강점이 있습니다.
-     * 사주 명리학도 일종의 규칙과 패턴을 따르는 시스템이므로, 이 점이 파인튜닝 시 긍정적인 영향을 줄 수 있습니다.
-     *
-     * price
-     * 사용량은 10000개의 뉴런 당 US$0.11의 비율을 기준으로 청구서에 뉴런으로 표시됩니다.
-     * US$0.66 per M input tokens
-     * US$1 per M output tokens
-     *
-     * Workers AI: 월 10,000 뉴런 (Workers Paid 플랜에 포함)
-     * 예상 사용량: 한 번의 요청당 약 1.78 뉴런
-     * 월 무료 할당량으로 약 5,617번의 요청 처리 가능
-     */
+export interface Env {
+  AI: Ai;
+}
 
-    if (
-      url.pathname === "/api/detailed-fortune-telling" &&
-      request.method === "POST"
-    ) {
-      try {
-        const {
-          systemPrompt,
-          userPrompt,
-          max_tokens,
-          temperature,
-          model,
-          // 고급 옵션들
-          useGateway = false, // AI Gateway 사용 여부
-          gatewayId, // Gateway ID (로깅/모니터링용)
-          returnRawResponse = false, // 원시 응답 반환 여부
-          stream = false, // 스트리밍 응답 여부
-          top_p, // 핵 샘플링 파라미터
-          frequency_penalty, // 빈도 페널티
-          presence_penalty, // 존재 페널티
-          seed, // 재현 가능한 결과를 위한 시드
-        }: any = await request.json();
+/**
+ * Cloudflare Workers AI 고급 사용법 가이드
+ *
+ * 1. AI Gateway: 요청 로깅, 캐싱, 재시도, 폴백 모델 설정 가능
+ * 2. 타입 안전성: 모델별 특화된 입력/출력 타입 활용
+ * 3. 다양한 옵션: returnRawResponse, stream, 모델별 특수 파라미터
+ * 4. AutoRAG: 자동 검색 증강 생성 (RAG) 기능
+ * 5. 모델 검색: 사용 가능한 모델 동적 탐색
+ *
+ * @cf/qwen/qwen2.5-coder-32b-instruct는 'Coder'로서의 논리적, 구조적 사고에 강점이 있습니다.
+ * 사주 명리학도 일종의 규칙과 패턴을 따르는 시스템이므로, 이 점이 파인튜닝 시 긍정적인 영향을 줄 수 있습니다.
+ *
+ * price
+ * 사용량은 10000개의 뉴런 당 US$0.11의 비율을 기준으로 청구서에 뉴런으로 표시됩니다.
+ * US$0.66 per M input tokens
+ * US$1 per M output tokens
+ *
+ * Workers AI: 월 10,000 뉴런 (Workers Paid 플랜에 포함)
+ * 예상 사용량: 한 번의 요청당 약 1.78 뉴런
+ * 월 무료 할당량으로 약 5,617번의 요청 처리 가능
+ */
 
-        // AI 인스턴스 준비 (Gateway 사용 시 향상된 기능 제공)
-        let aiInstance: any = env.AI;
+/**
+ * API 요청 본문에 대한 타입 정의
+ */
+interface DetailedFortuneTellingRequest {
+  systemPrompt?: string;
+  userPrompt?: string;
+  max_tokens?: number;
+  temperature?: number;
+  model?: string;
+  useGateway?: boolean;
+  gatewayId?: string;
+  returnRawResponse?: boolean;
+  stream?: boolean;
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  seed?: number;
+}
 
-        if (
-          useGateway &&
-          gatewayId &&
-          typeof gatewayId === "string" &&
-          gatewayId.trim().length > 0
-        ) {
-          try {
-            console.log("AI Gateway 초기화:", gatewayId);
-            aiInstance = env.AI.gateway(gatewayId.trim());
-            console.log("AI Gateway 초기화 성공");
-          } catch (gatewayError) {
-            console.warn(
-              "AI Gateway 초기화 실패, 기본 AI 인스턴스 사용:",
-              gatewayError
-            );
-            aiInstance = env.AI; // 폴백으로 기본 AI 사용
-          }
-        } else if (useGateway) {
-          console.warn(
-            "Gateway ID가 유효하지 않습니다. 기본 AI 인스턴스를 사용합니다."
-          );
-        }
+/**
+ * AI 모델에 전달할 파라미터를 생성합니다.
+ * @param body 요청 본문
+ * @returns AI.run()에 사용될 파라미터 객체
+ */
+function buildAiParams(body: DetailedFortuneTellingRequest): object {
+  const params: any = {
+    messages: [
+      {
+        role: "system",
+        content: body.systemPrompt || "당신은 전문 사주명리학자입니다.",
+      },
+      { role: "user", content: body.userPrompt || "사주 분석을 해주세요." },
+    ],
+    max_tokens: Math.max(1, Math.min(body.max_tokens || 1500, 32000)),
+    temperature: Math.max(
+      0,
+      Math.min(body.temperature !== undefined ? body.temperature : 0.3, 2.0)
+    ),
+  };
 
-        // 사용할 모델 결정 (폴백 체계 포함)
-        const primaryModel = model || "@cf/qwen/qwen2.5-coder-32b-instruct";
-        const fallbackModels = [
-          "@cf/qwen/qwen2.5-coder-32b-instruct", // 논리적 사고에 강함
-          "@cf/meta/llama-3.1-8b-instruct", // 일반적인 대화형 모델
-          "@cf/google/gemma-7b-it", // 효율적인 추론 모델
-          "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
-        ];
+  if (body.stream) {
+    params.stream = true;
+  }
+  if (body.returnRawResponse) {
+    params.returnRawResponse = true;
+  }
 
-        // AI Gateway는 파라미터에 대해 더 엄격하므로 기본/고급 옵션 분리
-        const baseOptions: any = {
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt || "당신은 전문 사주명리학자입니다.",
-            },
-            { role: "user", content: userPrompt || "사주 분석을 해주세요." },
-          ],
-          max_tokens: Math.max(1, Math.min(max_tokens || 1500, 32000)),
-          temperature: Math.max(
-            0,
-            Math.min(temperature !== undefined ? temperature : 0.3, 2.0)
-          ),
-        };
+  // 고급 파라미터들을 조건부로 추가 (유효한 값만)
+  if (typeof body.top_p === "number" && body.top_p >= 0 && body.top_p <= 1) {
+    params.top_p = body.top_p;
+  }
+  if (
+    typeof body.frequency_penalty === "number" &&
+    body.frequency_penalty >= -2 &&
+    body.frequency_penalty <= 2
+  ) {
+    params.frequency_penalty = body.frequency_penalty;
+  }
+  if (
+    typeof body.presence_penalty === "number" &&
+    body.presence_penalty >= -2 &&
+    body.presence_penalty <= 2
+  ) {
+    params.presence_penalty = body.presence_penalty;
+  }
+  if (typeof body.seed === "number" && Number.isInteger(body.seed)) {
+    params.seed = body.seed;
+  }
 
-        // Gateway 사용 시와 아닐 때 다른 옵션 구성
-        let advancedOptions: any;
+  return params;
+}
 
-        if (useGateway) {
-          // Gateway 사용 시: 기본 파라미터만 사용 (안정성 우선)
-          console.log("Gateway 모드: 기본 파라미터만 사용");
-          advancedOptions = { ...baseOptions };
+/**
+ * AI Gateway 사용 설정을 생성합니다.
+ * @param body 요청 본문
+ * @returns AI.run()에 사용될 게이트웨이 설정 객체
+ */
+function buildGatewayConfig(
+  body: DetailedFortuneTellingRequest
+): { gateway: { id: string } } | undefined {
+  if (body.useGateway && body.gatewayId && body.gatewayId.trim().length > 0) {
+    return { gateway: { id: body.gatewayId.trim() } };
+  }
+  return undefined;
+}
 
-          // Gateway에서도 안전한 파라미터만 추가
-          if (stream === true) {
-            advancedOptions.stream = true;
-          }
-        } else {
-          // 일반 모드: 모든 고급 파라미터 사용 가능
-          console.log("일반 모드: 고급 파라미터 사용");
-          advancedOptions = { ...baseOptions };
+/**
+ * AI 모델의 응답을 바탕으로 최종 HTTP 응답을 생성합니다.
+ * @param aiResult AI 모델의 실행 결과
+ * @param requestBody 원본 요청 본문
+ * @param model 사용된 모델명
+ * @returns 최종 Response 객체
+ */
+function createApiResponse(
+  aiResult: any,
+  requestBody: DetailedFortuneTellingRequest,
+  model: string
+): Response {
+  const { useGateway = false, stream = false } = requestBody;
 
-          // 고급 파라미터들을 조건부로 추가 (유효한 값만)
-          if (typeof top_p === "number" && top_p >= 0 && top_p <= 1) {
-            advancedOptions.top_p = top_p;
-          }
-          if (
-            typeof frequency_penalty === "number" &&
-            frequency_penalty >= -2 &&
-            frequency_penalty <= 2
-          ) {
-            advancedOptions.frequency_penalty = frequency_penalty;
-          }
-          if (
-            typeof presence_penalty === "number" &&
-            presence_penalty >= -2 &&
-            presence_penalty <= 2
-          ) {
-            advancedOptions.presence_penalty = presence_penalty;
-          }
-          if (typeof seed === "number" && Number.isInteger(seed)) {
-            advancedOptions.seed = seed;
-          }
-          if (stream === true) {
-            advancedOptions.stream = true;
-          }
-          if (returnRawResponse === true) {
-            advancedOptions.returnRawResponse = true;
-          }
-        }
+  // 스트리밍 응답 처리
+  if (
+    stream &&
+    (aiResult instanceof Response || aiResult instanceof ReadableStream)
+  ) {
+    const responseStream =
+      aiResult instanceof ReadableStream ? new Response(aiResult) : aiResult;
 
-        console.log(
-          "AI 요청 파라미터:",
-          JSON.stringify(
-            {
-              model: primaryModel,
-              options: advancedOptions,
-              useGateway: useGateway,
-              gatewayId: gatewayId,
-            },
-            null,
-            2
-          )
-        );
+    const headers = new Headers(responseStream.headers);
+    headers.set("Content-Type", "text/event-stream; charset=utf-8");
+    headers.set("Access-Control-Allow-Origin", "*");
+    headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    headers.set("Access-Control-Allow-Headers", "Content-Type");
+    headers.set("X-AI-Model", model);
+    headers.set("X-Gateway-Enabled", useGateway.toString());
+    headers.set("X-Stream-Response", "true");
 
-        const result = await aiInstance.run(
-          primaryModel as any,
-          advancedOptions
-        );
+    return new Response(responseStream.body, {
+      status: responseStream.status,
+      headers: headers,
+    });
+  }
 
-        console.log(
-          "AI 응답 타입:",
-          typeof result,
-          "instanceof Response:",
-          result instanceof Response
-        );
-        console.log("AI 응답 내용:", result);
-        console.log("AI 응답 constructor:", result?.constructor?.name);
+  // 일반(non-streaming) 응답 처리
+  if (
+    !aiResult ||
+    (typeof aiResult === "object" && Object.keys(aiResult).length === 0)
+  ) {
+    throw new Error("AI 모델로부터 유효한 응답을 받지 못했습니다.");
+  }
 
-        // 스트리밍 응답 처리 - ReadableStream 또는 Response 객체 감지
-        if (
-          stream &&
-          (result instanceof Response ||
-            result instanceof ReadableStream ||
-            result?.constructor?.name === "ReadableStream")
-        ) {
-          console.log("스트리밍 응답 처리");
+  const enhancedResponse = {
+    ...(aiResult || {}),
+    metadata: {
+      model_used: model,
+      gateway_enabled: useGateway,
+      timestamp: new Date().toISOString(),
+      stream_enabled: stream,
+      response_type: typeof aiResult,
+    },
+  };
 
-          // ReadableStream인 경우 Response로 래핑
-          if (
-            result instanceof ReadableStream ||
-            result?.constructor?.name === "ReadableStream"
-          ) {
-            console.log("ReadableStream을 Response로 래핑");
+  return new Response(JSON.stringify(enhancedResponse), {
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "X-AI-Model": model,
+      "X-Gateway-Enabled": useGateway.toString(),
+    },
+  });
+}
 
-            return new Response(result, {
-              status: 200,
-              headers: {
-                "Content-Type": "text/plain; charset=utf-8",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type",
-                "X-AI-Model": primaryModel,
-                "X-Gateway-Enabled": useGateway.toString(),
-                "X-Stream-Response": "true",
-              },
-            });
-          }
+/**
+ * 상세 사주 풀이 요청을 처리합니다.
+ */
+async function handleDetailedFortuneTelling(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  try {
+    const body: DetailedFortuneTellingRequest = await request.json();
 
-          // Response 객체인 경우
-          if (result instanceof Response) {
-            console.log("Response 객체 스트리밍 처리");
-            const headers = new Headers(result.headers);
-            headers.set("X-AI-Model", primaryModel);
-            headers.set("X-Gateway-Enabled", useGateway.toString());
-            headers.set("Access-Control-Allow-Origin", "*");
-            headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-            headers.set("Access-Control-Allow-Headers", "Content-Type");
+    const model = body.model || "@cf/qwen/qwen2.5-coder-32b-instruct";
+    const aiParams = buildAiParams(body);
+    const gatewayConfig = buildGatewayConfig(body);
 
-            return new Response(result.body, {
-              status: result.status,
-              headers: headers,
-            });
-          }
-        }
+    console.log(
+      "AI 요청 파라미터:",
+      JSON.stringify(
+        { model, params: aiParams, gateway: gatewayConfig?.gateway },
+        null,
+        2
+      )
+    );
 
-        // 스트리밍이 아닌 응답 처리
-        console.log("일반 응답 처리");
+    const result = await env.AI.run(model as any, aiParams, gatewayConfig);
 
-        // result가 null이거나 빈 객체인 경우 검증
-        if (
-          !result ||
-          (typeof result === "object" && Object.keys(result).length === 0)
-        ) {
-          console.warn("AI 응답이 비어있습니다:", result);
-          throw new Error("AI 모델로부터 유효한 응답을 받지 못했습니다.");
-        }
+    console.log("AI 응답 수신:", {
+      type: typeof result,
+      isResponse: result instanceof Response,
+      isStream: result instanceof ReadableStream,
+    });
 
-        /**
-         * 응답 후처리 및 메타데이터 추가
-         * - 사용된 모델 정보
-         * - 토큰 사용량 (가능한 경우)
-         * - 응답 시간 측정
-         * - 품질 지표
-         */
-        const enhancedResponse = {
-          ...(result || {}), // result가 null/undefined일 경우 빈 객체 사용
-          metadata: {
-            model_used: primaryModel,
-            gateway_enabled: useGateway,
-            timestamp: new Date().toISOString(),
-            stream_enabled: stream,
-            response_type: typeof result,
-            // 추가 메타데이터는 여기에
-          },
-        };
-
-        return new Response(JSON.stringify(enhancedResponse), {
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-            // 사용된 모델 정보를 헤더로 전달
-            "X-AI-Model": primaryModel,
-            "X-Gateway-Enabled": useGateway.toString(),
-          },
-        });
-      } catch (error) {
-        console.error("상세 사주 풀이 오류:", error);
-        return new Response(
-          JSON.stringify({
-            message: "상세 사주 풀이 중 오류가 발생했습니다",
-            error: error,
-            details: error instanceof Error ? error.message : "알 수 없는 오류",
-            timestamp: new Date().toISOString(),
-            // 디버깅을 위한 추가 정보
-            debug_info: {
-              url: request.url,
-              method: request.method,
-            },
-          }),
-          {
-            status: 500,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          }
-        );
-      }
-    }
-
-    // 사용 가능한 AI 모델 목록 조회 엔드포인트
-    if (url.pathname === "/api/ai-models" && request.method === "GET") {
-      try {
-        /**
-         * 동적 모델 검색 기능
-         * - 현재 사용 가능한 모델들을 실시간으로 조회
-         * - 모델별 특성과 가격 정보 제공
-         * - 사주 분석에 적합한 모델 추천
-         */
-        const searchParams = new URL(request.url).searchParams;
-        const category = searchParams.get("category"); // 예: 'text-generation', 'embedding' 등
-        const provider = searchParams.get("provider"); // 예: 'meta', 'google', 'openai' 등
-
-        const modelsSearchParams: any = {};
-        if (category) modelsSearchParams.task = category;
-        if (provider) modelsSearchParams.provider = provider;
-
-        const availableModels = await env.AI.models(modelsSearchParams);
-
-        // 사주 분석에 특히 적합한 모델들을 표시
-        const recommendedForSaju = availableModels.map((model: any) => ({
-          ...(model || {}), // model이 null/undefined일 경우 빈 객체 사용
-          recommended_for_saju:
-            model?.name?.includes("coder") ||
-            model?.name?.includes("instruct") ||
-            model?.description?.toLowerCase()?.includes("reasoning"),
-          saju_suitability_score: calculateSajuSuitability(model || {}),
-        }));
-
-        return new Response(
-          JSON.stringify({
-            total_count: availableModels.length,
-            recommended_models: recommendedForSaju
-              .filter((m: any) => m.recommended_for_saju)
-              .sort(
-                (a: any, b: any) =>
-                  b.saju_suitability_score - a.saju_suitability_score
-              )
-              .slice(0, 5),
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          }
-        );
-      } catch (error) {
-        console.error("모델 목록 조회 오류:", error);
-        return new Response(JSON.stringify({ error: "모델 목록 조회 실패" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-    }
-
-    // CORS 프리플라이트 요청 처리 (필수!)
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Access-Control-Max-Age": "86400",
-        },
-      });
-    }
-
-    // 그 외 요청 처리
-    return new Response("Not Found", { status: 404 });
-  },
-} satisfies ExportedHandler<Env>;
+    return createApiResponse(result, body, model);
+  } catch (error) {
+    console.error("상세 사주 풀이 오류:", error);
+    const errorResponse = {
+      message: "상세 사주 풀이 중 오류가 발생했습니다",
+      error: error instanceof Error ? error.message : String(error),
+      details: error instanceof Error ? error.stack : "알 수 없는 오류",
+      timestamp: new Date().toISOString(),
+      debug_info: {
+        url: request.url,
+        method: request.method,
+      },
+    };
+    return new Response(JSON.stringify(errorResponse), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  }
+}
 
 /**
  * 사주 분석에 대한 모델 적합성 점수 계산
@@ -400,3 +276,92 @@ function calculateSajuSuitability(model: any): number {
 
   return Math.min(100, Math.max(0, score));
 }
+
+/**
+ * 사용 가능한 AI 모델 목록을 조회합니다.
+ */
+async function handleAiModels(request: Request, env: Env): Promise<Response> {
+  try {
+    const searchParams = new URL(request.url).searchParams;
+    const modelsSearchParams: any = {};
+    if (searchParams.has("category"))
+      modelsSearchParams.task = searchParams.get("category");
+    if (searchParams.has("provider"))
+      modelsSearchParams.provider = searchParams.get("provider");
+
+    const availableModels = await env.AI.models(modelsSearchParams);
+
+    const recommendedForSaju = availableModels.map((model: any) => ({
+      ...(model || {}),
+      recommended_for_saju:
+        model?.name?.includes("coder") ||
+        model?.name?.includes("instruct") ||
+        model?.description?.toLowerCase()?.includes("reasoning"),
+      saju_suitability_score: calculateSajuSuitability(model || {}),
+    }));
+
+    return new Response(
+      JSON.stringify({
+        total_count: availableModels.length,
+        recommended_models: recommendedForSaju
+          .filter((m: any) => m.recommended_for_saju)
+          .sort(
+            (a: any, b: any) =>
+              b.saju_suitability_score - a.saju_suitability_score
+          )
+          .slice(0, 5),
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("모델 목록 조회 오류:", error);
+    return new Response(JSON.stringify({ error: "모델 목록 조회 실패" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+/**
+ * CORS Preflight 요청을 처리합니다.
+ */
+function handleOptionsRequest(): Response {
+  return new Response(null, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (request.method === "OPTIONS") {
+      return handleOptionsRequest();
+    }
+
+    switch (url.pathname) {
+      case "/api/detailed-fortune-telling":
+        if (request.method === "POST") {
+          return handleDetailedFortuneTelling(request, env);
+        }
+        break;
+      case "/api/ai-models":
+        if (request.method === "GET") {
+          return handleAiModels(request, env);
+        }
+        break;
+    }
+
+    return new Response("Not Found", { status: 404 });
+  },
+} satisfies ExportedHandler<Env>;
