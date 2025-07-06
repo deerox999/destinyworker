@@ -7,6 +7,7 @@ export interface RagEnv {
   AI: Ai;
   DB: D1Database;
   VECTORIZE_INDEX: VectorizeIndex;
+  BRAVE_API_KEY?: string;
 }
 
 /**
@@ -35,10 +36,21 @@ export async function createEmbedding(ai: Ai, text: string): Promise<number[]> {
  */
 export async function findSimilarVectors(
   index: VectorizeIndex,
-  queryVector: number[]
-): Promise<string[]> {
-  const sim = await index.query(queryVector, { topK: 5 }); // 상위 5개 문서 검색
-  return sim.matches.map((match) => match.id);
+  vector: number[],
+  topK: number = 5
+): Promise<number[]> {
+  try {
+    const results = await index.query(vector, { topK });
+    if (!results.matches || results.matches.length === 0) {
+      return [];
+    }
+    return results.matches
+      .map((match) => parseInt(match.id, 10))
+      .filter((id) => !isNaN(id));
+  } catch (error) {
+    console.error("Error finding similar vectors:", error);
+    return [];
+  }
 }
 
 /**

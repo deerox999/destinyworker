@@ -219,7 +219,7 @@ async function handleQuery(request: Request, env: Env): Promise<Response> {
     );
 
     // 3. D1에서 유사한 문서의 원본 텍스트(Context) 가져오기
-    const contextDocs = await getDocumentsFromD1(env.DB, similarDocIds);
+    const contextDocs = await getDocumentsFromD1(env.DB, similarDocIds.map(id => id.toString()));
 
     // 4. LLM에 Context와 질문을 함께 전달하여 답변 생성
     const contextMessage =

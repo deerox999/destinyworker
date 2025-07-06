@@ -299,5 +299,125 @@ export function createAiRouter(): Router {
     }
   );
 
+  // 대화형 RAG 목록 조회
+  router.get(
+    "/api/ai/saju-chat/history",
+    async (request: Request, env: any) =>
+      await SajuKnowledgeApi.fetch(request, env),
+    {
+      summary: "[대화형 RAG] 내 대화 목록 조회",
+      description: "현재 로그인한 사용자의 모든 대화 목록을 최신순으로 조회합니다.",
+      tags: ["AI - 대화형 RAG"],
+      auth: true,
+      responses: {
+        "200": {
+          description: "대화 목록 조회 성공",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  conversations: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string", format: "uuid" },
+                        title: { type: "string", description: "대화의 첫 메시지 내용" },
+                        updatedAt: { type: "string", format: "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": { description: "인증 실패" },
+        "500": { description: "서버 오류" }
+      }
+    }
+  );
+
+  // 대화형 RAG 특정 대화 기록 조회
+  router.get(
+    "/api/ai/saju-chat/:id",
+    async (request: Request, env: any) =>
+      await SajuKnowledgeApi.fetch(request, env),
+    {
+      summary: "[대화형 RAG] 특정 대화 기록 조회",
+      description: "특정 대화 ID에 해당하는 모든 메시지 기록을 조회합니다.",
+      tags: ["AI - 대화형 RAG"],
+      auth: true,
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          description: "조회할 대화의 ID",
+          schema: { type: "string", format: "uuid" },
+        },
+      ],
+      responses: {
+        "200": {
+          description: "대화 기록 조회 성공",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  conversationId: { type: "string", format: "uuid" },
+                  messages: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        role: { type: "string", enum: ['user', 'assistant', 'system'] },
+                        content: { type: "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": { description: "인증 실패" },
+        "404": { description: "대화를 찾을 수 없거나 권한이 없음" },
+        "500": { description: "서버 오류" }
+      }
+    }
+  );
+
+  // 대화형 RAG 특정 대화 삭제
+  router.delete(
+    "/api/ai/saju-chat/:id",
+    async (request: Request, env: any) =>
+      await SajuKnowledgeApi.fetch(request, env),
+    {
+      summary: "[대화형 RAG] 특정 대화 삭제",
+      description: "특정 대화 ID에 해당하는 모든 메시지 기록을 삭제합니다.",
+      tags: ["AI - 대화형 RAG"],
+      auth: true,
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          description: "삭제할 대화의 ID",
+          schema: { type: "string", format: "uuid" },
+        },
+      ],
+      responses: {
+        "200": { description: "삭제 성공" },
+        "401": { description: "인증 실패" },
+        "404": { description: "대화를 찾을 수 없거나 권한이 없음" },
+        "500": { description: "서버 오류" }
+      }
+    }
+  );
+
   return router;
 } 

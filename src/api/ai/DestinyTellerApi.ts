@@ -207,7 +207,7 @@ async function handleDetailedFortuneTelling(
       env.VECTORIZE_INDEX,
       queryVector
     );
-    const contextDocs = await getDocumentsFromD1(env.DB, similarDocIds);
+    const contextDocs = await getDocumentsFromD1(env.DB, similarDocIds.map(id => id.toString()));
 
     // 2. 검색된 문서를 시스템 프롬프트에 컨텍스트로 추가
     const ragContext =

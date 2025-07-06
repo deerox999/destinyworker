@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client/edge";
+import { PrismaClient } from "@prisma/client";
 import { PrismaD1 } from "@prisma/adapter-d1";
 import {
   createEmbedding,
@@ -11,6 +11,70 @@ interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
 }
+
+interface WebSearchResult {
+  title: string;
+  description: string;
+  url: string;
+}
+
+/**
+ * Brave Search API를 사용하여 웹 검색을 수행합니다.
+ * @param query 검색어
+ * @param apiKey Brave Search API 키
+ * @returns 검색 결과 문자열 (여러 결과가 합쳐짐)
+ */
+async function performWebSearch(query: string, apiKey?: string): Promise<string> {
+  if (!apiKey) {
+    console.log("BRAVE_API_KEY is not set, skipping web search.");
+    return "";
+  }
+  try {
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&safesearch=strict`;
+    const response = await fetch(url, {
+      headers: {
+        "X-Subscription-Token": apiKey,
+        "Accept": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Brave Search API error: ${response.status} ${response.statusText}`, await response.text());
+      return "";
+    }
+
+    const data = await response.json() as any;
+    const results = data.web?.results;
+
+    if (!results || results.length === 0) {
+      return "";
+    }
+
+    return results
+      .map((result: WebSearchResult) => `[웹 검색 결과] 제목: ${result.title}\n내용: ${result.description}\n출처: ${result.url}`)
+      .join('\n\n');
+  } catch (error) {
+    console.error("Error performing web search:", error);
+    return "";
+  }
+}
+
+// JWT 토큰에서 사용자 ID 추출
+const getUserIdFromToken = async (request: Request): Promise<number | null> => {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  try {
+    const token = authHeader.substring(7);
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.exp > Math.floor(Date.now() / 1000) ? payload.userId : null;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * D1에서 특정 대화 ID에 해당하는 기록을 가져옵니다.
@@ -75,8 +139,10 @@ async function handleSajuChat(
     return new Response("'message' is required.", { status: 400 });
   }
   
-  // TODO: 실제 인증 로직으로 교체해야 함
-  const userId = 1; 
+  const userId = await getUserIdFromToken(request);
+  if (!userId) {
+    return new Response("Unauthorized: Invalid token", { status: 401 });
+  }
   
   const newConversationId = conversationId || crypto.randomUUID();
 
@@ -86,24 +152,41 @@ async function handleSajuChat(
       ? await getConversationHistory(prisma, conversationId)
       : [];
 
-    // 2. 최신 사용자 질문으로 RAG 파이프라인 실행
+    // 2. RAG 및 웹 검색 동시 실행
     const queryVector = await createEmbedding(env.AI, userQuery);
-    const similarDocIds = await findSimilarVectors(
-      env.VECTORIZE_INDEX,
-      queryVector
-    );
-    const contextDocs = await getDocumentsFromD1(env.DB, similarDocIds);
+
+    const [ragDocs, webSearchResults] = await Promise.all([
+        (async () => {
+            const similarDocIds = await findSimilarVectors(
+                env.VECTORIZE_INDEX,
+                queryVector,
+                10 // 웹 검색 결과를 위해 RAG 결과는 10개로 줄임
+            );
+            return getDocumentsFromD1(env.DB, similarDocIds.map(id => id.toString()));
+        })(),
+        performWebSearch(userQuery, env.BRAVE_API_KEY)
+    ]);
+    
+    const ragContext = ragDocs.length > 0 
+      ? `[내부 지식 베이스]:\n${ragDocs.join('\n---\n')}` 
+      : "";
+    
+    const webContext = webSearchResults.length > 0 
+      ? `[최신 웹 검색 결과]:\n${webSearchResults}`
+      : "";
+  
+    const fullContext = [ragContext, webContext].filter(Boolean).join('\n\n');
 
     const contextMessage =
-      contextDocs.length > 0
-        ? `Context:\n${contextDocs.join("\n---\n")}`
-        : "No context provided.";
+      fullContext
+      ? `너에게 제공되는 컨텍스트(Context)는 사용자의 질문과 관련된 참고 자료야. 이 컨텍스트는 [내부 지식 베이스]와 [최신 웹 검색 결과]로 구성되어 있어. 두 정보를 모두 종합적으로 참고해서 사용자의 질문에 대해 답변해줘. 컨텍스트에 질문과 일치하는 내용이 없으면, 아는 척하지 말고 반드시 "제공된 정보만으로는 답변하기 어렵습니다."라고 솔직하게 말해야 해.\n\n---\n\n${fullContext}`
+      : "No context provided.";
 
     // 3. LLM에 전달할 전체 메시지 구성
     const messages: ChatMessage[] = [
-      ...history, // 과거 대화 내용
-      { role: "system", content: contextMessage }, // RAG로 찾은 현재 맥락
-      { role: "user", content: userQuery }, // 사용자의 새 질문
+      ...history,
+      { role: "system", content: contextMessage },
+      { role: "user", content: userQuery },
     ];
 
     if (systemPrompt) {
@@ -111,7 +194,7 @@ async function handleSajuChat(
     }
 
     // 4. LLM 호출
-    const llmResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+    const llmResponse = await env.AI.run("@cf/google/gemma-3-12b-it", {
       messages,
     });
     const assistantResponse = llmResponse.response || "죄송합니다. 답변을 생성할 수 없습니다.";
@@ -140,6 +223,164 @@ async function handleSajuChat(
   }
 }
 
+/**
+ * 사용자의 전체 대화 목록을 조회합니다.
+ */
+async function getConversationList(
+  request: Request,
+  env: RagEnv
+): Promise<Response> {
+  const adapter = new PrismaD1(env.DB);
+  const prisma = new PrismaClient({ adapter });
+
+  try {
+    const userId = await getUserIdFromToken(request);
+    if (!userId) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    const results: { conversation_id: string; first_message: string; last_activity: string }[] = await prisma.$queryRawUnsafe(
+        `
+        WITH FirstMessages AS (
+            SELECT
+                conversation_id,
+                content,
+                ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at ASC) as rn
+            FROM conversation_histories
+            WHERE user_id = ? AND role = 'user'
+        ),
+        LastActivity AS (
+            SELECT
+                conversation_id,
+                MAX(created_at) as last_activity
+            FROM conversation_histories
+            WHERE user_id = ?
+            GROUP BY conversation_id
+        )
+        SELECT
+            fm.conversation_id,
+            fm.content as first_message,
+            la.last_activity
+        FROM FirstMessages fm
+        JOIN LastActivity la ON fm.conversation_id = la.conversation_id
+        WHERE fm.rn = 1
+        ORDER BY la.last_activity DESC;
+        `,
+        userId, userId
+    );
+
+    const conversations = results.map(r => ({
+        id: r.conversation_id,
+        title: r.first_message.substring(0, 80),
+        updatedAt: r.last_activity
+    }));
+
+    return new Response(JSON.stringify({
+        success: true,
+        conversations
+    }), {
+        headers: { "Content-Type": "application/json" },
+    });
+
+  } catch (error) {
+    console.error("Error fetching conversation list:", error);
+    return new Response("Failed to fetch conversation list.", { status: 500 });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/**
+ * 특정 대화의 전체 메시지 기록을 조회합니다.
+ */
+async function getFullConversation(
+    request: Request,
+    env: RagEnv,
+    conversationId: string
+): Promise<Response> {
+    const adapter = new PrismaD1(env.DB);
+    const prisma = new PrismaClient({ adapter });
+
+    try {
+        const userId = await getUserIdFromToken(request);
+        if (!userId) {
+            return new Response("Unauthorized", { status: 401 });
+        }
+
+        const firstMessage = await prisma.conversationHistory.findFirst({
+            where: { conversationId, userId }
+        });
+
+        if (!firstMessage) {
+            return new Response("Conversation not found or access denied", { status: 404 });
+        }
+
+        const messages = await getConversationHistory(prisma, conversationId);
+
+        return new Response(JSON.stringify({
+            success: true,
+            conversationId,
+            messages
+        }), {
+            headers: { "Content-Type": "application/json" },
+        });
+
+    } catch (error) {
+        console.error(`Error fetching conversation ${conversationId}:`, error);
+        return new Response("Failed to fetch conversation.", { status: 500 });
+    } finally {
+        await prisma.$disconnect();
+    }
+}
+
+/**
+ * 특정 대화 및 관련 메시지를 모두 삭제합니다.
+ */
+async function handleDeleteConversation(
+    request: Request,
+    env: RagEnv,
+    conversationId: string
+): Promise<Response> {
+    const adapter = new PrismaD1(env.DB);
+    const prisma = new PrismaClient({ adapter });
+
+    try {
+        const userId = await getUserIdFromToken(request);
+        if (!userId) {
+            return new Response("Unauthorized", { status: 401 });
+        }
+
+        // 대화 소유권 확인
+        const conversation = await prisma.conversationHistory.findFirst({
+            where: { conversationId, userId },
+            select: { id: true }
+        });
+
+        if (!conversation) {
+            return new Response("Conversation not found or access denied", { status: 404 });
+        }
+
+        // 해당 대화의 모든 메시지 삭제
+        const { count } = await prisma.conversationHistory.deleteMany({
+            where: { conversationId, userId }
+        });
+
+        return new Response(JSON.stringify({
+            success: true,
+            message: `Conversation ${conversationId} and its ${count} messages have been deleted.`,
+            deletedMessagesCount: count
+        }), {
+            headers: { "Content-Type": "application/json" },
+        });
+
+    } catch (error) {
+        console.error(`Error deleting conversation ${conversationId}:`, error);
+        return new Response("Failed to delete conversation.", { status: 500 });
+    } finally {
+        await prisma.$disconnect();
+    }
+}
+
 export default {
   async fetch(request: Request, env: RagEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -158,13 +399,27 @@ export default {
     }
     
     // 라우팅: /api/ai/saju-chat
-    if (pathSegments[2] === "saju-chat" && request.method === "POST") {
+    if (pathSegments[2] === "saju-chat") {
+      // GET /api/ai/saju-chat/history : 대화 목록 조회
+      if (request.method === "GET" && pathSegments[3] === 'history') {
+        return getConversationList(request, env);
+      }
+      // GET /api/ai/saju-chat/:id : 특정 대화 기록 조회
+      if (request.method === 'GET' && pathSegments.length === 4 && pathSegments[3] !== 'history') {
+          const conversationId = pathSegments[3];
+          return getFullConversation(request, env, conversationId);
+      }
+      // DELETE /api/ai/saju-chat/:id : 특정 대화 삭제
+      if (request.method === 'DELETE' && pathSegments.length === 4) {
+          const conversationId = pathSegments[3];
+          return handleDeleteConversation(request, env, conversationId);
+      }
       // 새 대화: /api/ai/saju-chat
-      if (pathSegments.length === 3) {
+      if (pathSegments.length === 3 && request.method === "POST") {
         return handleSajuChat(request, env);
       }
       // 기존 대화: /api/ai/saju-chat/:id
-      if (pathSegments.length === 4) {
+      if (pathSegments.length === 4 && request.method === "POST") {
         const conversationId = pathSegments[3];
         return handleSajuChat(request, env, conversationId);
       }
