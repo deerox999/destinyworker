@@ -126,7 +126,8 @@ model CelebrityRequest {
 /// RAG 문서 테이블 - AI가 답변을 생성할 때 참고하는 문서 저장
 model Document {
   id        Int      @id @default(autoincrement()) /// 문서 고유 ID (자동 증가)
-  text      String   /// 문서 원본 텍스트
+  text      String   @unique /// 문서 원본 텍스트
+  metadata  String?  /// JSON 형식의 메타데이터 (선택사항)
   createdAt DateTime @default(now()) @map("created_at") /// 문서 생성 시간
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") /// 문서 마지막 업데이트 시간
 

@@ -45,8 +45,9 @@ export function createAiRouter(): Router {
     "/api/rag/documents",
     async (request: Request, env: any) => await RagApi.fetch(request, env),
     {
-      summary: "[RAG] 문서 추가",
-      description: "RAG 시스템에 지식 문서를 추가하고 벡터 인덱싱을 수행합니다.",
+      summary: "[RAG] 문서 일괄 추가",
+      description:
+        "RAG 시스템에 여러 지식 문서를 한 번에 추가하고 벡터 인덱싱을 수행합니다. 메타데이터도 함께 저장할 수 있습니다.",
       tags: ["AI - RAG"],
       auth: true, // 관리자 권한 필요
       requestBody: {
@@ -55,9 +56,77 @@ export function createAiRouter(): Router {
             schema: {
               type: "object",
               properties: {
-                text: { type: "string", description: "저장할 텍스트 내용" },
+                documents: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      text: {
+                        type: "string",
+                        description: "저장할 텍스트 내용",
+                      },
+                      metadata: {
+                        type: "object",
+                        description:
+                          "문서에 대한 구조화된 메타데이터. 도서관의 '색인 카드'처럼 문서의 핵심 정보를 담습니다. 일관된 메타데이터는 AI 답변의 품질과 데이터 필터링 기능에 큰 영향을 미칩니다.",
+                        properties: {
+                          source: {
+                            type: "string",
+                            description:
+                              "필수. 지식의 출처 (예: '자평진전', '궁통보감').",
+                          },
+                          category: {
+                            type: "string",
+                            enum: ["십신론", "격국론", "용신론", "물상론", "기타"],
+                            description: "필수. 사주 명리학의 대분류.",
+                          },
+                          author: {
+                            type: "string",
+                            description: "선택. 원본 저자.",
+                            nullable: true,
+                          },
+                          relatedConcepts: {
+                            type: "array",
+                            items: { type: "string" },
+                            description:
+                              "선택. 관련된 핵심 개념어 배열. (예: ['갑목', '편재'])",
+                            nullable: true,
+                          },
+                          url: {
+                            type: "string",
+                            description: "선택. 웹 출처인 경우의 URL.",
+                            nullable: true,
+                          },
+                        },
+                        required: ["source", "category"],
+                      },
+                    },
+                    required: ["text", "metadata"],
+                  },
+                },
               },
-              required: ["text"]
+              required: ["documents"],
+            },
+            example: {
+              documents: [
+                {
+                  text: "갑목은 양의 목으로, 하늘로 솟아오르는 큰 나무와 같다.",
+                  metadata: {
+                    source: "자평진전",
+                    author: "심효첨",
+                    category: "물상론",
+                    relatedConcepts: ["갑목", "물상"],
+                  },
+                },
+                {
+                  text: "편재는 내가 극하는 오행이면서 음양이 같은 것을 말한다.",
+                  metadata: {
+                    source: "어떤 사주 블로그",
+                    category: "십신론",
+                    url: "https://some.blog/saju/123",
+                  },
+                },
+              ],
             },
           },
         },
@@ -65,9 +134,80 @@ export function createAiRouter(): Router {
       responses: {
         "201": { description: "문서 추가 및 인덱싱 성공" },
         "400": { description: "잘못된 요청" },
-        "409": { description: "이미 존재하는 문서" },
-        "500": { description: "서버 오류" }
-      }
+        "409": { description: "모든 문서가 이미 존재함" },
+        "500": { description: "서버 오류" },
+      },
+    }
+  );
+
+  // RAG 문서 메타데이터 수정
+  router.put(
+    "/api/rag/documents/:id",
+    async (request: Request, env: any) => await RagApi.fetch(request, env),
+    {
+      summary: "[RAG] 문서 메타데이터 수정",
+      description: "ID로 특정 문서의 메타데이터 전체를 수정합니다. 벡터 인덱스는 재계산되지 않습니다.",
+      tags: ["AI - RAG"],
+      auth: true, // 관리자 권한 필요
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          description: "메타데이터를 수정할 문서의 ID",
+          schema: { type: "integer" },
+        },
+      ],
+      requestBody: {
+        description: "새로운 메타데이터 객체. 모든 필드를 포함하여 전송해야 합니다.",
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                source: {
+                  type: "string",
+                  description: "필수. 지식의 출처 (예: '자평진전', '궁통보감').",
+                },
+                category: {
+                  type: "string",
+                  enum: ["십신론", "격국론", "용신론", "물상론", "기타"],
+                  description: "필수. 사주 명리학의 대분류.",
+                },
+                author: {
+                  type: "string",
+                  description: "선택. 원본 저자.",
+                  nullable: true,
+                },
+                relatedConcepts: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "선택. 관련된 핵심 개념어 배열. (예: ['갑목', '편재'])",
+                  nullable: true,
+                },
+                url: {
+                  type: "string",
+                  description: "선택. 웹 출처인 경우의 URL.",
+                  nullable: true,
+                },
+              },
+              required: ["source", "category"],
+            },
+            example: {
+              source: "궁통보감",
+              category: "용신론",
+              author: "작자미상",
+            },
+          },
+        },
+      },
+      responses: {
+        "200": { description: "메타데이터 수정 성공" },
+        "400": { description: "잘못된 요청 (ID 또는 메타데이터 형식 오류)" },
+        "404": { description: "해당 ID의 문서를 찾을 수 없음" },
+        "500": { description: "서버 오류" },
+      },
     }
   );
 
@@ -104,9 +244,50 @@ export function createAiRouter(): Router {
       responses: {
         "200": {
           description: "성공적인 응답",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "integer" },
+                        text: { type: "string" },
+                        metadata: {
+                          type: "object",
+                          properties: {
+                            source: { type: "string" },
+                            category: { type: "string" },
+                            author: { type: "string", nullable: true },
+                            relatedConcepts: { type: "array", items: {type: "string"}, nullable: true },
+                            url: { type: "string", nullable: true },
+                          },
+                          nullable: true,
+                        },
+                        created_at: { type: "string", format: "date-time" },
+                        updated_at: { type: "string", format: "date-time" },
+                      },
+                    },
+                  },
+                  pagination: {
+                    type: "object",
+                    properties: {
+                      page: { type: "integer" },
+                      limit: { type: "integer" },
+                      totalItems: { type: "integer" },
+                      totalPages: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+          },
           // 상세 스키마는 common/paginationUtils.ts에 의해 결정됨
         },
-        "500": { description: "서버 오류" }
+        "500": { description: "서버 오류" },
       },
     }
   );
@@ -147,46 +328,65 @@ export function createAiRouter(): Router {
     }
   );
 
-  // RAG 질의
-  router.post(
-    "/api/rag/query",
+  // RAG 메타데이터 스키마 조회
+  router.get(
+    "/api/rag/metadata-schema",
     async (request: Request, env: any) => await RagApi.fetch(request, env),
     {
-      summary: "[RAG] 질의",
-      description: "RAG 시스템에 저장된 지식을 바탕으로 질문에 답변합니다.",
+      summary: "[RAG] 메타데이터 스키마 조회",
+      description:
+        "문서 추가/수정에 필요한 메타데이터의 '설계도'를 제공합니다. 프론트엔드에서 이 정보를 바탕으로 입력 폼을 동적으로 생성할 수 있습니다. 예를 들어 'category' 필드는 드롭다운으로, 나머지는 텍스트 입력으로 구현할 수 있습니다.",
       tags: ["AI - RAG"],
       auth: true,
-      requestBody: {
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                query: { type: "string", description: "질문 내용" },
-              },
-              required: ["query"]
-            },
-          },
-        },
-      },
       responses: {
         "200": {
-          description: "질의 성공",
+          description: "스키마 정보 조회 성공",
           content: {
             "application/json": {
               schema: {
                 type: "object",
                 properties: {
-                  answer: { type: "string", description: "AI의 답변" },
-                  context: { type: "array", items: { type: "string" }, description: "답변에 사용된 컨텍스트 문서들" }
-                }
-              }
-            }
-          }
+                  keys: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "사용 가능한 모든 메타데이터 키 목록",
+                  },
+                  required: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "필수 메타데이터 키 목록",
+                  },
+                  options: {
+                    type: "object",
+                    properties: {
+                      category: {
+                        type: "array",
+                        items: { type: "string" },
+                        description:
+                          "category 필드에서 선택 가능한 값 목록",
+                      },
+                    },
+                    description: "선택지가 정해진 필드의 옵션 값 목록",
+                  },
+                  fields: {
+                    type: "object",
+                    additionalProperties: {
+                      type: "object",
+                      properties: {
+                        type: { type: "string" },
+                        description: { type: "string" },
+                        optional: { type: "boolean" },
+                      },
+                    },
+                    description: "각 필드에 대한 상세 설명",
+                  },
+                },
+              },
+            },
+          },
         },
-        "400": { description: "질문 누락" },
-        "500": { description: "서버 오류" }
-      }
+        "500": { description: "서버 오류" },
+      },
     }
   );
 

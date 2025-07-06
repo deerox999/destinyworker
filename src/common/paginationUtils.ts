@@ -54,7 +54,19 @@ export async function paginate(
       countQuery.first<{ count: number }>()
     ]);
     
-    const data = dataResult.results || [];
+    let data = dataResult.results || [];
+    if (data.length > 0 && 'metadata' in data[0]) {
+      data = data.map(item => {
+        try {
+          const metadata = typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata;
+          return { ...item, metadata };
+        } catch (e) {
+          // JSON 파싱 실패 시 원본 metadata 유지
+          return item;
+        }
+      });
+    }
+
     const totalItems = countResult?.count || 0;
     const totalPages = Math.ceil(totalItems / limit);
 

@@ -168,7 +168,18 @@ async function handleSajuChat(
     ]);
     
     const ragContext = ragDocs.length > 0 
-      ? `[내부 지식 베이스]:\n${ragDocs.join('\n---\n')}` 
+      ? `[내부 지식 베이스]:\n${
+        ragDocs.map(doc => {
+          let context = `내용: ${doc.text}`;
+          // 메타데이터가 존재하면 컨텍스트에 추가합니다.
+          if (doc.metadata) {
+            // 예시: 메타데이터를 JSON 문자열로 보기 좋게 포맷팅
+            const metadataString = JSON.stringify(doc.metadata);
+            context = `출처 정보: ${metadataString}\n${context}`;
+          }
+          return context;
+        }).join('\n\n---\n\n')
+      }` 
       : "";
     
     const webContext = webSearchResults.length > 0 

@@ -1,6 +1,18 @@
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 
 /**
+ * D1에서 조회한 문서의 타입 정의
+ */
+export interface DocumentWithMetadata {
+  id: number;
+  text: string;
+  metadata: Record<string, any> | null;
+  // 스키마에 정의된 다른 필드들도 여기에 추가할 수 있습니다.
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * RAG 파이프라인에 필요한 환경 변수 타입
  */
 export interface RagEnv {
@@ -26,6 +38,27 @@ export async function createEmbedding(ai: Ai, text: string): Promise<number[]> {
     throw new Error("Failed to generate vector embedding.");
   }
   return vector;
+}
+
+/**
+ * 텍스트 묶음에 대한 임베딩 벡터를 생성합니다.
+ * @param ai AI 인스턴스
+ * @param texts 임베딩할 텍스트 배열
+ * @returns 생성된 벡터의 배열 (2차원 부동 소수점 배열)
+ */
+export async function createEmbeddings(ai: Ai, texts: string[]): Promise<number[][]> {
+  if (texts.length === 0) {
+    return [];
+  }
+  const embeddingResponse = await ai.run("@cf/baai/bge-base-en-v1.5", {
+    text: texts,
+  });
+  // @ts-ignore
+  const vectors = embeddingResponse.data;
+  if (!vectors || vectors.length !== texts.length) {
+    throw new Error("Failed to generate vector embeddings for all texts.");
+  }
+  return vectors;
 }
 
 /**
@@ -62,14 +95,32 @@ export async function findSimilarVectors(
 export async function getDocumentsFromD1(
   db: D1Database,
   ids: string[]
-): Promise<string[]> {
+): Promise<DocumentWithMetadata[]> {
   if (ids.length === 0) {
     return [];
   }
   const placeholders = ids.map(() => "?").join(", ");
   const { results } = await db
-    .prepare(`SELECT text FROM documents WHERE id IN (${placeholders})`)
+    .prepare(`SELECT * FROM documents WHERE id IN (${placeholders})`)
     .bind(...ids)
-    .all<{ text: string }>();
-  return results?.map((res) => res.text) || [];
+    .all<Omit<DocumentWithMetadata, "metadata"> & { metadata: string | null }>();
+
+  if (!results) {
+    return [];
+  }
+
+  // metadata 필드를 JSON 문자열에서 객체로 파싱합니다.
+  return results.map((doc) => {
+    let parsedMetadata: Record<string, any> | null = null;
+    if (doc.metadata) {
+      try {
+        parsedMetadata = JSON.parse(doc.metadata);
+      } catch (e) {
+        console.error(`문서 ID ${doc.id}의 메타데이터 파싱 실패:`, e);
+        // 파싱에 실패하면 null을 유지하거나, 혹은 원본 문자열을 그대로 반환할 수 있습니다.
+        // 여기서는 null로 처리합니다.
+      }
+    }
+    return { ...doc, metadata: parsedMetadata };
+  });
 } 

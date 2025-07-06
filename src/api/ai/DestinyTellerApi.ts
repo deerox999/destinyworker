@@ -212,9 +212,17 @@ async function handleDetailedFortuneTelling(
     // 2. 검색된 문서를 시스템 프롬프트에 컨텍스트로 추가
     const ragContext =
       contextDocs.length > 0
-        ? `Here is some context from my knowledge base, use it to answer the user's question:\n${contextDocs.join(
-            "\n---\n"
-          )}`
+        ? `Here is some context from my knowledge base, use it to answer the user's question:\n${contextDocs
+            .map((doc) => {
+              let context = doc.text;
+              if (doc.metadata) {
+                context += `\n(Source Metadata: ${JSON.stringify(
+                  doc.metadata
+                )})`;
+              }
+              return context;
+            })
+            .join("\n---\n")}`
         : "";
 
     const originalSystemPrompt =

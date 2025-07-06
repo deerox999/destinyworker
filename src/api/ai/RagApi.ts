@@ -1,6 +1,7 @@
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 import {
   createEmbedding,
+  createEmbeddings,
   findSimilarVectors,
   getDocumentsFromD1,
 } from "../../common/ragUtils";
@@ -14,10 +15,32 @@ export interface Env {
 }
 
 /**
+ * RAG 문서에 대한 사주 프로젝트용 표준 메타데이터 스키마.
+ * 일관된 메타데이터는 AI 답변의 품질과 데이터 필터링 기능에 큰 영향을 미칩니다.
+ */
+export interface DocumentMetadata {
+  /** 지식의 출처 (예: "자평진전", "궁통보감") */
+  source: string;
+  /** 사주 명리학의 대분류 */
+  category: "십신론" | "격국론" | "용신론" | "물상론" | "기타";
+  /** 저자 (선택 사항) */
+  author?: string;
+  /** 관련 개념 (선택 사항, 필터링에 유용) */
+  relatedConcepts?: string[];
+  /** 웹 출처인 경우의 URL (선택 사항) */
+  url?: string;
+}
+
+/**
  * API 요청 본문에 대한 타입 정의
  */
-interface DocumentRequest {
+interface Document {
   text: string;
+  metadata: DocumentMetadata;
+}
+
+interface DocumentRequest {
+  documents: Document[];
 }
 
 interface QueryRequest {
@@ -29,84 +52,133 @@ interface QueryRequest {
 // =================================================================
 
 /**
- * 텍스트를 D1에 저장하고 ID를 반환합니다.
+ * 여러 텍스트를 D1에 한 번에 저장합니다.
+ * 중복된 텍스트는 건너뜁니다.
  * @param db D1 Database 인스턴스
- * @param text 저장할 텍스트
- * @returns 저장된 행의 ID
+ * @param documents 저장할 문서 배열 ({text, metadata})
+ * @returns 저장에 성공한 문서의 ID와 텍스트 배열
  */
-async function saveTextToD1(db: D1Database, text: string): Promise<number | null> {
-  const existing = await db
-    .prepare("SELECT id FROM documents WHERE text = ?")
-    .bind(text)
-    .first<{ id: number }>();
+async function saveDocumentsToD1(
+  db: D1Database,
+  documents: { text: string; metadata?: any }[]
+): Promise<{ id: number; text: string }[]> {
+  const statements = documents.map(({ text, metadata }) =>
+    db
+      .prepare(
+        "INSERT INTO documents (text, metadata) VALUES (?, ?) ON CONFLICT(text) DO NOTHING RETURNING id, text"
+      )
+      .bind(text, metadata ? JSON.stringify(metadata) : null)
+  );
 
-  if (existing) {
-    return null; // 중복 시 null 반환
+  try {
+    const results = await db.batch<{ id: number; text: string }>(statements);
+    const successfullyInserted = results.flatMap((result) => result.results || []);
+    return successfullyInserted;
+  } catch (e) {
+    console.error("D1 batch insert failed:", e);
+    // 트랜잭션 실패 시 개별적으로 처리 (선택적 폴백)
+    const inserted = [];
+    for (const doc of documents) {
+      try {
+        const { results } = await db
+          .prepare(
+            "INSERT INTO documents (text, metadata) VALUES (?, ?) ON CONFLICT(text) DO NOTHING RETURNING id, text"
+          )
+          .bind(doc.text, doc.metadata ? JSON.stringify(doc.metadata) : null)
+          .run<{ id: number; text: string }>();
+        if (results && results.length > 0) {
+          inserted.push(results[0]);
+        }
+      } catch (innerError) {
+        console.error(`Failed to insert document with text: ${doc.text}`, innerError);
+      }
+    }
+    return inserted;
   }
-
-  const { results } = await db
-    .prepare("INSERT INTO documents (text) VALUES (?) RETURNING id")
-    .bind(text)
-    .run<{ id: number }>();
-
-  const recordId = results?.[0]?.id;
-  if (!recordId) {
-    throw new Error("Failed to save document to D1.");
-  }
-  return recordId;
 }
 
 /**
- * 벡터를 Vectorize 인덱스에 저장합니다.
+ * 여러 벡터를 Vectorize 인덱스에 저장합니다.
  * @param index Vectorize 인덱스 인스턴스
- * @param id 문서 ID
- * @param vector 임베딩 벡터
+ * @param vectors 저장할 벡터 배열 ({id, values})
  */
-async function insertVector(
+async function insertVectors(
   index: VectorizeIndex,
-  id: number,
-  vector: number[]
+  vectors: { id: number; values: number[] }[]
 ): Promise<void> {
-  await index.upsert([{ id: id.toString(), values: vector }]);
+  if (vectors.length === 0) {
+    return;
+  }
+  const toInsert = vectors.map((v) => ({ id: v.id.toString(), values: v.values }));
+  await index.upsert(toInsert);
 }
 
 /**
  * 새 문서를 추가하고 인덱싱하는 요청을 처리합니다.
  */
-async function handleAddDocument(
+async function handleAddDocuments(
   request: Request,
   env: Env
 ): Promise<Response> {
   try {
-    const { text } = (await request.json()) as DocumentRequest;
-    if (!text || typeof text !== "string") {
-      return new Response("Invalid request: 'text' must be a non-empty string.", {
-        status: 400,
-        headers: corsHeaders()
-      });
+    const { documents } = (await request.json()) as DocumentRequest;
+    if (
+      !Array.isArray(documents) ||
+      documents.length === 0 ||
+      documents.some((d) => !d.text || !d.metadata)
+    ) {
+      return new Response(
+        "Invalid request: 'documents' must be a non-empty array of objects with 'text' and 'metadata' properties.",
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
-    const docId = await saveTextToD1(env.DB, text);
-    if (docId === null) {
+    // Metadata 유효성 검사
+    for (const doc of documents) {
+      if (!doc.metadata.source || !doc.metadata.category) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Invalid metadata: 'source' and 'category' are required fields.",
+          }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders() },
+          }
+        );
+      }
+    }
+
+    const newlyInsertedDocs = await saveDocumentsToD1(env.DB, documents);
+
+    if (newlyInsertedDocs.length === 0) {
       return new Response(
-        JSON.stringify({ message: "Document with this text already exists." }),
+        JSON.stringify({ message: "All documents already exist or failed to save." }),
         { status: 409, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
       );
     }
 
-    const vector = await createEmbedding(env.AI, text);
-    await insertVector(env.VECTORIZE_INDEX, docId, vector);
+    const textsToEmbed = newlyInsertedDocs.map(doc => doc.text);
+    const embeddings = await createEmbeddings(env.AI, textsToEmbed);
+    
+    const vectorsToInsert = newlyInsertedDocs.map((doc, i) => ({
+      id: doc.id,
+      values: embeddings[i],
+    }));
+    
+    await insertVectors(env.VECTORIZE_INDEX, vectorsToInsert);
 
     return new Response(
       JSON.stringify({
-        id: docId,
-        message: "Document added and indexed successfully.",
+        message: `Processed ${documents.length} documents. Added and indexed ${newlyInsertedDocs.length} new documents.`,
+        addedCount: newlyInsertedDocs.length,
+        addedIds: newlyInsertedDocs.map(d => d.id)
       }),
       { status: 201, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Error adding document:", error);
-    return new Response("Failed to add document.", { status: 500, headers: corsHeaders() });
+    console.error("Error adding documents:", error);
+    return new Response("Failed to add documents.", { status: 500, headers: corsHeaders() });
   }
 }
 
@@ -193,59 +265,106 @@ async function handleDeleteDocuments(request: Request, env: Env): Promise<Respon
 }
 
 // =================================================================
-// 4. 질의 및 답변 생성 (Query & Generate)
+// 4. 문서 수정
 // =================================================================
 
-/**
- * RAG 파이프라인을 통해 최종 답변을 생성합니다.
- */
-async function handleQuery(request: Request, env: Env): Promise<Response> {
+async function handleUpdateDocumentMetadata(
+  request: Request,
+  env: Env,
+  id: string
+): Promise<Response> {
+  const docId = parseInt(id, 10);
+  if (isNaN(docId)) {
+    return new Response("Invalid document ID.", { status: 400, headers: corsHeaders() });
+  }
+
   try {
-    const { query } = (await request.json()) as QueryRequest;
-    if (!query) {
-      return new Response("Invalid request: 'query' is required.", {
-        status: 400,
-        headers: corsHeaders()
-      });
+    const metadata = (await request.json()) as DocumentMetadata;
+
+    // Metadata 유효성 검사
+    if (!metadata || !metadata.source || !metadata.category) {
+      return new Response(
+        JSON.stringify({
+          error: "Invalid metadata: 'source' and 'category' are required fields.",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders() } }
+      );
     }
 
-    // 1. 질문을 임베딩하여 쿼리 벡터 생성
-    const queryVector = await createEmbedding(env.AI, query);
+    const { meta } = await env.DB.prepare("UPDATE documents SET metadata = ? WHERE id = ?")
+      .bind(JSON.stringify(metadata), docId)
+      .run();
 
-    // 2. Vectorize에서 유사한 벡터(문서 ID) 검색
-    const similarDocIds = await findSimilarVectors(
-      env.VECTORIZE_INDEX,
-      queryVector
-    );
-
-    // 3. D1에서 유사한 문서의 원본 텍스트(Context) 가져오기
-    const contextDocs = await getDocumentsFromD1(env.DB, similarDocIds.map(id => id.toString()));
-
-    // 4. LLM에 Context와 질문을 함께 전달하여 답변 생성
-    const contextMessage =
-      contextDocs.length > 0
-        ? `Context:\n${contextDocs.join("\n---\n")}`
-        : "No context provided.";
-
-    const systemPrompt =
-      "You are a helpful assistant. Answer the user's question based on the provided context. If the context doesn't contain the answer, say that you don't know.";
-
-    const { response } = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-      messages: [
-        { role: "system", content: contextMessage },
-        { role: "system", content: systemPrompt },
-        { role: "user", content: query },
-      ],
-    });
+    if (meta.changes === 0) {
+      return new Response(
+        JSON.stringify({ error: `Document with ID ${docId} not found.` }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders() } }
+      );
+    }
 
     return new Response(
-      JSON.stringify({ answer: response, context: contextDocs }),
-      { headers: { ...corsHeaders(), "Content-Type": "application/json" } }
+      JSON.stringify({
+        message: `Document ${docId} metadata updated successfully.`,
+        id: docId,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders() } }
     );
   } catch (error) {
-    console.error("Error handling query:", error);
-    return new Response("Failed to process query.", { status: 500, headers: corsHeaders() });
+    console.error(`Error updating document ${docId}:`, error);
+    if (error instanceof SyntaxError) {
+      return new Response(JSON.stringify({ error: "잘못된 JSON 형식입니다." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
+    return new Response("문서 수정 중 오류가 발생했습니다.", { status: 500, headers: corsHeaders() });
   }
+}
+
+// =================================================================
+// 5. 메타데이터 스키마 조회
+// =================================================================
+
+async function handleGetMetadataSchema(): Promise<Response> {
+  const schema = {
+    keys: ["source", "category", "author", "relatedConcepts", "url"],
+    required: ["source", "category"],
+    options: {
+      category: ["십신론", "격국론", "용신론", "물상론", "기타"],
+    },
+    fields: {
+      source: {
+        type: "string",
+        description:
+          "지식의 출처 (예: '자평진전', '궁통보감'). 데이터의 신뢰도를 판단하는 핵심 정보입니다.",
+      },
+      category: {
+        type: "string",
+        description:
+          "사주 명리학의 대분류. 이 지식이 어떤 주제에 속하는지 명시합니다.",
+      },
+      author: {
+        type: "string",
+        description: "출처의 저자 (선택 사항).",
+        optional: true,
+      },
+      relatedConcepts: {
+        type: "array",
+        itemType: "string",
+        description:
+          "관련 핵심 개념어 배열 (선택 사항). 향후 특정 개념과 연관된 문서를 필터링하는 데 사용됩니다. (예: ['갑목', '편재'])",
+        optional: true,
+      },
+      url: {
+        type: "string",
+        description: "출처가 웹사이트인 경우의 주소 (선택 사항).",
+        optional: true,
+      },
+    },
+  };
+  return new Response(JSON.stringify(schema), {
+    headers: { "Content-Type": "application/json", ...corsHeaders() },
+  });
 }
 
 // =================================================================
@@ -261,10 +380,22 @@ export default {
       return new Response(null, { headers: corsHeaders() });
     }
 
+    // /api/rag/metadata-schema
+    if (pathSegments[2] === "metadata-schema" && request.method === "GET") {
+      return handleGetMetadataSchema();
+    }
+
+    // /api/rag/documents/:id
+    if (pathSegments[2] === "documents" && pathSegments.length === 4) {
+      if (request.method === "PUT") {
+        return handleUpdateDocumentMetadata(request, env, pathSegments[3]);
+      }
+    }
+    
     // /api/rag/documents
-    if (pathSegments[2] === "documents") {
-      if (request.method === "POST" && pathSegments.length === 3) {
-        return handleAddDocument(request, env);
+    if (pathSegments[2] === "documents" && pathSegments.length === 3) {
+      if (request.method === "POST") {
+        return handleAddDocuments(request, env);
       }
       if (request.method === "GET" && pathSegments.length === 3) {
         return handleListDocuments(request, env);
@@ -272,11 +403,6 @@ export default {
       if (request.method === "DELETE" && pathSegments.length === 3) {
         return handleDeleteDocuments(request, env);
       }
-    }
-
-    // /api/rag/query
-    if (pathSegments[2] === "query" && request.method === "POST") {
-      return handleQuery(request, env);
     }
 
     return new Response("Not Found", { status: 404, headers: corsHeaders() });
