@@ -140,31 +140,55 @@ async function handleListDocuments(
 // =================================================================
 
 /**
- * 문서를 삭제하는 요청을 처리합니다.
+ * 여러 문서를 ID 목록을 이용해 한 번에 삭제하는 요청을 처리합니다.
  */
-async function handleDeleteDocument(request: Request, env: Env, id: string): Promise<Response> {
-    const docId = parseInt(id, 10);
-    if (isNaN(docId)) {
-        return new Response("Invalid document ID.", { status: 400, headers: corsHeaders() });
-    }
-
+async function handleDeleteDocuments(request: Request, env: Env): Promise<Response> {
     try {
-        // D1에서 삭제
-        const { success } = await env.DB.prepare("DELETE FROM documents WHERE id = ?").bind(docId).run();
-        if (!success) {
-            return new Response("Document not found in D1.", { status: 404, headers: corsHeaders() });
+        const { ids } = await request.json() as { ids: number[] };
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return new Response(
+                JSON.stringify({ error: "요청 본문에 'ids' 배열(숫자)을 포함해야 합니다." }),
+                { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
+            );
         }
         
-        // Vectorize에서 삭제
-        await env.VECTORIZE_INDEX.deleteByIds([id]);
+        const validIds = ids.filter(id => typeof id === 'number' && Number.isInteger(id));
+        if (validIds.length !== ids.length) {
+            return new Response(
+                JSON.stringify({ error: "'ids' 배열은 정수로만 구성되어야 합니다." }),
+                { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
+            );
+        }
 
-        return new Response(JSON.stringify({ message: "Document deleted successfully." }), {
+        // D1에서 삭제
+        const placeholders = validIds.map(() => '?').join(',');
+        const query = `DELETE FROM documents WHERE id IN (${placeholders})`;
+        const { meta } = await env.DB.prepare(query).bind(...validIds).run();
+        const deletedCount = meta.changes || 0;
+
+        // Vectorize에서 삭제
+        const stringIds = validIds.map(id => id.toString());
+        if (stringIds.length > 0) {
+            await env.VECTORIZE_INDEX.deleteByIds(stringIds);
+        }
+
+        return new Response(JSON.stringify({ 
+          message: `총 ${deletedCount}개의 문서가 성공적으로 삭제되었습니다.`,
+          deletedCount
+        }), {
             headers: { ...corsHeaders(), "Content-Type": "application/json" },
         });
 
     } catch (error) {
-        console.error("Error deleting document:", error);
-        return new Response("Failed to delete document.", { status: 500, headers: corsHeaders() });
+        console.error("Error deleting documents:", error);
+        if (error instanceof SyntaxError) {
+          return new Response(
+            JSON.stringify({ error: "잘못된 JSON 형식입니다." }),
+            { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
+          );
+        }
+        return new Response("문서 삭제 중 오류가 발생했습니다.", { status: 500, headers: corsHeaders() });
     }
 }
 
@@ -245,9 +269,8 @@ export default {
       if (request.method === "GET" && pathSegments.length === 3) {
         return handleListDocuments(request, env);
       }
-      if (request.method === "DELETE" && pathSegments.length === 4) {
-        const id = pathSegments[3];
-        return handleDeleteDocument(request, env, id);
+      if (request.method === "DELETE" && pathSegments.length === 3) {
+        return handleDeleteDocuments(request, env);
       }
     }
 

@@ -337,7 +337,7 @@ export default {
     }
 
     switch (url.pathname) {
-      case "/api/detailed-fortune-telling":
+      case "/api/ai/detailed-fortune-telling":
         if (request.method === "POST") {
           return handleDetailedFortuneTelling(request, env);
         }

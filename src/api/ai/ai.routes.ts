@@ -113,27 +113,35 @@ export function createAiRouter(): Router {
 
   // RAG 문서 삭제
   router.delete(
-    "/api/rag/documents/:id",
+    "/api/rag/documents",
     async (request: Request, env: any) => await RagApi.fetch(request, env),
     {
-      summary: "[RAG] 문서 삭제",
+      summary: "[RAG] 문서 일괄 삭제",
       description:
-        "특정 문서를 ID를 이용해 D1과 Vectorize 인덱스에서 모두 삭제합니다.",
+        "ID 목록을 이용해 D1과 Vectorize 인덱스에서 여러 문서를 한 번에 삭제합니다.",
       tags: ["AI - RAG"],
       auth: true, // 관리자 권한 필요
-      parameters: [
-        {
-          name: "id",
-          in: "path",
-          required: true,
-          description: "삭제할 문서의 ID",
-          schema: { type: "integer" },
-        },
-      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                ids: { 
+                  type: "array", 
+                  items: { type: "integer" },
+                  description: "삭제할 문서 ID 목록"
+                }
+              },
+              required: ["ids"]
+            }
+          }
+        }
+      },
       responses: {
         "200": { description: "삭제 성공" },
-        "400": { description: "잘못된 ID" },
-        "404": { description: "문서를 찾을 수 없음" },
+        "400": { description: "잘못된 요청 (ID 목록이 없거나 형식이 잘못됨)" },
         "500": { description: "서버 오류" }
       }
     }
