@@ -71,6 +71,23 @@ export class Router {
     const method = request.method;
     const pathname = url.pathname;
 
+    // CORS Preflight(OPTIONS) 요청 자동 처리
+    if (method === 'OPTIONS') {
+      // 해당 경로에 GET, POST 등 다른 메서드로 등록된 라우트가 있는지 확인
+      const hasRoute = this.routes.some(route => this.matchPath(route.path, pathname));
+      if (hasRoute) {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*', // 실제 프로덕션에서는 특정 도메인으로 제한하는 것이 좋습니다.
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization', // 클라이언트에서 보내는 헤더들을 허용
+            'Access-Control-Max-Age': '86400', // Preflight 요청 캐시 시간(초)
+          }
+        });
+      }
+    }
+
     // 등록된 라우트들을 순회하며 매칭되는 라우트를 찾습니다
     for (const route of this.routes) {
       if (route.method !== method) continue;
