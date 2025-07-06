@@ -182,16 +182,17 @@ async function handleSajuChat(
       ? `너에게 제공되는 컨텍스트(Context)는 사용자의 질문과 관련된 참고 자료야. 이 컨텍스트는 [내부 지식 베이스]와 [최신 웹 검색 결과]로 구성되어 있어. 두 정보를 모두 종합적으로 참고해서 사용자의 질문에 대해 답변해줘. 컨텍스트에 질문과 일치하는 내용이 없으면, 아는 척하지 말고 반드시 "제공된 정보만으로는 답변하기 어렵습니다."라고 솔직하게 말해야 해.\n\n---\n\n${fullContext}`
       : "No context provided.";
 
-    // 3. LLM에 전달할 전체 메시지 구성
-    const messages: ChatMessage[] = [
-      ...history,
-      { role: "system", content: contextMessage },
-      { role: "user", content: userQuery },
-    ];
+    const messages: ChatMessage[] = [];
 
-    if (systemPrompt) {
-        messages.unshift({ role: "system", content: systemPrompt });
-    }
+    // systemPrompt와 contextMessage를 결합하여 하나의 시스템 메시지로 만듭니다.
+    const combinedSystemMessage = systemPrompt 
+      ? `${systemPrompt}\n\n---\n\n${contextMessage}` 
+      : contextMessage;
+
+    messages.push({ role: 'system', content: combinedSystemMessage });
+    
+    // 시스템 메시지 다음에 대화 기록과 현재 사용자 질문을 추가합니다.
+    messages.push(...history, { role: "user", content: userQuery });
 
     // 4. LLM 호출
     const llmResponse = await env.AI.run("@cf/google/gemma-3-12b-it", {
