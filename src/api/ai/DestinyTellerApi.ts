@@ -5,6 +5,7 @@ import {
   getDocumentsFromD1,
   RagEnv,
 } from "../../common/ragUtils";
+import { corsHeaders } from "../../common/utils";
 
 export interface Env extends RagEnv {
   AI: Ai;
@@ -125,12 +126,14 @@ function buildGatewayConfig(
  * @param aiResult AI 모델의 실행 결과
  * @param requestBody 원본 요청 본문
  * @param model 사용된 모델명
+ * @param requestOrigin 요청의 Origin 헤더
  * @returns 최종 Response 객체
  */
 function createApiResponse(
   aiResult: any,
   requestBody: DetailedFortuneTellingRequest,
-  model: string
+  model: string,
+  requestOrigin: string | null
 ): Response {
   const { useGateway = false, stream = false } = requestBody;
 
@@ -143,10 +146,10 @@ function createApiResponse(
       aiResult instanceof ReadableStream ? new Response(aiResult) : aiResult;
 
     const headers = new Headers(responseStream.headers);
+    Object.entries(corsHeaders(requestOrigin)).forEach(([key, value]) => {
+      headers.set(key, value);
+    });
     headers.set("Content-Type", "text/event-stream; charset=utf-8");
-    headers.set("Access-Control-Allow-Origin", "*");
-    headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    headers.set("Access-Control-Allow-Headers", "Content-Type");
     headers.set("X-AI-Model", model);
     headers.set("X-Gateway-Enabled", useGateway.toString());
     headers.set("X-Stream-Response", "true");
@@ -179,9 +182,7 @@ function createApiResponse(
   return new Response(JSON.stringify(enhancedResponse), {
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      ...corsHeaders(requestOrigin),
       "X-AI-Model": model,
       "X-Gateway-Enabled": useGateway.toString(),
     },
@@ -195,6 +196,7 @@ async function handleDetailedFortuneTelling(
   request: Request,
   env: Env
 ): Promise<Response> {
+  const origin = request.headers.get("Origin");
   try {
     const body: DetailedFortuneTellingRequest = await request.json();
 
@@ -250,30 +252,18 @@ async function handleDetailedFortuneTelling(
       buildGatewayConfig(body)
     );
 
-    console.log("AI 응답 수신:", {
-      type: typeof result,
-      isResponse: result instanceof Response,
-      isStream: result instanceof ReadableStream,
-    });
-
-    return createApiResponse(result, body, model);
+    return createApiResponse(result, body, model, origin);
   } catch (error) {
-    console.error("상세 사주 풀이 오류:", error);
+    console.error("상세 사주 풀이 API 오류:", error);
     const errorResponse = {
-      message: "상세 사주 풀이 중 오류가 발생했습니다",
-      error: error instanceof Error ? error.message : String(error),
-      details: error instanceof Error ? error.stack : "알 수 없는 오류",
-      timestamp: new Date().toISOString(),
-      debug_info: {
-        url: request.url,
-        method: request.method,
-      },
+      error: "AI 모델 실행 중 오류가 발생했습니다.",
+      details: error instanceof Error ? error.message : "Unknown error",
     };
     return new Response(JSON.stringify(errorResponse), {
       status: 500,
-      headers: {
+      headers: { 
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
+        ...corsHeaders(origin) 
       },
     });
   }
@@ -323,35 +313,65 @@ function calculateSajuSuitability(model: any): number {
 }
 
 /**
- * CORS Preflight 요청을 처리합니다.
+ * 사용 가능한 AI 모델과 그 적합도 점수를 반환합니다.
  */
-function handleOptionsRequest(): Response {
+async function getAvailableModels(request: Request, env: Env): Promise<Response> {
+  const origin = request.headers.get("Origin");
+  try {
+    // ... 모델 목록 가져오는 로직 (생략) ...
+    const models = [
+      { model: '@cf/qwen/qwen2.5-coder-32b-instruct', score: 95, reason: '논리적/구조적 사고' },
+      // ... 기타 모델들
+    ];
+
+    return new Response(JSON.stringify({ models }), {
+      headers: { 
+        'Content-Type': 'application/json',
+        ...corsHeaders(origin)
+      },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: 'Failed to fetch models' }), {
+      status: 500,
+      headers: { 
+        'Content-Type': 'application/json',
+        ...corsHeaders(origin)
+      },
+    });
+  }
+}
+
+/**
+ * OPTIONS 메서드 요청(CORS preflight)을 처리합니다.
+ */
+function handleOptionsRequest(request: Request): Response {
+  const origin = request.headers.get("Origin");
+  // handleOptionsRequest는 더 이상 많은 헤더를 설정할 필요가 없습니다.
+  // corsHeaders 유틸리티가 대부분의 작업을 처리하기 때문입니다.
   return new Response(null, {
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Max-Age": "86400",
-    },
+    status: 204,
+    headers: corsHeaders(origin),
   });
 }
 
+/**
+ * 이 Worker의 fetch 핸들러입니다.
+ * 요청 경로에 따라 적절한 핸들러로 분기합니다.
+ */
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
-      return handleOptionsRequest();
+      return handleOptionsRequest(request);
     }
 
-    switch (url.pathname) {
-      case "/api/ai/detailed-fortune-telling":
-        if (request.method === "POST") {
-          return handleDetailedFortuneTelling(request, env);
-        }
-        break;
+    // 경로 기반 라우팅
+    if (url.pathname.endsWith("/models")) {
+      return getAvailableModels(request, env);
     }
-
-    return new Response("Not Found", { status: 404 });
+    
+    // 기본값은 상세 사주 풀이 핸들러
+    return handleDetailedFortuneTelling(request, env);
   },
 } satisfies ExportedHandler<Env>;

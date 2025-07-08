@@ -6,6 +6,7 @@ import {
   getDocumentsFromD1,
   RagEnv,
 } from "../../common/ragUtils";
+import { corsHeaders } from "../../common/utils";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -397,16 +398,13 @@ export default {
   async fetch(request: Request, env: RagEnv): Promise<Response> {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split("/").filter(Boolean);
+    const origin = request.headers.get("Origin");
 
     // CORS Preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          "Access-Control-Max-Age": "86400",
-        },
+        status: 204,
+        headers: corsHeaders(origin),
       });
     }
     
