@@ -22,7 +22,7 @@ export interface DocumentMetadata {
   /** 지식의 출처 (예: "자평진전", "궁통보감") */
   source: string;
   /** 사주 명리학의 대분류 */
-  category: "십신론" | "격국론" | "용신론" | "물상론" | "기타";
+  category: string;
   /** 저자 (선택 사항) */
   author?: string;
   /** 관련 개념 (선택 사항, 필터링에 유용) */
@@ -268,7 +268,7 @@ async function handleDeleteDocuments(request: Request, env: Env): Promise<Respon
 // 4. 문서 수정
 // =================================================================
 
-async function handleUpdateDocumentMetadata(
+async function handleUpdateDocument(
   request: Request,
   env: Env,
   id: string
@@ -279,32 +279,47 @@ async function handleUpdateDocumentMetadata(
   }
 
   try {
-    const metadata = (await request.json()) as DocumentMetadata;
+    const { text, metadata } = (await request.json()) as Document;
 
-    // Metadata 유효성 검사
-    if (!metadata || !metadata.source || !metadata.category) {
+    // 필수 필드 유효성 검사
+    if (!text || !metadata || !metadata.source || !metadata.category) {
       return new Response(
         JSON.stringify({
-          error: "Invalid metadata: 'source' and 'category' are required fields.",
+          error:
+            "Invalid request body: 'text' and 'metadata' (with 'source' and 'category') are required fields.",
         }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders() } }
       );
     }
 
-    const { meta } = await env.DB.prepare("UPDATE documents SET metadata = ? WHERE id = ?")
-      .bind(JSON.stringify(metadata), docId)
-      .run();
+    // 기존 문서를 가져와서 텍스트 변경 여부 확인
+    const oldDoc = await env.DB.prepare("SELECT text FROM documents WHERE id = ?")
+      .bind(docId)
+      .first<{ text: string }>();
 
-    if (meta.changes === 0) {
+    if (!oldDoc) {
       return new Response(
         JSON.stringify({ error: `Document with ID ${docId} not found.` }),
         { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders() } }
       );
     }
+    
+    // D1에 문서 업데이트
+    await env.DB.prepare("UPDATE documents SET text = ?, metadata = ? WHERE id = ?")
+      .bind(text, JSON.stringify(metadata), docId)
+      .run();
+
+    // 텍스트가 변경된 경우에만 임베딩을 다시 생성하고 벡터를 업데이트
+    if (oldDoc.text !== text) {
+      const embedding = await createEmbedding(env.AI, text);
+      await env.VECTORIZE_INDEX.upsert([
+        { id: docId.toString(), values: embedding },
+      ]);
+    }
 
     return new Response(
       JSON.stringify({
-        message: `Document ${docId} metadata updated successfully.`,
+        message: `Document ${docId} updated successfully.`,
         id: docId,
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders() } }
@@ -388,7 +403,7 @@ export default {
     // /api/rag/documents/:id
     if (pathSegments[2] === "documents" && pathSegments.length === 4) {
       if (request.method === "PUT") {
-        return handleUpdateDocumentMetadata(request, env, pathSegments[3]);
+        return handleUpdateDocument(request, env, pathSegments[3]);
       }
     }
     
