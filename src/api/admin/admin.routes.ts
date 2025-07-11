@@ -4,6 +4,7 @@ import {
   getUserProfiles,
   getAdminStats,
   getLoginHistory,
+  getAiUsageStats,
 } from "./adminApi";
 
 export function createAdminRouter(): Router {
@@ -253,6 +254,41 @@ export function createAdminRouter(): Router {
         },
       },
       "403": { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
+  // AI 사용량 통계 조회
+  router.get("/api/admin/ai-usage-stats", getAiUsageStats, {
+    summary: "[Admin] AI 사용량 통계 조회",
+    description: "일별 또는 월별로 AI 사용량 통계를 조회합니다.",
+    tags: ["Admin"],
+    auth: true,
+    parameters: [
+      {
+        name: "groupBy",
+        in: "query",
+        description: "그룹화 기준 ('day' 또는 'month', 기본값: 'day')",
+        schema: { type: "string", enum: ["day", "month"], default: "day" },
+      },
+      {
+        name: "startDate",
+        in: "query",
+        description: "조회 시작일 (YYYY-MM-DD)",
+        schema: { type: "string", format: "date" },
+      },
+      {
+        name: "endDate",
+        in: "query",
+        description: "조회 종료일 (YYYY-MM-DD)",
+        schema: { type: "string", format: "date" },
+      },
+    ],
+    responses: {
+      "200": { description: "통계 조회 성공" },
+      "400": { description: "잘못된 쿼리 파라미터" },
+      "401": { description: "인증 실패" },
+      "403": { description: "권한 없음 (관리자 아님)" },
+      "500": { description: "서버 오류" },
     },
   });
 

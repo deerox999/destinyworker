@@ -4,9 +4,10 @@ import {
   createEmbedding,
   findSimilarVectors,
   getDocumentsFromD1,
+  logAiUsage,
   RagEnv,
 } from "../../common/ragUtils";
-import { jsonResponse } from "../../common/utils";
+import { getUserIdFromToken, jsonResponse } from "../../common/utils";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -70,25 +71,6 @@ async function performWebSearch(
     return "";
   }
 }
-
-// JWT 토큰에서 사용자 ID 추출
-const getUserIdFromToken = async (request: Request): Promise<number | null> => {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  try {
-    const token = authHeader.substring(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-    );
-    return payload.exp > Math.floor(Date.now() / 1000) ? payload.userId : null;
-  } catch {
-    return null;
-  }
-};
 
 /**
  * D1에서 특정 대화 ID에 해당하는 기록을 가져옵니다.
@@ -230,12 +212,24 @@ export async function SajuChat(
     // 시스템 메시지 다음에 대화 기록과 현재 사용자 질문을 추가합니다.
     messages.push(...history, { role: "user", content: userQuery });
 
-    // 4. LLM 호출
-    const llmResponse = await env.AI.run("@cf/google/gemma-3-12b-it", {
+    // 4. LLM 호출 및 사용량 기록
+    const model = "@cf/google/gemma-3-12b-it";
+    const llmResponse: any = await env.AI.run(model, {
       messages,
     });
+
     const assistantResponse =
       llmResponse.response || "죄송합니다. 답변을 생성할 수 없습니다.";
+
+    // 토큰 사용량이 응답에 포함된 경우 로그를 기록합니다.
+    if (
+      llmResponse.usage &&
+      typeof llmResponse.usage.prompt_tokens === "number" &&
+      typeof llmResponse.usage.completion_tokens === "number" &&
+      typeof llmResponse.usage.total_tokens === "number"
+    ) {
+      await logAiUsage(env.DB, userId, model, llmResponse.usage);
+    }
 
     // 5. 새로운 대화 내용 D1에 저장
     await saveConversationTurn(

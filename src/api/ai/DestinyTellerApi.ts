@@ -3,9 +3,10 @@ import {
   createEmbedding,
   findSimilarVectors,
   getDocumentsFromD1,
+  logAiUsage,
   RagEnv,
 } from "../../common/ragUtils";
-import { corsHeaders, jsonResponse } from "../../common/utils";
+import { corsHeaders, getUserIdFromToken, jsonResponse } from "../../common/utils";
 
 export interface Env extends RagEnv {
   AI: Ai;
@@ -167,6 +168,12 @@ export async function FortuneTelling(
   env: Env,
   params?: Record<string, string>
 ): Promise<Response> {
+  // 1. 사용자 인증
+  const userId = await getUserIdFromToken(request);
+  if (!userId) {
+    return jsonResponse({ error: "Unauthorized: Invalid token" }, 401, request);
+  }
+
   try {
     const body: DetailedFortuneTellingRequest = await request.json();
 
@@ -210,20 +217,17 @@ export async function FortuneTelling(
       systemPrompt: finalSystemPrompt,
     });
 
-    console.log(
-      "AI 요청 파라미터 (RAG 적용):",
-      JSON.stringify(
-        { model, params: aiParams, gateway: buildGatewayConfig(body)?.gateway },
-        null,
-        2
-      )
-    );
-
     const result = await env.AI.run(
       model as any,
       aiParams,
       buildGatewayConfig(body)
     );
+
+    // 4. AI 사용량 로깅 (스트리밍이 아닌 경우)
+    // Cloudflare AI 응답에 'usage' 객체가 포함되어 있는지 확인합니다.
+    if (!body.stream && result && result.usage) {
+      await logAiUsage(env.DB, userId, model, result.usage);
+    }
 
     return createApiResponse(result, body, model, request);
   } catch (error) {

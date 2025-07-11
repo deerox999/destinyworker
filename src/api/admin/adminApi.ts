@@ -337,3 +337,92 @@ export async function getLoginHistory(
     );
   }
 }
+
+/**
+ * AI 사용량 통계를 조회합니다.
+ */
+export async function getAiUsageStats(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const groupBy = url.searchParams.get("groupBy") || "day"; // 'day' or 'month'
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
+
+  if (!["day", "month"].includes(groupBy)) {
+    return jsonResponse(
+      { error: "Invalid 'groupBy' parameter. Use 'day' or 'month'." },
+      400,
+      request
+    );
+  }
+
+  const adapter = new PrismaD1(env.DB);
+  const prisma = new PrismaClient({ adapter });
+
+  try {
+    const where: any = {};
+    if (startDate) {
+      where.createdAt = { ...where.createdAt, gte: new Date(startDate) };
+    }
+    if (endDate) {
+      where.createdAt = { ...where.createdAt, lte: new Date(endDate) };
+    }
+
+    // Prisma의 group by와 aggregation 기능을 사용하기 어렵기 때문에 Raw 쿼리 사용
+    // SQLite에서 날짜별/월별 그룹화를 처리하는 방법
+    const dateFormat = groupBy === "day" ? "%Y-%m-%d" : "%Y-%m";
+    const query = `
+      SELECT
+        STRFTIME('${dateFormat}', created_at) as date,
+        SUM(total_tokens) as total_tokens,
+        COUNT(id) as total_calls,
+        COUNT(DISTINCT user_id) as unique_users
+      FROM ai_usage_logs
+      ${
+        startDate || endDate
+          ? `WHERE ${
+              startDate
+                ? `created_at >= '${new Date(startDate)
+                    .toISOString()
+                    .slice(0, 10)} 00:00:00'`
+                : ""
+            } ${startDate && endDate ? "AND" : ""} ${
+              endDate
+                ? `created_at <= '${new Date(endDate)
+                    .toISOString()
+                    .slice(0, 10)} 23:59:59'`
+                : ""
+            }`
+          : ""
+      }
+      GROUP BY date
+      ORDER BY date DESC;
+    `;
+
+    const result: any[] = await prisma.$queryRawUnsafe(query);
+
+    // 숫자로 변환
+    const stats = result.map((row) => ({
+      ...row,
+      total_tokens: Number(row.total_tokens),
+      total_calls: Number(row.total_calls),
+      unique_users: Number(row.unique_users),
+    }));
+
+    return jsonResponse({
+      success: true,
+      stats,
+    });
+  } catch (error) {
+    console.error("Error fetching AI usage stats:", error);
+    return jsonResponse(
+      { error: "Failed to fetch AI usage stats." },
+      500,
+      request
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+}

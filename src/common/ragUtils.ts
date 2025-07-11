@@ -1,4 +1,6 @@
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import { PrismaD1 } from "@prisma/adapter-d1";
+import { PrismaClient } from "@prisma/client";
 
 /**
  * D1에서 조회한 문서의 타입 정의
@@ -128,4 +130,42 @@ export async function getDocumentsFromD1(
     }
     return { ...doc, metadata: parsedMetadata };
   });
+}
+
+/**
+ * AI 사용량 로그를 D1 데이터베이스에 기록합니다.
+ * @param db D1 Database 인스턴스
+ * @param userId 사용자 ID
+ * @param model 사용된 AI 모델
+ * @param usage 토큰 사용량 정보 { prompt_tokens: number, completion_tokens: number, total_tokens: number }
+ */
+export async function logAiUsage(
+  db: D1Database,
+  userId: number,
+  model: string,
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  }
+): Promise<void> {
+  // 로깅 실패가 주요 기능에 영향을 주지 않도록 try-catch로 감쌉니다.
+  try {
+    const adapter = new PrismaD1(db);
+    const prisma = new PrismaClient({ adapter });
+
+    await prisma.aiUsageLog.create({
+      data: {
+        userId: userId,
+        model: model,
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+      },
+    });
+    // 사용 후 즉시 연결을 해제합니다.
+    await prisma.$disconnect();
+  } catch (error) {
+    console.error("Failed to log AI usage:", error);
+  }
 }

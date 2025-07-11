@@ -32,6 +32,7 @@ model User {
   celebrityCommentLikes CelebrityCommentLike[] /// 관계: 한 사용자는 여러 댓글 추천을 할 수 있음
   conversationHistories ConversationHistory[] /// 관계: 한 사용자는 여러 대화 기록을 가질 수 있음
   loginHistories LoginHistory[] /// 관계: 한 사용자는 여러 로그인 기록을 가질 수 있음
+  aiUsageLogs AiUsageLog[] /// 관계: 한 사용자는 여러 AI 사용 기록을 가질 수 있음
   @@map("users")
 }
 
@@ -157,4 +158,18 @@ model LoginHistory {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 기록은 하나의 사용자에 속함
 
   @@map("login_histories")
+}
+
+/// AI 사용량 기록 테이블
+model AiUsageLog {
+  id Int @id @default(autoincrement()) /// 로그 고유 ID (자동 증가)
+  userId Int @map("user_id") /// 사용자 ID
+  model String /// 사용된 AI 모델
+  promptTokens Int @map("prompt_tokens") /// 프롬프트 토큰 수
+  completionTokens Int @map("completion_tokens") /// 응답 토큰 수
+  totalTokens Int @map("total_tokens") /// 총 토큰 수
+  createdAt DateTime @default(now()) @map("created_at") /// 기록 생성 시간
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 로그는 하나의 사용자에 속함
+
+  @@map("ai_usage_logs")
 } 
