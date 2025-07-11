@@ -5,7 +5,7 @@ import {
   getDocumentsFromD1,
   RagEnv,
 } from "../../common/ragUtils";
-import { corsHeaders } from "../../common/utils";
+import { corsHeaders, jsonResponse } from "../../common/utils";
 
 export interface Env extends RagEnv {
   AI: Ai;
@@ -126,14 +126,14 @@ function buildGatewayConfig(
  * @param aiResult AI 모델의 실행 결과
  * @param requestBody 원본 요청 본문
  * @param model 사용된 모델명
- * @param requestOrigin 요청의 Origin 헤더
+ * @param request 요청
  * @returns 최종 Response 객체
  */
 function createApiResponse(
   aiResult: any,
   requestBody: DetailedFortuneTellingRequest,
   model: string,
-  requestOrigin: string | null
+  request: Request
 ): Response {
   const { useGateway = false, stream = false } = requestBody;
 
@@ -146,7 +146,7 @@ function createApiResponse(
       aiResult instanceof ReadableStream ? new Response(aiResult) : aiResult;
 
     const headers = new Headers(responseStream.headers);
-    Object.entries(corsHeaders(requestOrigin)).forEach(([key, value]) => {
+    Object.entries(corsHeaders(request)).forEach(([key, value]) => {
       headers.set(key, value);
     });
     headers.set("Content-Type", "text/event-stream; charset=utf-8");
@@ -161,10 +161,7 @@ function createApiResponse(
   }
 
   // 일반(non-streaming) 응답 처리
-  if (
-    !aiResult ||
-    (typeof aiResult === "object" && Object.keys(aiResult).length === 0)
-  ) {
+  if (!aiResult || (typeof aiResult === "object" && Object.keys(aiResult).length === 0)) {
     throw new Error("AI 모델로부터 유효한 응답을 받지 못했습니다.");
   }
 
@@ -178,15 +175,7 @@ function createApiResponse(
       response_type: typeof aiResult,
     },
   };
-
-  return new Response(JSON.stringify(enhancedResponse), {
-    headers: {
-      "Content-Type": "application/json",
-      ...corsHeaders(requestOrigin),
-      "X-AI-Model": model,
-      "X-Gateway-Enabled": useGateway.toString(),
-    },
-  });
+  return jsonResponse(enhancedResponse, 200, request);
 }
 
 /**
@@ -196,7 +185,6 @@ async function handleDetailedFortuneTelling(
   request: Request,
   env: Env
 ): Promise<Response> {
-  const origin = request.headers.get("Origin");
   try {
     const body: DetailedFortuneTellingRequest = await request.json();
 
@@ -252,71 +240,20 @@ async function handleDetailedFortuneTelling(
       buildGatewayConfig(body)
     );
 
-    return createApiResponse(result, body, model, origin);
+    return createApiResponse(result, body, model, request);
   } catch (error) {
     console.error("상세 사주 풀이 API 오류:", error);
-    const errorResponse = {
+    return jsonResponse({
       error: "AI 모델 실행 중 오류가 발생했습니다.",
       details: error instanceof Error ? error.message : "Unknown error",
-    };
-    return new Response(JSON.stringify(errorResponse), {
-      status: 500,
-      headers: { 
-        "Content-Type": "application/json",
-        ...corsHeaders(origin) 
-      },
-    });
+    }, 500, request);
   }
-}
-
-/**
- * 사주 분석에 대한 모델 적합성 점수 계산
- * @param model 모델 정보
- * @returns 0-100 사이의 점수
- */
-function calculateSajuSuitability(model: any): number {
-  // model이 null/undefined인 경우 기본 점수 반환
-  if (!model || typeof model !== "object") {
-    return 30; // 기본 최소 점수
-  }
-
-  let score = 50; // 기본 점수
-
-  const name = (model.name || "").toLowerCase();
-  const description = (model.description || "").toLowerCase();
-
-  // 논리적 사고에 강한 모델들 가점
-  if (name.includes("coder")) score += 20;
-  if (name.includes("instruct")) score += 15;
-  if (description.includes("reasoning")) score += 15;
-  if (description.includes("logic")) score += 10;
-
-  // 대화형 모델 가점
-  if (name.includes("chat") || name.includes("assistant")) score += 10;
-
-  // 큰 모델일수록 복잡한 사주 분석에 유리
-  try {
-    const parameterMatch = name.match(/(\d+)b/);
-    if (parameterMatch && parameterMatch[1]) {
-      const params = parseInt(parameterMatch[1]);
-      if (!isNaN(params)) {
-        if (params >= 30) score += 15;
-        else if (params >= 13) score += 10;
-        else if (params >= 7) score += 5;
-      }
-    }
-  } catch (error) {
-    console.warn("파라미터 매칭 중 오류:", error);
-  }
-
-  return Math.min(100, Math.max(0, score));
 }
 
 /**
  * 사용 가능한 AI 모델과 그 적합도 점수를 반환합니다.
  */
 async function getAvailableModels(request: Request, env: Env): Promise<Response> {
-  const origin = request.headers.get("Origin");
   try {
     // ... 모델 목록 가져오는 로직 (생략) ...
     const models = [
@@ -324,34 +261,11 @@ async function getAvailableModels(request: Request, env: Env): Promise<Response>
       // ... 기타 모델들
     ];
 
-    return new Response(JSON.stringify({ models }), {
-      headers: { 
-        'Content-Type': 'application/json',
-        ...corsHeaders(origin)
-      },
-    });
+    
+    return jsonResponse({ models }, 200, request);
   } catch (error) {
-    return new Response(JSON.stringify({ error: 'Failed to fetch models' }), {
-      status: 500,
-      headers: { 
-        'Content-Type': 'application/json',
-        ...corsHeaders(origin)
-      },
-    });
+    return jsonResponse({ error: 'Failed to fetch models' }, 500, request);
   }
-}
-
-/**
- * OPTIONS 메서드 요청(CORS preflight)을 처리합니다.
- */
-function handleOptionsRequest(request: Request): Response {
-  const origin = request.headers.get("Origin");
-  // handleOptionsRequest는 더 이상 많은 헤더를 설정할 필요가 없습니다.
-  // corsHeaders 유틸리티가 대부분의 작업을 처리하기 때문입니다.
-  return new Response(null, {
-    status: 204,
-    headers: corsHeaders(origin),
-  });
 }
 
 /**
@@ -361,10 +275,6 @@ function handleOptionsRequest(request: Request): Response {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-
-    if (request.method === "OPTIONS") {
-      return handleOptionsRequest(request);
-    }
 
     // 경로 기반 라우팅
     if (url.pathname.endsWith("/models")) {

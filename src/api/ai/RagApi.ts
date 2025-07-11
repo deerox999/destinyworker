@@ -1,12 +1,10 @@
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import { paginate } from "../../common/paginationUtils";
 import {
   createEmbedding,
-  createEmbeddings,
-  findSimilarVectors,
-  getDocumentsFromD1,
+  createEmbeddings
 } from "../../common/ragUtils";
-import { corsHeaders } from "../../common/utils";
-import { paginate } from "../../common/paginationUtils";
+import { corsHeaders, jsonResponse } from "../../common/utils";
 
 export interface Env {
   AI: Ai;
@@ -127,35 +125,24 @@ async function handleAddDocuments(
       documents.length === 0 ||
       documents.some((d) => !d.text || !d.metadata)
     ) {
-      return new Response(
+      return jsonResponse(
         "Invalid request: 'documents' must be a non-empty array of objects with 'text' and 'metadata' properties.",
-        { status: 400, headers: corsHeaders() }
+        400,
+        request
       );
     }
 
     // Metadata 유효성 검사
     for (const doc of documents) {
       if (!doc.metadata.source || !doc.metadata.category) {
-        return new Response(
-          JSON.stringify({
-            error:
-              "Invalid metadata: 'source' and 'category' are required fields.",
-          }),
-          {
-            status: 400,
-            headers: { "Content-Type": "application/json", ...corsHeaders() },
-          }
-        );
+        return jsonResponse({ error: "Invalid metadata: 'source' and 'category' are required fields." }, 400, request);
       }
     }
 
     const newlyInsertedDocs = await saveDocumentsToD1(env.DB, documents);
 
     if (newlyInsertedDocs.length === 0) {
-      return new Response(
-        JSON.stringify({ message: "All documents already exist or failed to save." }),
-        { status: 409, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ message: "All documents already exist or failed to save." }, 409, request);
     }
 
     const textsToEmbed = newlyInsertedDocs.map(doc => doc.text);
@@ -168,17 +155,14 @@ async function handleAddDocuments(
     
     await insertVectors(env.VECTORIZE_INDEX, vectorsToInsert);
 
-    return new Response(
-      JSON.stringify({
+    return jsonResponse({
         message: `Processed ${documents.length} documents. Added and indexed ${newlyInsertedDocs.length} new documents.`,
         addedCount: newlyInsertedDocs.length,
         addedIds: newlyInsertedDocs.map(d => d.id)
-      }),
-      { status: 201, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
-    );
+      }, 201, request);
   } catch (error) {
     console.error("Error adding documents:", error);
-    return new Response("Failed to add documents.", { status: 500, headers: corsHeaders() });
+    return jsonResponse({ error: "Failed to add documents." }, 500, request);
   }
 }
 
@@ -200,10 +184,7 @@ async function handleListDocuments(
     });
   } catch (error) {
     console.error("Error listing documents:", error);
-    return new Response("Failed to list documents.", {
-      status: 500,
-      headers: corsHeaders(),
-    });
+    return jsonResponse({ error: "Failed to list documents." }, 500, request);
   }
 }
 
@@ -219,18 +200,12 @@ async function handleDeleteDocuments(request: Request, env: Env): Promise<Respon
         const { ids } = await request.json() as { ids: number[] };
 
         if (!Array.isArray(ids) || ids.length === 0) {
-            return new Response(
-                JSON.stringify({ error: "요청 본문에 'ids' 배열(숫자)을 포함해야 합니다." }),
-                { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
-            );
+            return jsonResponse({ error: "요청 본문에 'ids' 배열(숫자)을 포함해야 합니다." }, 400, request);
         }
         
         const validIds = ids.filter(id => typeof id === 'number' && Number.isInteger(id));
         if (validIds.length !== ids.length) {
-            return new Response(
-                JSON.stringify({ error: "'ids' 배열은 정수로만 구성되어야 합니다." }),
-                { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
-            );
+            return jsonResponse({ error: "'ids' 배열은 정수로만 구성되어야 합니다." }, 400, request);
         }
 
         // D1에서 삭제
@@ -245,22 +220,17 @@ async function handleDeleteDocuments(request: Request, env: Env): Promise<Respon
             await env.VECTORIZE_INDEX.deleteByIds(stringIds);
         }
 
-        return new Response(JSON.stringify({ 
+        return jsonResponse({ 
           message: `총 ${deletedCount}개의 문서가 성공적으로 삭제되었습니다.`,
           deletedCount
-        }), {
-            headers: { ...corsHeaders(), "Content-Type": "application/json" },
-        });
+        }, 200, request);
 
     } catch (error) {
         console.error("Error deleting documents:", error);
         if (error instanceof SyntaxError) {
-          return new Response(
-            JSON.stringify({ error: "잘못된 JSON 형식입니다." }),
-            { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
-          );
+          return jsonResponse({ error: "잘못된 JSON 형식입니다." }, 400, request);
         }
-        return new Response("문서 삭제 중 오류가 발생했습니다.", { status: 500, headers: corsHeaders() });
+        return jsonResponse({ error: "문서 삭제 중 오류가 발생했습니다." }, 500, request);
     }
 }
 
@@ -275,7 +245,7 @@ async function handleUpdateDocument(
 ): Promise<Response> {
   const docId = parseInt(id, 10);
   if (isNaN(docId)) {
-    return new Response("Invalid document ID.", { status: 400, headers: corsHeaders() });
+    return jsonResponse({ error: "Invalid document ID." }, 400, request);
   }
 
   try {
@@ -283,13 +253,7 @@ async function handleUpdateDocument(
 
     // 필수 필드 유효성 검사
     if (!text || !metadata || !metadata.source || !metadata.category) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "Invalid request body: 'text' and 'metadata' (with 'source' and 'category') are required fields.",
-        }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders() } }
-      );
+      return jsonResponse({ error: "Invalid request body: 'text' and 'metadata' (with 'source' and 'category') are required fields." }, 400, request);
     }
 
     // 기존 문서를 가져와서 텍스트 변경 여부 확인
@@ -298,10 +262,7 @@ async function handleUpdateDocument(
       .first<{ text: string }>();
 
     if (!oldDoc) {
-      return new Response(
-        JSON.stringify({ error: `Document with ID ${docId} not found.` }),
-        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders() } }
-      );
+      return jsonResponse({ error: `Document with ID ${docId} not found.` }, 404, request);
     }
     
     // D1에 문서 업데이트
@@ -317,22 +278,13 @@ async function handleUpdateDocument(
       ]);
     }
 
-    return new Response(
-      JSON.stringify({
-        message: `Document ${docId} updated successfully.`,
-        id: docId,
-      }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders() } }
-    );
+    return jsonResponse({ message: `Document ${docId} updated successfully.`, id: docId }, 200, request);
   } catch (error) {
     console.error(`Error updating document ${docId}:`, error);
     if (error instanceof SyntaxError) {
-      return new Response(JSON.stringify({ error: "잘못된 JSON 형식입니다." }), {
-        status: 400,
-        headers: { "Content-Type": "application/json", ...corsHeaders() },
-      });
+      return jsonResponse({ error: "잘못된 JSON 형식입니다." }, 400, request);
     }
-    return new Response("문서 수정 중 오류가 발생했습니다.", { status: 500, headers: corsHeaders() });
+    return jsonResponse({ error: "문서 수정 중 오류가 발생했습니다." }, 500, request);
   }
 }
 
@@ -340,7 +292,7 @@ async function handleUpdateDocument(
 // 5. 메타데이터 스키마 조회
 // =================================================================
 
-async function handleGetMetadataSchema(): Promise<Response> {
+async function handleGetMetadataSchema(request: Request): Promise<Response> {
   const schema = {
     keys: ["source", "category", "author", "relatedConcepts", "url"],
     required: ["source", "category"],
@@ -377,9 +329,7 @@ async function handleGetMetadataSchema(): Promise<Response> {
       },
     },
   };
-  return new Response(JSON.stringify(schema), {
-    headers: { "Content-Type": "application/json", ...corsHeaders() },
-  });
+  return jsonResponse(schema, 200, request);
 }
 
 // =================================================================
@@ -391,13 +341,9 @@ export default {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split("/").filter(Boolean);
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders() });
-    }
-
     // /api/rag/metadata-schema
     if (pathSegments[2] === "metadata-schema" && request.method === "GET") {
-      return handleGetMetadataSchema();
+      return handleGetMetadataSchema(request);
     }
 
     // /api/rag/documents/:id
@@ -420,6 +366,6 @@ export default {
       }
     }
 
-    return new Response("Not Found", { status: 404, headers: corsHeaders() });
+    return jsonResponse({ error: "Not Found" }, 404, request);
   },
 } satisfies ExportedHandler<Env>; 

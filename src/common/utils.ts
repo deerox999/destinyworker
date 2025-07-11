@@ -15,15 +15,16 @@ const allowedOrigins = [
 ];
 
 // CORS 헤더 추가 함수
-export function corsHeaders(requestOrigin?: string | null) {
+export function corsHeaders(request?: Request) {
+  const origin = request?.headers.get("Origin");
   const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400", // Preflight 요청 캐시 시간(초)
   };
 
-  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
-    headers["Access-Control-Allow-Origin"] = requestOrigin;
+  if (origin && allowedOrigins.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
     headers["Vary"] = "Origin"; // 동적으로 Origin을 설정할 때 캐싱 문제를 방지하기 위해 추가
   } else {
     // 허용되지 않은 오리진의 경우, 첫 번째 오리진을 기본값으로 설정하거나 혹은 아예 설정하지 않을 수 있습니다.
@@ -35,23 +36,23 @@ export function corsHeaders(requestOrigin?: string | null) {
 }
 
 // JSON 응답 생성 함수
-export function jsonResponse(data: any, status = 200, requestOrigin?: string | null) {
+export function jsonResponse(data: any, status = 200, request?: Request) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json",
-      ...corsHeaders(requestOrigin),
+      ...corsHeaders(request),
     },
   });
 }
 
 // HTML 응답 생성 함수
-export function htmlResponse(html: string, status = 200, requestOrigin?: string | null) {
+export function htmlResponse(html: string, status = 200, request?: Request) {
   return new Response(html, {
     status,
     headers: {
       "Content-Type": "text/html",
-      ...corsHeaders(requestOrigin),
+      ...corsHeaders(request),
     },
   });
 }

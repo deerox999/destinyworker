@@ -1,12 +1,12 @@
-import { PrismaClient } from "@prisma/client";
 import { PrismaD1 } from "@prisma/adapter-d1";
+import { PrismaClient } from "@prisma/client";
 import {
   createEmbedding,
   findSimilarVectors,
   getDocumentsFromD1,
   RagEnv,
 } from "../../common/ragUtils";
-import { corsHeaders } from "../../common/utils";
+import { jsonResponse } from "../../common/utils";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -137,12 +137,12 @@ async function handleSajuChat(
 
   const { message: userQuery, systemPrompt } = await request.json<{ message: string, systemPrompt?: string }>();
   if (!userQuery) {
-    return new Response("'message' is required.", { status: 400 });
+    return jsonResponse({ error: "'message' is required." }, 400, request);
   }
   
   const userId = await getUserIdFromToken(request);
   if (!userId) {
-    return new Response("Unauthorized: Invalid token", { status: 401 });
+    return jsonResponse({ error: "Unauthorized: Invalid token" }, 401, request);
   }
   
   const newConversationId = conversationId || crypto.randomUUID();
@@ -221,16 +221,14 @@ async function handleSajuChat(
       assistantResponse
     );
 
-    return new Response(JSON.stringify({ 
+    return jsonResponse({ 
         conversationId: newConversationId, 
         answer: assistantResponse 
-    }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    }, 200, request);
 
   } catch (error) {
     console.error("Saju chat error:", error);
-    return new Response("Failed to process saju chat.", { status: 500 });
+    return jsonResponse({ error: "Failed to process saju chat." }, 500, request);
   } finally {
      await prisma.$disconnect();
   }
@@ -249,7 +247,7 @@ async function getConversationList(
   try {
     const userId = await getUserIdFromToken(request);
     if (!userId) {
-      return new Response("Unauthorized", { status: 401 });
+      return jsonResponse({ error: "Unauthorized" }, 401, request);
     }
 
     const results: { conversation_id: string; first_message: string; last_activity: string }[] = await prisma.$queryRawUnsafe(
@@ -288,16 +286,14 @@ async function getConversationList(
         updatedAt: r.last_activity
     }));
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
         success: true,
         conversations
-    }), {
-        headers: { "Content-Type": "application/json" },
-    });
+    }, 200, request);
 
   } catch (error) {
     console.error("Error fetching conversation list:", error);
-    return new Response("Failed to fetch conversation list.", { status: 500 });
+    return jsonResponse({ error: "Failed to fetch conversation list." }, 500, request);
   } finally {
     await prisma.$disconnect();
   }
@@ -317,7 +313,7 @@ async function getFullConversation(
     try {
         const userId = await getUserIdFromToken(request);
         if (!userId) {
-            return new Response("Unauthorized", { status: 401 });
+            return jsonResponse({ error: "Unauthorized" }, 401, request);
         }
 
         const firstMessage = await prisma.conversationHistory.findFirst({
@@ -325,22 +321,20 @@ async function getFullConversation(
         });
 
         if (!firstMessage) {
-            return new Response("Conversation not found or access denied", { status: 404 });
+            return jsonResponse({ error: "Conversation not found or access denied" }, 404, request);
         }
 
         const messages = await getConversationHistory(prisma, conversationId);
 
-        return new Response(JSON.stringify({
+        return jsonResponse({
             success: true,
             conversationId,
             messages
-        }), {
-            headers: { "Content-Type": "application/json" },
-        });
+        }, 200, request);
 
     } catch (error) {
         console.error(`Error fetching conversation ${conversationId}:`, error);
-        return new Response("Failed to fetch conversation.", { status: 500 });
+        return jsonResponse({ error: "Failed to fetch conversation." }, 500, request);
     } finally {
         await prisma.$disconnect();
     }
@@ -360,7 +354,7 @@ async function handleDeleteConversation(
     try {
         const userId = await getUserIdFromToken(request);
         if (!userId) {
-            return new Response("Unauthorized", { status: 401 });
+            return jsonResponse({ error: "Unauthorized" }, 401, request);
         }
 
         // 대화 소유권 확인
@@ -370,7 +364,7 @@ async function handleDeleteConversation(
         });
 
         if (!conversation) {
-            return new Response("Conversation not found or access denied", { status: 404 });
+            return jsonResponse({ error: "Conversation not found or access denied" }, 404, request);
         }
 
         // 해당 대화의 모든 메시지 삭제
@@ -378,17 +372,15 @@ async function handleDeleteConversation(
             where: { conversationId, userId }
         });
 
-        return new Response(JSON.stringify({
+        return jsonResponse({
             success: true,
             message: `Conversation ${conversationId} and its ${count} messages have been deleted.`,
             deletedMessagesCount: count
-        }), {
-            headers: { "Content-Type": "application/json" },
-        });
+        }, 200, request);
 
     } catch (error) {
         console.error(`Error deleting conversation ${conversationId}:`, error);
-        return new Response("Failed to delete conversation.", { status: 500 });
+        return jsonResponse({ error: "Failed to delete conversation." }, 500, request);
     } finally {
         await prisma.$disconnect();
     }
@@ -398,15 +390,7 @@ export default {
   async fetch(request: Request, env: RagEnv): Promise<Response> {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split("/").filter(Boolean);
-    // CORS Preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders(request.headers.get("Origin")),
-      });
-    }
     
-    // 라우팅: /api/ai/saju-chat
     if (pathSegments[2] === "saju-chat") {
       // GET /api/ai/saju-chat/history : 대화 목록 조회
       if (request.method === "GET" && pathSegments[3] === 'history') {
@@ -433,6 +417,6 @@ export default {
       }
     }
 
-    return new Response("Not Found", { status: 404 });
+    return jsonResponse({ error: "Not Found" }, 404, request);
   },
 } satisfies ExportedHandler<RagEnv>; 

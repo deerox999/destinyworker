@@ -116,7 +116,7 @@ export const userApiHandlers = {
       
       await prisma.$disconnect();
 
-      return jsonResponse({ 
+      return jsonResponse({
         success: true, 
         message: "프로필 이름이 성공적으로 수정되었습니다.",
         프로필이름: userName.trim()

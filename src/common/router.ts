@@ -3,7 +3,7 @@
  * API 경로와 핸들러를 자동으로 매칭하여 처리하는 시스템
  */
 
-import { corsHeaders } from "./utils";
+import { jsonResponse } from "./utils";
 
 export interface RouteHandler {
   (request: Request, env: any, params?: Record<string, string>): Promise<Response>;
@@ -78,10 +78,7 @@ export class Router {
       // 해당 경로에 GET, POST 등 다른 메서드로 등록된 라우트가 있는지 확인
       const hasRoute = this.routes.some(route => this.matchPath(route.path, pathname));
       if (hasRoute) {
-        return new Response(null, {
-          status: 204,
-          headers: corsHeaders(request.headers.get("Origin"))
-        });
+        return jsonResponse(null, 204, request);
       }
     }
 
@@ -95,13 +92,10 @@ export class Router {
           return await route.handler(request, env, match.params);
         } catch (error) {
           console.error(`라우트 처리 오류 [${method} ${pathname}]:`, error);
-          return new Response(JSON.stringify({
+          return jsonResponse({
             error: "서버 내부 오류가 발생했습니다.",
             message: error instanceof Error ? error.message : "Unknown error"
-          }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" }
-          });
+          }, 500, request);
         }
       }
     }
