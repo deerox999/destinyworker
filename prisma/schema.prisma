@@ -33,6 +33,7 @@ model User {
   conversationHistories ConversationHistory[] /// 관계: 한 사용자는 여러 대화 기록을 가질 수 있음
   loginHistories LoginHistory[] /// 관계: 한 사용자는 여러 로그인 기록을 가질 수 있음
   aiUsageLogs AiUsageLog[] /// 관계: 한 사용자는 여러 AI 사용 기록을 가질 수 있음
+  pushSubscriptions PushSubscription[] /// 관계: 한 사용자는 여러 푸시 구독을 가질 수 있음
   @@map("users")
 }
 
@@ -172,4 +173,17 @@ model AiUsageLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 로그는 하나의 사용자에 속함
 
   @@map("ai_usage_logs")
+}
+
+/// 푸시 구독 정보 테이블 - 사용자 기기별 푸시 알림 구독 정보 저장
+model PushSubscription {
+  id        Int      @id @default(autoincrement()) /// 구독 고유 ID
+  userId    Int      @map("user_id") /// 사용자 ID
+  endpoint  String   @unique /// 푸시 서비스 엔드포인트 URL
+  p256dh    String   /// P-256 DH 공개 키
+  auth      String   /// 인증 시크릿
+  createdAt DateTime @default(now()) @map("created_at") /// 구독 생성 시간
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 구독은 하나의 사용자에 속함
+
+  @@map("push_subscriptions")
 } 

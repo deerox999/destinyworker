@@ -15,6 +15,7 @@ import { createSajuRouter } from "./saju/saju.routes";
 import { createAuthRouter } from "./user/auth/auth.routes";
 import { createUserRouter } from "./user/user.routes";
 import { createR2Router } from "./user/r2.routes";
+import { createPushRouter } from "./user/auth/push.routes";
 
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터
@@ -31,6 +32,7 @@ export function createAppRouter(): Router {
 
   // 모듈화된 라우터 병합
   router.merge(createAuthRouter());
+  router.merge(createPushRouter());
   router.merge(createUserRouter());
   router.merge(createR2Router());
   router.merge(createSajuRouter());
