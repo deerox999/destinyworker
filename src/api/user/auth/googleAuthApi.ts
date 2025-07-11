@@ -1,4 +1,4 @@
-import { jsonResponse } from "../../common/utils";
+import { jsonResponse } from "../../../common/utils";
 
 // 사용자 인터페이스
 interface User {

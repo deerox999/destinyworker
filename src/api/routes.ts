@@ -1,19 +1,19 @@
-import { createAdminRouter } from "./admin/admin.routes";
-import { createAiRouter } from "./ai/ai.routes";
-import { createAuthRouter } from "./auth/auth.routes";
-import { createCelebrityRouter } from "./celebrity/celebrity.routes";
-import { createSajuRouter } from "./saju/saju.routes";
-import { createUserRouter } from "./user/user.routes";
+import { Router } from "../common/class/router";
 import {
   generateApiListHTML,
   generateSwaggerHTML,
 } from "../common/swagger/html/swaggerUI";
-import { Router } from "../common/class/router";
 import {
   generateOpenApiSpec,
   htmlResponse,
   jsonResponse,
 } from "../common/utils";
+import { createAdminRouter } from "./admin/admin.routes";
+import { createAiRouter } from "./ai/ai.routes";
+import { createCelebrityRouter } from "./celebrity/celebrity.routes";
+import { createSajuRouter } from "./saju/saju.routes";
+import { createAuthRouter } from "./user/auth/auth.routes";
+import { createUserRouter } from "./user/user.routes";
 
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터

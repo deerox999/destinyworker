@@ -1,4 +1,4 @@
-import { Router } from "../../common/class/router";
+import { Router } from "../../../common/class/router";
 import {
   googleLogin,
   logout,

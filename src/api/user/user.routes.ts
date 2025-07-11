@@ -1,5 +1,5 @@
 import { Router } from "../../common/class/router";
-import { getUserProfile, updateUserName } from "./userApi";
+import { getUserProfile, updateUserProfile } from "./userApi";
 
 export function createUserRouter(): Router {
   const router = new Router();
@@ -40,9 +40,9 @@ export function createUserRouter(): Router {
     },
   });
 
-  router.put("/api/user/profile/name", updateUserName, {
-    summary: "프로필 이름 수정",
-    description: "사용자의 프로필 이름을 수정합니다.",
+  router.put("/api/user/profile", updateUserProfile, {
+    summary: "프로필 수정",
+    description: "사용자의 프로필 이름 또는 사진을 수정합니다.",
     tags: ["사용자"],
     auth: true,
     requestBody: {
@@ -56,15 +56,18 @@ export function createUserRouter(): Router {
                 type: "string",
                 description: "새로운 프로필 이름 (1-50자)",
               },
+              picture: {
+                type: "string",
+                description: "새로운 프로필 사진 URL",
+              },
             },
-            required: ["userName"],
           },
         },
       },
     },
     responses: {
       "200": {
-        description: "이름 변경 성공",
+        description: "프로필 수정 성공",
         content: {
           "application/json": {
             schema: {
@@ -72,13 +75,19 @@ export function createUserRouter(): Router {
               properties: {
                 success: { type: "boolean" },
                 message: { type: "string" },
-                프로필이름: { type: "string" },
+                user: {
+                  type: "object",
+                  properties: {
+                    프로필이름: { type: "string" },
+                    프로필사진: { type: "string" },
+                  },
+                },
               },
             },
           },
         },
       },
-      "400": { description: "잘못된 프로필 이름 형식" },
+      "400": { description: "잘못된 요청" },
       "401": { description: "인증 실패" },
       "404": { description: "사용자를 찾을 수 없음" },
     },
