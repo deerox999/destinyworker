@@ -31,13 +31,15 @@ export async function getUploadUrl(
       R2_ACCESS_KEY_ID,
       R2_SECRET_ACCESS_KEY,
       R2_BUCKET_NAME,
+      R2_PUBLIC_URL,
     } = env;
 
     if (
       !R2_ACCOUNT_ID ||
       !R2_ACCESS_KEY_ID ||
       !R2_SECRET_ACCESS_KEY ||
-      !R2_BUCKET_NAME
+      !R2_BUCKET_NAME ||
+      !R2_PUBLIC_URL
     ) {
       console.error("R2 environment variables are not set");
       return jsonResponse({ error: "Server configuration error" }, 500);
@@ -62,12 +64,10 @@ export async function getUploadUrl(
       { expiresIn: 300 } // 5 minutes
     );
 
-    const publicBucketUrl = `https://pub-4354a322c954457ca67926934c8564a9.r2.dev`;
-
     return jsonResponse({
       success: true,
       uploadUrl: signedUrl,
-      fileUrl: `${publicBucketUrl}/${objectKey}`,
+      fileUrl: `${R2_PUBLIC_URL}/${objectKey}`,
     });
   } catch (error) {
     console.error("Failed to get upload URL:", error);

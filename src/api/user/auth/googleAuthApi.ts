@@ -192,17 +192,19 @@ async function findOrCreateUser(
       .first();
 
     if (result) {
-      // 기존 사용자 정보 업데이트
+      // 기존 사용자 정보 업데이트 (이름만)
       stmt = db.prepare(`
         UPDATE users 
-        SET name = ?, picture = ?, updated_at = CURRENT_TIMESTAMP 
+        SET name = ?, updated_at = CURRENT_TIMESTAMP 
         WHERE id = ?
       `);
-      await stmt
-        .bind(googleUserInfo.name, googleUserInfo.picture, result.id)
-        .run();
+      await stmt.bind(googleUserInfo.name, result.id).run();
 
-      return result as User;
+      // 최신 유저 정보를 다시 조회하여 반환
+      const updatedUserStmt = db.prepare("SELECT * FROM users WHERE id = ?");
+      const updatedUser = await updatedUserStmt.bind(result.id).first();
+
+      return updatedUser as User;
     } else {
       // 새 사용자 생성
       stmt = db.prepare(`
