@@ -3,6 +3,8 @@
  * API 경로와 핸들러를 자동으로 매칭하여 처리하는 시스템
  */
 
+import { corsHeaders } from "./utils";
+
 export interface RouteHandler {
   (request: Request, env: any, params?: Record<string, string>): Promise<Response>;
 }
@@ -78,12 +80,7 @@ export class Router {
       if (hasRoute) {
         return new Response(null, {
           status: 204,
-          headers: {
-            'Access-Control-Allow-Origin': '*', // 실제 프로덕션에서는 특정 도메인으로 제한하는 것이 좋습니다.
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization', // 클라이언트에서 보내는 헤더들을 허용
-            'Access-Control-Max-Age': '86400', // Preflight 요청 캐시 시간(초)
-          }
+          headers: corsHeaders(request.headers.get("Origin"))
         });
       }
     }

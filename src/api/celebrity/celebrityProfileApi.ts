@@ -1,17 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaD1 } from '@prisma/adapter-d1';
-
-// 유틸리티 함수들
-const jsonResponse = (data: any, status = 200) => 
-  new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
-  });
+import { jsonResponse } from '../../common/utils';
 
 const createPrismaClient = (db: D1Database) => {
   const adapter = new PrismaD1(db);
@@ -241,7 +230,7 @@ export const celebrityProfileApiHandlers = {
           },
           select: { commentId: true }
         });
-        userLikes = new Set(likes.map(like => like.commentId));
+        userLikes = new Set(likes.map((like: any) => like.commentId));
       }
 
       await prisma.$disconnect();
@@ -250,7 +239,7 @@ export const celebrityProfileApiHandlers = {
         success: true,
         celebrityId,
         조회수: viewCount,
-        comments: comments.map(comment => toCommentFields(comment, userLikes)),
+        comments: comments.map((comment: any) => toCommentFields(comment, userLikes)),
         pagination: {
           page,
           limit,

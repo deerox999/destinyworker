@@ -31,9 +31,9 @@ export function createAppRouter(): Router {
   const routes = router.getRoutes();
   routes.forEach((route) => {
     const hasSwagger = route.swagger ? '✅' : '⚙️';
-    console.log(`${hasSwagger} ${route.method} ${route.path}`);
+    const summary = route.swagger?.summary ? `- ${route.swagger.summary}` : '';
+    console.log(`${hasSwagger} ${route.method} ${route.path} ${summary}`);
   });
-  console.log("✅ = Swagger 메타데이터 있음, ⚙️ = 자동 생성");
   console.log("=========================");
 
   return router;

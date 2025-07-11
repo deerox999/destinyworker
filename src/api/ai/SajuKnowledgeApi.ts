@@ -398,13 +398,11 @@ export default {
   async fetch(request: Request, env: RagEnv): Promise<Response> {
     const url = new URL(request.url);
     const pathSegments = url.pathname.split("/").filter(Boolean);
-    const origin = request.headers.get("Origin");
-
     // CORS Preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
-        headers: corsHeaders(origin),
+        headers: corsHeaders(request.headers.get("Origin")),
       });
     }
     
