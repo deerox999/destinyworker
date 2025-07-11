@@ -87,3 +87,24 @@ export function generateOpenApiSpec(requestUrl: string) {
     filterTags
   );
 }
+
+// JWT 토큰에서 사용자 ID 추출
+export const getUserIdFromToken = async (
+  request: Request
+): Promise<number | null> => {
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  try {
+    const token = authHeader.substring(7);
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    const payload = JSON.parse(
+      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
+    );
+    return payload.exp > Math.floor(Date.now() / 1000) ? payload.userId : null;
+  } catch {
+    return null;
+  }
+};

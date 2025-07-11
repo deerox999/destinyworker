@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaD1 } from "@prisma/adapter-d1";
-import { jsonResponse } from "../../common/utils";
+import { jsonResponse, getUserIdFromToken } from "../../common/utils";
 
 const createPrismaClient = (db: D1Database) => {
   const adapter = new PrismaD1(db);
@@ -8,25 +8,6 @@ const createPrismaClient = (db: D1Database) => {
     adapter,
     log: ["error"], // 에러만 로깅
   });
-};
-
-// JWT 토큰에서 사용자 ID 추출
-const getUserIdFromToken = async (request: Request): Promise<number | null> => {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  try {
-    const token = authHeader.substring(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-    );
-    return payload.exp > Math.floor(Date.now() / 1000) ? payload.userId : null;
-  } catch {
-    return null;
-  }
 };
 
 // 프로필 이름 유효성 검사

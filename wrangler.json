@@ -19,6 +19,13 @@
       "index_name": "saju-index"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "DESTINY_R2",
+      "bucket_name": "destiny",
+      "preview_bucket_name": "destiny-dev"
+    }
+  ],
   "vars": {
     "GOOGLE_CLIENT_ID": "337392205026-edu53b4l8cb843u6vq1s2aniljfhq0e4.apps.googleusercontent.com"
   },

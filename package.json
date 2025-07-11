@@ -19,16 +19,20 @@
     "publish": true
   },
   "devDependencies": {
+    "@types/uuid": "^10.0.0",
     "lunar-javascript": "^1.7.3",
     "swagger-typescript-api": "^13.2.7",
     "typescript": "5.8.3",
     "wrangler": "4.16.1"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.844.0",
+    "@aws-sdk/s3-request-presigner": "^3.844.0",
     "@prisma/adapter-d1": "^6.11.1",
     "@prisma/client": "^6.10.1",
     "@types/swagger-ui-dist": "^3.30.5",
-    "prisma": "^6.10.1"
+    "prisma": "^6.10.1",
+    "uuid": "^11.1.0"
   },
   "scripts": {
     "cf-typegen": "wrangler types",
