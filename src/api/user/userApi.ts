@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaD1 } from "@prisma/adapter-d1";
-import { jsonResponse, getUserIdFromToken } from "../../common/utils";
+import { jsonResponse, getUserFromToken } from "../../common/utils";
 import { deleteR2Object } from "./r2Api";
 
 const createPrismaClient = (db: D1Database) => {
@@ -34,12 +34,12 @@ export async function getUserProfile(
   env: any
 ): Promise<Response> {
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(request);
+    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
 
     const prisma = createPrismaClient(env.DB);
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: userInfo.id },
       select: {
         id: true,
         email: true,
@@ -85,8 +85,8 @@ export async function updateUserProfile(
   env: any
 ): Promise<Response> {
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(request);
+    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
 
     const body = (await request.json()) as {
       userName?: string;
@@ -111,7 +111,7 @@ export async function updateUserProfile(
 
     // 사용자 존재 확인 및 현재 프로필 정보 가져오기
     const existingUser = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: userInfo.id },
       select: { id: true, picture: true },
     });
 
@@ -148,7 +148,7 @@ export async function updateUserProfile(
 
     // 프로필 정보 업데이트
     const updatedUser = await prisma.user.update({
-      where: { id: userId },
+      where: { id: userInfo.id },
       data: dataToUpdate,
     });
 

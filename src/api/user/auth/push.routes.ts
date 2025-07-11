@@ -1,6 +1,8 @@
 import { Router } from "../../../common/class/router";
 import { getVapidPublicKey, subscribe, unsubscribe } from "./pushApi";
-
+/*
+현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
+*/
 export function createPushRouter(): Router {
   const router = new Router();
 

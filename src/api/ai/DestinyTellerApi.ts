@@ -6,7 +6,7 @@ import {
   logAiUsage,
   RagEnv,
 } from "../../common/ragUtils";
-import { corsHeaders, getUserIdFromToken, jsonResponse } from "../../common/utils";
+import { corsHeaders, getUserFromToken, jsonResponse } from "../../common/utils";
 
 export interface Env extends RagEnv {
   AI: Ai;
@@ -169,8 +169,8 @@ export async function FortuneTelling(
   params?: Record<string, string>
 ): Promise<Response> {
   // 1. 사용자 인증
-  const userId = await getUserIdFromToken(request);
-  if (!userId) {
+  const user = await getUserFromToken(request);
+  if (!user) {
     return jsonResponse({ error: "Unauthorized: Invalid token" }, 401, request);
   }
 
@@ -226,7 +226,7 @@ export async function FortuneTelling(
     // 4. AI 사용량 로깅 (스트리밍이 아닌 경우)
     // Cloudflare AI 응답에 'usage' 객체가 포함되어 있는지 확인합니다.
     if (!body.stream && result && result.usage) {
-      await logAiUsage(env.DB, userId, model, result.usage);
+      await logAiUsage(env.DB, user.id, model, result.usage);
     }
 
     return createApiResponse(result, body, model, request);

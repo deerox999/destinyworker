@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaD1 } from "@prisma/adapter-d1";
-import { jsonResponse } from "../../common/utils";
+import { jsonResponse, getUserFromToken } from "../../common/utils";
 
 const createPrismaClient = (db: D1Database) => {
   const adapter = new PrismaD1(db);
@@ -8,25 +8,6 @@ const createPrismaClient = (db: D1Database) => {
     adapter,
     log: ["error"], // 에러만 로깅
   });
-};
-
-// JWT 토큰에서 사용자 ID 추출
-const getUserIdFromToken = async (request: Request): Promise<number | null> => {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  try {
-    const token = authHeader.substring(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-    );
-    return payload.exp > Math.floor(Date.now() / 1000) ? payload.userId : null;
-  } catch {
-    return null;
-  }
 };
 
 // 한글 -> 영어 필드 변환
@@ -88,12 +69,12 @@ export async function getSajuProfiles(
   params?: Record<string, string>
 ): Promise<Response> {
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(request);
+    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
 
     const prisma = createPrismaClient(env.DB);
     const profiles = await prisma.sajuProfile.findMany({
-      where: { userId },
+      where: { userId: userInfo.id },
       orderBy: { updatedAt: "desc" },
     });
     await prisma.$disconnect();
@@ -121,8 +102,8 @@ export async function createSajuProfile(
   params?: Record<string, string>
 ): Promise<Response> {
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(request);
+    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
 
     const body = await request.json();
     if (!validateSajuData(body)) {
@@ -131,7 +112,7 @@ export async function createSajuProfile(
 
     const prisma = createPrismaClient(env.DB);
     const profile = await prisma.sajuProfile.create({
-      data: { userId, ...toDbFields(body) },
+      data: { userId: userInfo.id, ...toDbFields(body) },
     });
     await prisma.$disconnect();
 
@@ -161,8 +142,8 @@ export async function updateSajuProfile(
   params?: Record<string, string>
 ): Promise<Response> {
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(request);
+    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(params?.id);
     if (!profileId) return jsonResponse({ error: "잘못된 ID입니다." }, 400);
@@ -185,7 +166,7 @@ export async function updateSajuProfile(
       return jsonResponse({ error: "프로필을 찾을 수 없습니다." }, 404);
     }
 
-    if (existing.userId !== userId) {
+    if (existing.userId !== userInfo.id) {
       await prisma.$disconnect();
       return jsonResponse({ error: "권한이 없습니다." }, 403);
     }
@@ -215,8 +196,8 @@ export async function deleteSajuProfile(
   params?: Record<string, string>
 ): Promise<Response> {
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(request);
+    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(params?.id);
     if (!profileId) return jsonResponse({ error: "잘못된 ID입니다." }, 400);
@@ -234,7 +215,7 @@ export async function deleteSajuProfile(
       return jsonResponse({ error: "프로필을 찾을 수 없습니다." }, 404);
     }
 
-    if (existing.userId !== userId) {
+    if (existing.userId !== userInfo.id) {
       await prisma.$disconnect();
       return jsonResponse({ error: "권한이 없습니다." }, 403);
     }
@@ -261,8 +242,8 @@ export async function getSajuProfile(
   params?: Record<string, string>
 ): Promise<Response> {
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(request);
+    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(params?.id);
     if (!profileId) return jsonResponse({ error: "잘못된 ID입니다." }, 400);
@@ -275,7 +256,7 @@ export async function getSajuProfile(
 
     if (!profile)
       return jsonResponse({ error: "프로필을 찾을 수 없습니다." }, 404);
-    if (profile.userId !== userId)
+    if (profile.userId !== userInfo.id)
       return jsonResponse({ error: "권한이 없습니다." }, 403);
 
     return jsonResponse({

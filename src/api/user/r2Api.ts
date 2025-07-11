@@ -1,6 +1,6 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { jsonResponse, getUserIdFromToken } from "../../common/utils";
+import { jsonResponse, getUserFromToken } from "../../common/utils";
 import { v4 as uuidv4 } from "uuid";
 
 /* 운영 개발 분리 된 환경이 아님. dev 환경에서도, destiny 버킷에 업로드 가능하도록 되어있음. */
@@ -49,8 +49,8 @@ export async function getUploadUrl(
   request: Request,
   env: any
 ): Promise<Response> {
-  const userId = await getUserIdFromToken(request);
-  if (!userId) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+  const userInfo = await getUserFromToken(request);
+  if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
 
   try {
     const { fileName, contentType } = (await request.json()) as {
@@ -65,7 +65,7 @@ export async function getUploadUrl(
       );
     }
 
-    const objectKey = `uploads/user-${userId}/${uuidv4()}-${fileName}`;
+    const objectKey = `uploads/user-${userInfo.id}/${uuidv4()}-${fileName}`;
 
     const {
       R2_ACCOUNT_ID,

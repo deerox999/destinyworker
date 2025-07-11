@@ -7,7 +7,7 @@ import {
   logAiUsage,
   RagEnv,
 } from "../../common/ragUtils";
-import { getUserIdFromToken, jsonResponse } from "../../common/utils";
+import { getUserFromToken, jsonResponse } from "../../common/utils";
 import {
   getPersonaPrompt,
   getRejectionMessage,
@@ -161,8 +161,8 @@ export async function SajuChatList(
   const prisma = new PrismaClient({ adapter });
 
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) {
+    const user = await getUserFromToken(request);
+    if (!user) {
       return jsonResponse({ error: "Unauthorized" }, 401, request);
     }
 
@@ -197,8 +197,8 @@ export async function SajuChatList(
         WHERE fm.rn = 1
         ORDER BY la.last_activity DESC;
         `,
-      userId,
-      userId
+      user.id,
+      user.id
     );
 
     const conversations = results.map((r) => ({
@@ -274,8 +274,8 @@ export async function SajuChat(
     );
   }
 
-  const userId = await getUserIdFromToken(request);
-  if (!userId) {
+  const user = await getUserFromToken(request);
+  if (!user) {
     return jsonResponse({ error: "Unauthorized: Invalid token" }, 401, request);
   }
 
@@ -365,14 +365,14 @@ ${fullContext}`;
       typeof llmResponse.usage.completion_tokens === "number" &&
       typeof llmResponse.usage.total_tokens === "number"
     ) {
-      await logAiUsage(env.DB, userId, model, llmResponse.usage);
+      await logAiUsage(env.DB, user.id, model, llmResponse.usage);
     }
 
     // 6. 새로운 대화 내용 D1에 저장
     await saveConversationTurn(
       prisma,
       newConversationId,
-      userId,
+      user.id,
       userQuery,
       assistantResponse
     );
@@ -413,13 +413,13 @@ export async function SajuChatFull(
   const conversationId = pathSegments[3];
 
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) {
+    const user = await getUserFromToken(request);
+    if (!user) {
       return jsonResponse({ error: "Unauthorized" }, 401, request);
     }
 
     const firstMessage = await prisma.conversationHistory.findFirst({
-      where: { conversationId, userId },
+      where: { conversationId, userId: user.id },
     });
 
     if (!firstMessage) {
@@ -469,14 +469,14 @@ export async function SajuChatDelete(
   const conversationId = pathSegments[3];
 
   try {
-    const userId = await getUserIdFromToken(request);
-    if (!userId) {
+    const user = await getUserFromToken(request);
+    if (!user) {
       return jsonResponse({ error: "Unauthorized" }, 401, request);
     }
 
     // 대화 소유권 확인
     const conversation = await prisma.conversationHistory.findFirst({
-      where: { conversationId, userId },
+      where: { conversationId, userId: user.id },
       select: { id: true },
     });
 
@@ -490,7 +490,7 @@ export async function SajuChatDelete(
 
     // 해당 대화의 모든 메시지 삭제
     const { count } = await prisma.conversationHistory.deleteMany({
-      where: { conversationId, userId },
+      where: { conversationId, userId: user.id },
     });
 
     return jsonResponse(

@@ -7,13 +7,12 @@ import {
   createEmbedding,
   findSimilarVectors,
   getDocumentsFromD1,
-  logAiUsage,
-  RagEnv,
+  RagEnv
 } from "../../common/ragUtils";
 import {
   corsHeaders,
-  getUserIdFromToken,
-  jsonResponse,
+  getUserFromToken,
+  jsonResponse
 } from "../../common/utils";
 
 // Gemini API와 통신하기 위한 환경 변수 확장
@@ -228,8 +227,8 @@ export async function SajuAnalysisWithGemini(
   params?: Record<string, string>
 ): Promise<Response> {
   // 1. 사용자 인증 (기존 로직 재사용)
-  const userId = await getUserIdFromToken(request);
-  if (!userId) {
+  const user = await getUserFromToken(request);
+  if (!user) {
     return jsonResponse({ error: "Unauthorized: Invalid token" }, 401, request);
   }
 
@@ -309,7 +308,7 @@ export async function SajuAnalysisWithGemini(
       // Gemini API는 응답에 직접적인 토큰 사용량을 포함하지 않을 수 있음.
       // 필요 시 프롬프트/응답 텍스트 기반으로 토큰 수 계산 로직 추가 필요.
       // if (result.usage) {
-      //   await logAiUsage(env.DB, userId, model, result.usage);
+      //   await logAiUsage(env.DB, user.id, model, result.usage);
       // }
 
       return jsonResponse(result, 200, request);

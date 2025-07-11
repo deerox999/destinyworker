@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaD1 } from "@prisma/adapter-d1";
-import { jsonResponse } from "../../common/utils";
+import { jsonResponse, getUserFromToken } from "../../common/utils";
 
 const createPrismaClient = (db: D1Database) => {
   const adapter = new PrismaD1(db);
@@ -8,29 +8,6 @@ const createPrismaClient = (db: D1Database) => {
     adapter,
     log: ["error"],
   });
-};
-
-// JWT 토큰에서 사용자 정보 추출
-const getUserFromToken = async (
-  request: Request
-): Promise<{ id: number; role: string } | null> => {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  try {
-    const token = authHeader.substring(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-    );
-    if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
-
-    return { id: payload.userId, role: payload.role || "user" };
-  } catch {
-    return null;
-  }
 };
 
 // 관리자 권한 체크
