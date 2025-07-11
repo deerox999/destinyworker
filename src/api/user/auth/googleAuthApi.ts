@@ -203,7 +203,7 @@ async function findOrCreateUser(
       // 최신 유저 정보를 다시 조회하여 반환
       const updatedUserStmt = db.prepare("SELECT * FROM users WHERE id = ?");
       const updatedUser = await updatedUserStmt.bind(result.id).first();
-
+      
       return updatedUser as User;
     } else {
       // 새 사용자 생성
@@ -373,23 +373,21 @@ export async function logout(request: Request, env: any): Promise<Response> {
       return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401);
     }
 
-    const deleted = await deleteSession(env.DB, token);
+    // 세션 삭제 시도 (성공 여부와 관계없이 진행)
+    await deleteSession(env.DB, token);
 
-    if (deleted) {
-      // 로그아웃 기록 추가
-      try {
-        const stmt = env.DB.prepare(`
-          INSERT INTO login_histories (user_id, action) 
-          VALUES (?, 'logout')
-        `);
-        await stmt.bind(payload.userId).run();
-      } catch (e) {
-        console.error("Logout history save error:", e);
-      }
-      return jsonResponse({ success: true, message: "로그아웃되었습니다." });
-    } else {
-      return jsonResponse({ error: "유효하지 않은 세션입니다." }, 401);
+    // 로그아웃 기록 추가
+    try {
+      const stmt = env.DB.prepare(`
+        INSERT INTO login_histories (user_id, action) 
+        VALUES (?, 'logout')
+      `);
+      await stmt.bind(payload.userId).run();
+    } catch (e) {
+      console.error("Logout history save error:", e);
     }
+
+    return jsonResponse({ success: true, message: "로그아웃되었습니다." });
   } catch (error) {
     console.error("Logout error:", error);
     return jsonResponse(
