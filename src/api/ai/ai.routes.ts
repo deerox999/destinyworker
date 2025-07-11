@@ -507,11 +507,7 @@ export function createAiRouter(): Router {
             type: "object",
             properties: {
               message: { type: "string", description: "사용자의 첫 질문" },
-              systemPrompt: {
-                type: "string",
-                description: "AI의 역할을 정의하는 시스템 프롬프트 (선택사항)",
-                nullable: true,
-              },
+              i18n: { type: "string", description: "언어 코드 (ko, en, ja, zh, vi)", default: "ko" },
             },
             required: ["message"],
           },
@@ -561,11 +557,7 @@ export function createAiRouter(): Router {
             type: "object",
             properties: {
               message: { type: "string", description: "사용자의 다음 질문" },
-              systemPrompt: {
-                type: "string",
-                description: "AI의 역할을 정의하는 시스템 프롬프트 (선택사항)",
-                nullable: true,
-              },
+              i18n: { type: "string", description: "언어 코드 (ko, en, ja, zh, vi)", default: "ko" },
             },
             required: ["message"],
           },
