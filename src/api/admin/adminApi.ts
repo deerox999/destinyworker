@@ -339,71 +339,50 @@ export async function getLoginHistory(
 }
 
 /**
- * AI 사용량 통계를 조회합니다.
+ * 모델별 AI 사용량 통계를 조회합니다.
  */
-export async function getAiUsageStats(
+export async function getAiUsageStatsByModel(
   request: Request,
-  env: Env
+  env: any
 ): Promise<Response> {
-  const url = new URL(request.url);
-  const groupBy = url.searchParams.get("groupBy") || "day"; // 'day' or 'month'
-  const startDate = url.searchParams.get("startDate");
-  const endDate = url.searchParams.get("endDate");
-
-  if (!["day", "month"].includes(groupBy)) {
-    return jsonResponse(
-      { error: "Invalid 'groupBy' parameter. Use 'day' or 'month'." },
-      400,
-      request
-    );
+  if (!(await isAdmin(request, env))) {
+    return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const adapter = new PrismaD1(env.DB);
-  const prisma = new PrismaClient({ adapter });
+  const url = new URL(request.url);
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
+  const prisma = createPrismaClient(env.DB);
 
   try {
-    const where: any = {};
+    const whereConditions: string[] = [];
     if (startDate) {
-      where.createdAt = { ...where.createdAt, gte: new Date(startDate) };
+      whereConditions.push(
+        `created_at >= '${new Date(startDate).toISOString()}'`
+      );
     }
     if (endDate) {
-      where.createdAt = { ...where.createdAt, lte: new Date(endDate) };
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999); // 해당 날짜의 끝까지 포함
+      whereConditions.push(`created_at <= '${end.toISOString()}'`);
     }
+    const whereClause =
+      whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-    // Prisma의 group by와 aggregation 기능을 사용하기 어렵기 때문에 Raw 쿼리 사용
-    // SQLite에서 날짜별/월별 그룹화를 처리하는 방법
-    const dateFormat = groupBy === "day" ? "%Y-%m-%d" : "%Y-%m";
     const query = `
       SELECT
-        STRFTIME('${dateFormat}', created_at) as date,
+        model,
         SUM(total_tokens) as total_tokens,
         COUNT(id) as total_calls,
         COUNT(DISTINCT user_id) as unique_users
       FROM ai_usage_logs
-      ${
-        startDate || endDate
-          ? `WHERE ${
-              startDate
-                ? `created_at >= '${new Date(startDate)
-                    .toISOString()
-                    .slice(0, 10)} 00:00:00'`
-                : ""
-            } ${startDate && endDate ? "AND" : ""} ${
-              endDate
-                ? `created_at <= '${new Date(endDate)
-                    .toISOString()
-                    .slice(0, 10)} 23:59:59'`
-                : ""
-            }`
-          : ""
-      }
-      GROUP BY date
-      ORDER BY date DESC;
+      ${whereClause}
+      GROUP BY model
+      ORDER BY total_tokens DESC;
     `;
 
     const result: any[] = await prisma.$queryRawUnsafe(query);
 
-    // 숫자로 변환
     const stats = result.map((row) => ({
       ...row,
       total_tokens: Number(row.total_tokens),
@@ -411,16 +390,110 @@ export async function getAiUsageStats(
       unique_users: Number(row.unique_users),
     }));
 
-    return jsonResponse({
-      success: true,
-      stats,
-    });
+    return jsonResponse({ success: true, stats });
   } catch (error) {
-    console.error("Error fetching AI usage stats:", error);
+    console.error("Error fetching AI usage stats by model:", error);
     return jsonResponse(
-      { error: "Failed to fetch AI usage stats." },
-      500,
-      request
+      {
+        error: "모델별 AI 사용량 통계 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/**
+ * 사용자별 AI 사용량 통계를 조회합니다.
+ */
+export async function getAiUsageStatsByUser(
+  request: Request,
+  env: any
+): Promise<Response> {
+  if (!(await isAdmin(request, env))) {
+    return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+  }
+
+  const url = new URL(request.url);
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
+  const prisma = createPrismaClient(env.DB);
+
+  try {
+    const whereConditions: string[] = [];
+    if (startDate) {
+      whereConditions.push(
+        `l.created_at >= '${new Date(startDate).toISOString()}'`
+      );
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      whereConditions.push(`l.created_at <= '${end.toISOString()}'`);
+    }
+    const whereClause =
+      whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
+
+    const query = `
+      SELECT
+        u.id as user_id,
+        u.name as user_name,
+        u.email as user_email,
+        l.model,
+        SUM(l.total_tokens) as total_tokens,
+        COUNT(l.id) as total_calls
+      FROM ai_usage_logs as l
+      JOIN users as u ON l.user_id = u.id
+      ${whereClause}
+      GROUP BY u.id, u.name, u.email, l.model
+      ORDER BY u.id, total_tokens DESC;
+    `;
+
+    const result: any[] = await prisma.$queryRawUnsafe(query);
+
+    const userStats = new Map();
+    result.forEach((row) => {
+      const userId = row.user_id;
+      if (!userStats.has(userId)) {
+        userStats.set(userId, {
+          user: {
+            id: userId,
+            name: row.user_name,
+            email: row.user_email,
+          },
+          totalUsage: { tokens: 0, calls: 0 },
+          modelUsage: [],
+        });
+      }
+
+      const stats = userStats.get(userId);
+      const totalTokens = Number(row.total_tokens);
+      const totalCalls = Number(row.total_calls);
+
+      stats.totalUsage.tokens += totalTokens;
+      stats.totalUsage.calls += totalCalls;
+      stats.modelUsage.push({
+        model: row.model,
+        total_tokens: totalTokens,
+        total_calls: totalCalls,
+      });
+    });
+
+    const finalStats = Array.from(userStats.values()).sort(
+      (a, b) => b.totalUsage.tokens - a.totalUsage.tokens
+    );
+
+    return jsonResponse({ success: true, stats: finalStats });
+  } catch (error) {
+    console.error("Error fetching AI usage stats by user:", error);
+    return jsonResponse(
+      {
+        error: "사용자별 AI 사용량 통계 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
     );
   } finally {
     await prisma.$disconnect();

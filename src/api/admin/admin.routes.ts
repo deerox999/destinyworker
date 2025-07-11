@@ -4,7 +4,8 @@ import {
   getUserProfiles,
   getAdminStats,
   getLoginHistory,
-  getAiUsageStats,
+  getAiUsageStatsByModel,
+  getAiUsageStatsByUser,
 } from "./adminApi";
 
 export function createAdminRouter(): Router {
@@ -257,19 +258,14 @@ export function createAdminRouter(): Router {
     },
   });
 
-  // AI 사용량 통계 조회
-  router.get("/api/admin/ai-usage-stats", getAiUsageStats, {
-    summary: "[Admin] AI 사용량 통계 조회",
-    description: "일별 또는 월별로 AI 사용량 통계를 조회합니다.",
+  // 모델별 AI 사용량 통계 조회
+  router.get("/api/admin/stats/ai-usage-by-model", getAiUsageStatsByModel, {
+    summary: "[Admin] 모델별 AI 사용량 통계",
+    description:
+      "기간별로 각 AI 모델의 총 토큰 사용량, 호출 수, 순수 사용자 수를 조회합니다.",
     tags: ["Admin"],
     auth: true,
     parameters: [
-      {
-        name: "groupBy",
-        in: "query",
-        description: "그룹화 기준 ('day' 또는 'month', 기본값: 'day')",
-        schema: { type: "string", enum: ["day", "month"], default: "day" },
-      },
       {
         name: "startDate",
         in: "query",
@@ -284,11 +280,111 @@ export function createAdminRouter(): Router {
       },
     ],
     responses: {
-      "200": { description: "통계 조회 성공" },
-      "400": { description: "잘못된 쿼리 파라미터" },
-      "401": { description: "인증 실패" },
-      "403": { description: "권한 없음 (관리자 아님)" },
-      "500": { description: "서버 오류" },
+      "200": {
+        description: "모델별 통계 조회 성공",
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                success: { type: "boolean" },
+                stats: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      model: {
+                        type: "string",
+                        description: "AI 모델 이름",
+                      },
+                      total_tokens: {
+                        type: "integer",
+                      },
+                      total_calls: {
+                        type: "integer",
+                      },
+                      unique_users: {
+                        type: "integer",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // 사용자별 AI 사용량 통계 조회
+  router.get("/api/admin/stats/ai-usage-by-user", getAiUsageStatsByUser, {
+    summary: "[Admin] 사용자별 AI 사용량 통계",
+    description: "기간별로 각 사용자의 AI 사용량을 모델별로 상세히 조회합니다.",
+    tags: ["Admin"],
+    auth: true,
+    parameters: [
+      {
+        name: "startDate",
+        in: "query",
+        description: "조회 시작일 (YYYY-MM-DD)",
+        schema: { type: "string", format: "date" },
+      },
+      {
+        name: "endDate",
+        in: "query",
+        description: "조회 종료일 (YYYY-MM-DD)",
+        schema: { type: "string", format: "date" },
+      },
+    ],
+    responses: {
+      "200": {
+        description: "사용자별 통계 조회 성공",
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                success: { type: "boolean" },
+                stats: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      user: {
+                        type: "object",
+                        properties: {
+                          id: { type: "integer" },
+                          name: { type: "string" },
+                          email: { type: "string" },
+                        },
+                      },
+                      totalUsage: {
+                        type: "object",
+                        properties: {
+                          tokens: { type: "integer" },
+                          calls: { type: "integer" },
+                        },
+                      },
+                      modelUsage: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            model: { type: "string" },
+                            total_tokens: { type: "integer" },
+                            total_calls: { type: "integer" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 

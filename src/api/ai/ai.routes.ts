@@ -448,7 +448,7 @@ export function createAiRouter(): Router {
   });
 
   // 대화형 RAG 대화 이어가기
-  router.post("/api/ai/saju-chat/:id", SajuChatFull, {
+  router.post("/api/ai/saju-chat/:id", SajuChat, {
     summary: "[대화형 RAG] 대화 이어가기",
     description:
       "기존 대화의 맥락을 이어받아 답변을 생성합니다. Path에 conversationId를 포함하여 요청해야 합니다.",
