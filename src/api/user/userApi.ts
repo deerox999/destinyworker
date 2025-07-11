@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaD1 } from "@prisma/adapter-d1";
 import { jsonResponse, getUserIdFromToken } from "../../common/utils";
+import { deleteR2Object } from "./r2Api";
 
 const createPrismaClient = (db: D1Database) => {
   const adapter = new PrismaD1(db);
@@ -15,6 +16,16 @@ const validateUserName = (userName: string): boolean => {
   if (!userName || typeof userName !== "string") return false;
   const trimmed = userName.trim();
   return trimmed.length >= 1 && trimmed.length <= 50;
+};
+
+// R2 이미지 URL인지 확인
+const isR2ImageUrl = (url: string, R2_PUBLIC_URL: string): boolean => {
+  return url.startsWith(R2_PUBLIC_URL);
+};
+
+// R2 이미지 URL에서 객체 키 추출
+const getObjectKeyFromUrl = (url: string, R2_PUBLIC_URL: string): string => {
+  return url.replace(`${R2_PUBLIC_URL}/`, "");
 };
 
 // 사용자 정보 조회
@@ -96,31 +107,43 @@ export async function updateUserProfile(
       dataToUpdate.userName = body.userName.trim();
     }
 
-    if (body.picture !== undefined) {
-      if (typeof body.picture !== "string") {
-        return jsonResponse(
-          { error: "잘못된 프로필 사진 형식입니다." },
-          400
-        );
-      }
-      dataToUpdate.picture = body.picture;
-    }
-
-    if (Object.keys(dataToUpdate).length === 0) {
-      return jsonResponse({ error: "수정할 정보가 없습니다." }, 400);
-    }
-
     const prisma = createPrismaClient(env.DB);
 
-    // 사용자 존재 확인
+    // 사용자 존재 확인 및 현재 프로필 정보 가져오기
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true },
+      select: { id: true, picture: true },
     });
 
     if (!existingUser) {
       await prisma.$disconnect();
       return jsonResponse({ error: "사용자를 찾을 수 없습니다." }, 404);
+    }
+
+    if (body.picture !== undefined) {
+      if (typeof body.picture !== "string") {
+        await prisma.$disconnect();
+        return jsonResponse(
+          { error: "잘못된 프로필 사진 형식입니다." },
+          400
+        );
+      }
+
+      // 기존 이미지가 R2에 저장된 이미지인 경우 삭제
+      if (existingUser.picture && isR2ImageUrl(existingUser.picture, env.R2_PUBLIC_URL)) {
+        const objectKey = getObjectKeyFromUrl(existingUser.picture, env.R2_PUBLIC_URL);
+        const deleteResult = await deleteR2Object(objectKey, env);
+        if (!deleteResult) {
+          console.error(`Failed to delete old profile image: ${objectKey}`);
+        }
+      }
+
+      dataToUpdate.picture = body.picture;
+    }
+
+    if (Object.keys(dataToUpdate).length === 0) {
+      await prisma.$disconnect();
+      return jsonResponse({ error: "수정할 정보가 없습니다." }, 400);
     }
 
     // 프로필 정보 업데이트
