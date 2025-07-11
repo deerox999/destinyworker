@@ -20,7 +20,6 @@ export function corsHeaders(request?: Request) {
   const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "86400", // Preflight 요청 캐시 시간(초)
   };
 
   if (origin && allowedOrigins.includes(origin)) {
@@ -36,12 +35,13 @@ export function corsHeaders(request?: Request) {
 }
 
 // JSON 응답 생성 함수
-export function jsonResponse(data: any, status = 200, request?: Request) {
+export function jsonResponse(data: any, status = 200, request?: Request, headers?: Record<string, string>) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json",
       ...corsHeaders(request),
+      ...headers,
     },
   });
 }

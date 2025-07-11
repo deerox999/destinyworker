@@ -78,44 +78,50 @@ export class Router {
    * 요청을 처리합니다
    */
   async handle(request: Request, env: any): Promise<Response | null> {
-    const url = new URL(request.url);
-    const method = request.method;
-    const pathname = url.pathname;
+    try {
+      const url = new URL(request.url);
+      const method = request.method;
+      const pathname = url.pathname;
 
-    // CORS Preflight(OPTIONS) 요청 자동 처리
-    if (method === "OPTIONS") {
-      // 해당 경로에 GET, POST 등 다른 메서드로 등록된 라우트가 있는지 확인
-      const hasRoute = this.routes.some((route) =>
-        this.matchPath(route.path, pathname)
-      );
-      if (hasRoute) {
-        return jsonResponse(null, 204, request);
+      // CORS Preflight(OPTIONS) 요청 자동 처리
+      if (method === "OPTIONS") {
+        // 해당 경로에 GET, POST 등 다른 메서드로 등록된 라우트가 있는지 확인
+        const hasRoute = this.routes.some((route) =>
+          this.matchPath(route.path, pathname)
+        );
+        if (hasRoute) {
+          // preflight 요청에는 204 No Content로 응답하고, CORS 헤더를 포함시킵니다.
+          return jsonResponse(null, 204, request, {
+            "Access-Control-Max-Age": "86400",
+          });
+        }
+        // 경로가 없으면 null을 반환하여 404로 처리되도록 합니다.
+        return null;
       }
-    }
 
-    // 등록된 라우트들을 순회하며 매칭되는 라우트를 찾습니다
-    for (const route of this.routes) {
-      if (route.method !== method) continue;
+      // 등록된 라우트들을 순회하며 매칭되는 라우트를 찾습니다
+      for (const route of this.routes) {
+        if (route.method !== method) continue;
 
-      const match = this.matchPath(route.path, pathname);
-      if (match) {
-        try {
+        const match = this.matchPath(route.path, pathname);
+        if (match) {
           return await route.handler(request, env, match.params);
-        } catch (error) {
-          console.error(`라우트 처리 오류 [${method} ${pathname}]:`, error);
-          return jsonResponse(
-            {
-              error: "서버 내부 오류가 발생했습니다.",
-              message: error instanceof Error ? error.message : "Unknown error",
-            },
-            500,
-            request
-          );
         }
       }
-    }
 
-    return null; // 매칭되는 라우트가 없음
+      return null; // 매칭되는 라우트가 없음
+    } catch (error) {
+      console.error(`라우트 처리 중 예기치 않은 오류 발생:`, error);
+      return jsonResponse(
+        {
+          error: "서버 내부 오류가 발생했습니다.",
+          message: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined, // 개발 환경에서만 스택 정보 포함
+        },
+        500,
+        request
+      );
+    }
   }
 
   /**
