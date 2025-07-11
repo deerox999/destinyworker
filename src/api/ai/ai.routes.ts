@@ -1,5 +1,6 @@
 import { Router } from "../../common/class/router";
 import { FortuneTelling } from "./DestinyTellerApi";
+import { SajuAnalysisWithGemini } from "./geminiApi";
 import {
   RagAddDocuments,
   RagDelete,
@@ -57,6 +58,96 @@ export function createAiRouter(): Router {
       },
       "400": { description: "잘못된 요청" },
       "500": { description: "AI 모델 실행 오류" },
+    },
+  });
+
+  // Gemini 사주 분석 (신규)
+  router.post("/api/ai/gemini-saju-analysis", SajuAnalysisWithGemini, {
+    summary: "Gemini AI 기반 사주 분석",
+    description:
+      "Google의 Gemini AI 모델과 RAG를 결합하여 심층적인 사주 분석을 제공합니다. 스트리밍과 다양한 고급 옵션을 지원합니다.",
+    tags: ["AI"],
+    auth: true,
+    requestBody: {
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            properties: {
+              model: {
+                type: "string",
+                description:
+                  "사용할 Gemini 모델. 예: 'gemini-1.5-pro-latest'",
+                default: "gemini-1.5-pro-latest",
+              },
+              userPrompt: {
+                type: "string",
+                description: "사주 분석을 위한 사용자의 질문 또는 정보",
+              },
+              systemPrompt: {
+                type: "string",
+                description: "AI의 역할을 정의하는 커스텀 시스템 프롬프트",
+              },
+              history: {
+                type: "array",
+                description: "대화 기록(context)을 전달합니다.",
+                items: {
+                  type: "object",
+                  properties: {
+                    role: { type: "string", enum: ["user", "model"] },
+                    parts: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          text: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              stream: {
+                type: "boolean",
+                description: "스트리밍 응답 여부",
+                default: false,
+              },
+              generationConfig: {
+                type: "object",
+                description: "AI 응답 생성에 대한 고급 설정",
+                properties: {
+                  temperature: { type: "number", minimum: 0, maximum: 1 },
+                  topP: { type: "number" },
+                  topK: { type: "number" },
+                  maxOutputTokens: { type: "integer" },
+                  stopSequences: { type: "array", items: { type: "string" } },
+                },
+              },
+              safetySettings: {
+                type: "array",
+                description: "유해 콘텐츠 차단 설정",
+                items: {
+                  type: "object",
+                  properties: {
+                    category: { type: "string" },
+                    threshold: { type: "string" },
+                  },
+                },
+              },
+            },
+            required: ["userPrompt"],
+          },
+        },
+      },
+    },
+    responses: {
+      "200": {
+        description:
+          "성공. stream=true일 경우 text/event-stream, false일 경우 application/json.",
+      },
+      "400": { description: "잘못된 요청" },
+      "401": { description: "인증 실패" },
+      "500": { description: "Gemini API 또는 서버 오류" },
     },
   });
 
