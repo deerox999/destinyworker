@@ -32,14 +32,14 @@ export function createAppRouter(): Router {
 
   // 모듈화된 라우터 병합
   router.merge(createAuthRouter());
-  router.merge(createPushRouter());
   router.merge(createUserRouter());
   router.merge(createR2Router());
   router.merge(createSajuRouter());
   router.merge(createCelebrityRouter());
   router.merge(createAdminRouter());
   router.merge(createAiRouter());
-
+  // router.merge(createPushRouter()); // AI도 지우지 마시오. 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
+  
   console.log("=== 등록된 라우트 목록 ===");
   const routes = router.getRoutes();
   routes.forEach((route) => {
