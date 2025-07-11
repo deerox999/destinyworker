@@ -35,14 +35,26 @@ export function corsHeaders(request?: Request) {
 }
 
 // JSON 응답 생성 함수
-export function jsonResponse(data: any, status = 200, request?: Request, headers?: Record<string, string>) {
-  return new Response(JSON.stringify(data), {
+export function jsonResponse(
+  data: any,
+  status = 200,
+  request?: Request,
+  headers?: Record<string, string>
+) {
+  const isNullBodyStatus = status === 204 || status === 205 || status === 304;
+
+  const responseHeaders: Record<string, string> = {
+    ...corsHeaders(request),
+    ...headers,
+  };
+
+  if (!isNullBodyStatus) {
+    responseHeaders["Content-Type"] = "application/json";
+  }
+
+  return new Response(isNullBodyStatus ? null : JSON.stringify(data), {
     status,
-    headers: {
-      "Content-Type": "application/json",
-      ...corsHeaders(request),
-      ...headers,
-    },
+    headers: responseHeaders,
   });
 }
 
