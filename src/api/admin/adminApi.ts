@@ -1,6 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaD1 } from "@prisma/adapter-d1";
 import { jsonResponse } from "../../common/utils";
+import { paginate } from "../../common/paginationUtils";
+import { D1Database } from "@cloudflare/workers-types";
 
 const createPrismaClient = (db: D1Database) => {
   const adapter = new PrismaD1(db);
@@ -349,27 +351,41 @@ export async function getAiUsageStatsByModel(
     return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
+  const prisma = createPrismaClient(env.DB);
   const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1");
+  const limit = parseInt(url.searchParams.get("limit") || "20");
+  const sort = url.searchParams.get("sort") || "total_tokens";
+  const allowedSortColumns = [
+    "model",
+    "total_tokens",
+    "total_calls",
+    "unique_users",
+  ];
+  const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
+  const order =
+    url.searchParams.get("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
   const startDate = url.searchParams.get("startDate");
   const endDate = url.searchParams.get("endDate");
-  const prisma = createPrismaClient(env.DB);
+  const offset = (page - 1) * limit;
 
   try {
-    const whereConditions: string[] = [];
+    const whereClauses: string[] = [];
+    const bindings: any[] = [];
     if (startDate) {
-      whereConditions.push(
-        `created_at >= '${new Date(startDate).toISOString()}'`
-      );
+      whereClauses.push("created_at >= ?");
+      bindings.push(new Date(startDate).toISOString());
     }
     if (endDate) {
       const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999); // 해당 날짜의 끝까지 포함
-      whereConditions.push(`created_at <= '${end.toISOString()}'`);
+      end.setHours(23, 59, 59, 999);
+      whereClauses.push("created_at <= ?");
+      bindings.push(end.toISOString());
     }
     const whereClause =
-      whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-    const query = `
+    const dataQuery = `
       SELECT
         model,
         SUM(total_tokens) as total_tokens,
@@ -378,19 +394,42 @@ export async function getAiUsageStatsByModel(
       FROM ai_usage_logs
       ${whereClause}
       GROUP BY model
-      ORDER BY total_tokens DESC;
+      ORDER BY ${sortColumn} ${order}
+      LIMIT ? OFFSET ?;
+    `;
+    const dataBindings = [...bindings, limit, offset];
+
+    const countQuery = `
+      SELECT COUNT(*) as totalItems FROM (
+        SELECT 1 FROM ai_usage_logs ${whereClause} GROUP BY model
+      )
     `;
 
-    const result: any[] = await prisma.$queryRawUnsafe(query);
+    const [stats, countResult] = (await Promise.all([
+      prisma.$queryRawUnsafe(dataQuery, ...dataBindings),
+      prisma.$queryRawUnsafe(countQuery, ...bindings),
+    ])) as [any[], any[]];
 
-    const stats = result.map((row) => ({
-      ...row,
+    const totalItems =
+      countResult.length > 0 ? Number(countResult[0].totalItems) : 0;
+
+    const formattedStats = stats.map((row: any) => ({
+      model: row.model,
       total_tokens: Number(row.total_tokens),
       total_calls: Number(row.total_calls),
       unique_users: Number(row.unique_users),
     }));
 
-    return jsonResponse({ success: true, stats });
+    return jsonResponse({
+      success: true,
+      stats: formattedStats,
+      pagination: {
+        totalItems: totalItems,
+        totalPages: Math.ceil(totalItems / limit),
+        currentPage: page,
+        pageSize: limit,
+      },
+    });
   } catch (error) {
     console.error("Error fetching AI usage stats by model:", error);
     return jsonResponse(
@@ -416,27 +455,98 @@ export async function getAiUsageStatsByUser(
     return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
+  const prisma = createPrismaClient(env.DB);
   const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1");
+  const limit = parseInt(url.searchParams.get("limit") || "20");
+  const sort = url.searchParams.get("sort") || "total_tokens";
+  const allowedSortColumns = ["total_tokens", "total_calls"];
+  const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
+  const order =
+    url.searchParams.get("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
   const startDate = url.searchParams.get("startDate");
   const endDate = url.searchParams.get("endDate");
-  const prisma = createPrismaClient(env.DB);
+  const offset = (page - 1) * limit;
 
   try {
-    const whereConditions: string[] = [];
+    const whereClauses: string[] = [];
+    const bindings: any[] = [];
     if (startDate) {
-      whereConditions.push(
-        `l.created_at >= '${new Date(startDate).toISOString()}'`
-      );
+      whereClauses.push("l.created_at >= ?");
+      bindings.push(new Date(startDate).toISOString());
     }
     if (endDate) {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
-      whereConditions.push(`l.created_at <= '${end.toISOString()}'`);
+      whereClauses.push("l.created_at <= ?");
+      bindings.push(end.toISOString());
     }
     const whereClause =
-      whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-    const query = `
+    // 1. Get total count of users
+    const countQuery = `SELECT COUNT(DISTINCT user_id) as totalItems FROM ai_usage_logs as l ${whereClause}`;
+    const countResult = (await prisma.$queryRawUnsafe(
+      countQuery,
+      ...bindings
+    )) as any[];
+    const totalItems =
+      countResult.length > 0 ? Number(countResult[0].totalItems) : 0;
+
+    if (totalItems === 0) {
+      return jsonResponse({
+        success: true,
+        stats: [],
+        pagination: {
+          totalItems: 0,
+          totalPages: 0,
+          currentPage: page,
+          pageSize: limit,
+        },
+      });
+    }
+
+    // 2. Get a paginated list of user IDs, sorted by their total usage
+    const userIdsQuery = `
+      SELECT
+        user_id,
+        SUM(total_tokens) as total_tokens,
+        COUNT(id) as total_calls
+      FROM ai_usage_logs as l
+      ${whereClause}
+      GROUP BY user_id
+      ORDER BY ${sortColumn} ${order}
+      LIMIT ? OFFSET ?
+    `;
+    const paginatedUserStats = (await prisma.$queryRawUnsafe(
+      userIdsQuery,
+      ...bindings,
+      limit,
+      offset
+    )) as any[];
+    const userIds = paginatedUserStats.map((u) => u.user_id);
+
+    if (userIds.length === 0) {
+      return jsonResponse({
+        success: true,
+        stats: [],
+        pagination: {
+          totalItems,
+          totalPages: Math.ceil(totalItems / limit),
+          currentPage: page,
+          pageSize: limit,
+        },
+      });
+    }
+
+    // 3. Get model-specific usage for those users
+    const userIdsPlaceholder = userIds.map(() => "?").join(",");
+    const detailedWhereClauses = [...whereClauses];
+    detailedWhereClauses.push(`l.user_id IN (${userIdsPlaceholder})`);
+    const detailedBindings = [...bindings, ...userIds];
+    const detailedWhereClause = `WHERE ${detailedWhereClauses.join(" AND ")}`;
+
+    const detailedUsageQuery = `
       SELECT
         u.id as user_id,
         u.name as user_name,
@@ -446,51 +556,236 @@ export async function getAiUsageStatsByUser(
         COUNT(l.id) as total_calls
       FROM ai_usage_logs as l
       JOIN users as u ON l.user_id = u.id
-      ${whereClause}
+      ${detailedWhereClause}
       GROUP BY u.id, u.name, u.email, l.model
       ORDER BY u.id, total_tokens DESC;
     `;
+    const detailedUsage = (await prisma.$queryRawUnsafe(
+      detailedUsageQuery,
+      ...detailedBindings
+    )) as any[];
 
-    const result: any[] = await prisma.$queryRawUnsafe(query);
-
-    const userStats = new Map();
-    result.forEach((row) => {
+    // 4. Reconstruct the response
+    const userStatsMap = new Map();
+    for (const row of detailedUsage) {
       const userId = row.user_id;
-      if (!userStats.has(userId)) {
-        userStats.set(userId, {
-          user: {
-            id: userId,
-            name: row.user_name,
-            email: row.user_email,
-          },
-          totalUsage: { tokens: 0, calls: 0 },
+      if (!userStatsMap.has(userId)) {
+        userStatsMap.set(userId, {
+          user: { id: userId, name: row.user_name, email: row.user_email },
+          totalUsage: { tokens: 0, calls: 0 }, // will be populated next
           modelUsage: [],
         });
       }
-
-      const stats = userStats.get(userId);
-      const totalTokens = Number(row.total_tokens);
-      const totalCalls = Number(row.total_calls);
-
-      stats.totalUsage.tokens += totalTokens;
-      stats.totalUsage.calls += totalCalls;
-      stats.modelUsage.push({
+      userStatsMap.get(userId).modelUsage.push({
         model: row.model,
-        total_tokens: totalTokens,
-        total_calls: totalCalls,
+        total_tokens: Number(row.total_tokens),
+        total_calls: Number(row.total_calls),
       });
+    }
+
+    for (const u of paginatedUserStats) {
+      if (userStatsMap.has(u.user_id)) {
+        const stats = userStatsMap.get(u.user_id);
+        stats.totalUsage = {
+          tokens: Number(u.total_tokens),
+          calls: Number(u.total_calls),
+        };
+      }
+    }
+
+    const finalStats = userIds.map((id) => userStatsMap.get(id));
+
+    return jsonResponse({
+      success: true,
+      stats: finalStats,
+      pagination: {
+        totalItems,
+        totalPages: Math.ceil(totalItems / limit),
+        currentPage: page,
+        pageSize: limit,
+      },
     });
-
-    const finalStats = Array.from(userStats.values()).sort(
-      (a, b) => b.totalUsage.tokens - a.totalUsage.tokens
-    );
-
-    return jsonResponse({ success: true, stats: finalStats });
   } catch (error) {
     console.error("Error fetching AI usage stats by user:", error);
     return jsonResponse(
       {
         error: "사용자별 AI 사용량 통계 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/**
+ * 특정 사용자의 AI 사용 기록을 페이지네이션하여 조회합니다.
+ */
+export async function getAiUsageLogsForUser(
+  request: Request,
+  env: any,
+  params?: Record<string, string>
+): Promise<Response> {
+  if (!(await isAdmin(request, env))) {
+    return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+  }
+
+  const userId = Number(params?.userId);
+  if (!userId) {
+    return jsonResponse({ error: "잘못된 사용자 ID입니다." }, 400);
+  }
+
+  const db: D1Database = env.DB;
+  const url = new URL(request.url);
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
+
+  try {
+    const baseWhereClauses: { clause: string; binding: any }[] = [
+      { clause: "user_id = ?", binding: userId },
+    ];
+    if (startDate) {
+      baseWhereClauses.push({
+        clause: "created_at >= ?",
+        binding: new Date(startDate).toISOString(),
+      });
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      baseWhereClauses.push({
+        clause: "created_at <= ?",
+        binding: end.toISOString(),
+      });
+    }
+
+    return await paginate(request, db, {
+      tableName: "ai_usage_logs",
+      defaultLimit: 20,
+      baseWhereClauses,
+    });
+  } catch (error) {
+    console.error("Error fetching AI usage logs for user:", error);
+    return jsonResponse(
+      {
+        error: "사용자 AI 사용 기록 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 특정 AI 모델을 사용한 사용자 목록과 사용량 통계를 페이지네이션하여 조회합니다.
+ */
+export async function getAiUsageStatsForModel(
+  request: Request,
+  env: any,
+  params?: Record<string, string>
+): Promise<Response> {
+  if (!(await isAdmin(request, env))) {
+    return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+  }
+
+  const model = params?.["model+"];
+  if (!model) {
+    console.error("Model name is required", params);
+    return jsonResponse({ error: "모델 이름이 필요합니다." }, 400);
+  }
+
+  const prisma = createPrismaClient(env.DB);
+  const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1");
+  const limit = parseInt(url.searchParams.get("limit") || "20");
+  const sort = url.searchParams.get("sort") || "total_tokens";
+  // Whitelist sortable columns to prevent SQL injection
+  const allowedSortColumns = [
+    "total_tokens",
+    "total_prompt_tokens",
+    "total_completion_tokens",
+    "total_calls",
+  ];
+  const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
+  const order =
+    url.searchParams.get("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
+  const offset = (page - 1) * limit;
+
+  try {
+    const whereClauses: string[] = ["l.model = ?"];
+    const bindings: any[] = [decodeURIComponent(model)];
+
+    if (startDate) {
+      whereClauses.push("l.created_at >= ?");
+      bindings.push(new Date(startDate).toISOString());
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      whereClauses.push("l.created_at <= ?");
+      bindings.push(end.toISOString());
+    }
+    const whereClause = `WHERE ${whereClauses.join(" AND ")}`;
+
+    const dataQuery = `
+      SELECT
+        u.id as user_id,
+        u.name as user_name,
+        u.email as user_email,
+        SUM(l.prompt_tokens) as total_prompt_tokens,
+        SUM(l.completion_tokens) as total_completion_tokens,
+        SUM(l.total_tokens) as total_tokens,
+        COUNT(l.id) as total_calls
+      FROM ai_usage_logs as l
+      JOIN users as u ON l.user_id = u.id
+      ${whereClause}
+      GROUP BY u.id, u.name, u.email
+      ORDER BY ${sortColumn} ${order}
+      LIMIT ? OFFSET ?
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*) as totalItems FROM (
+        SELECT 1 FROM ai_usage_logs as l ${whereClause} GROUP BY l.user_id
+      )
+    `;
+
+    const [data, countResult] = (await Promise.all([
+      prisma.$queryRawUnsafe(dataQuery, ...bindings, limit, offset),
+      prisma.$queryRawUnsafe(countQuery, ...bindings),
+    ])) as [any[], any[]];
+
+    const totalItems =
+      countResult.length > 0 ? Number(countResult[0].totalItems) : 0;
+
+    const formattedData = data.map((row: any) => ({
+      user_id: row.user_id,
+      user_name: row.user_name,
+      user_email: row.user_email,
+      total_prompt_tokens: Number(row.total_prompt_tokens),
+      total_completion_tokens: Number(row.total_completion_tokens),
+      total_tokens: Number(row.total_tokens),
+      total_calls: Number(row.total_calls),
+    }));
+
+    return jsonResponse({
+      success: true,
+      data: formattedData,
+      pagination: {
+        totalItems: totalItems,
+        totalPages: Math.ceil(totalItems / limit),
+        currentPage: page,
+        pageSize: limit,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching AI usage stats for model:", error);
+    return jsonResponse(
+      {
+        error: "모델별 사용자 통계 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
       },
       500

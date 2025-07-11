@@ -6,6 +6,8 @@ import {
   getLoginHistory,
   getAiUsageStatsByModel,
   getAiUsageStatsByUser,
+  getAiUsageLogsForUser,
+  getAiUsageStatsForModel,
 } from "./adminApi";
 
 export function createAdminRouter(): Router {
@@ -262,10 +264,22 @@ export function createAdminRouter(): Router {
   router.get("/api/admin/stats/ai-usage-by-model", getAiUsageStatsByModel, {
     summary: "[Admin] 모델별 AI 사용량 통계",
     description:
-      "기간별로 각 AI 모델의 총 토큰 사용량, 호출 수, 순수 사용자 수를 조회합니다.",
+      "기간별로 각 AI 모델의 총 토큰 사용량, 호출 수, 순수 사용자 수를 페이지네이션하여 조회합니다.",
     tags: ["Admin"],
     auth: true,
     parameters: [
+      {
+        name: "page",
+        in: "query",
+        description: "페이지 번호",
+        schema: { type: "integer", default: 1 },
+      },
+      {
+        name: "limit",
+        in: "query",
+        description: "페이지당 항목 수",
+        schema: { type: "integer", default: 20 },
+      },
       {
         name: "startDate",
         in: "query",
@@ -277,6 +291,19 @@ export function createAdminRouter(): Router {
         in: "query",
         description: "조회 종료일 (YYYY-MM-DD)",
         schema: { type: "string", format: "date" },
+      },
+      {
+        name: "sort",
+        in: "query",
+        description:
+          "정렬 필드 (model, total_tokens, total_calls, unique_users)",
+        schema: { type: "string", default: "total_tokens" },
+      },
+      {
+        name: "order",
+        in: "query",
+        description: "정렬 순서",
+        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
       },
     ],
     responses: {
@@ -317,13 +344,90 @@ export function createAdminRouter(): Router {
     },
   });
 
+  // 특정 모델의 사용자별 AI 사용량 통계 조회
+  router.get(
+    "/api/admin/stats/ai-usage-by-model/:model+",
+    getAiUsageStatsForModel,
+    {
+      summary: "[Admin] 특정 모델의 사용자별 AI 사용량 통계",
+      description:
+        "특정 AI 모델을 사용한 유저 목록과 각 유저의 토큰 사용량을 페이지네이션하여 조회합니다. 모델 이름에 '/'가 포함될 수 있으므로 인코딩된 상태로 요청해야 합니다.",
+      tags: ["Admin"],
+      auth: true,
+      parameters: [
+        {
+          name: "model",
+          in: "path",
+          required: true,
+          description: "AI 모델 이름 (URL-encoded)",
+          schema: { type: "string" },
+        },
+        {
+          name: "page",
+          in: "query",
+          schema: { type: "integer", default: 1 },
+          description: "페이지 번호",
+        },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", default: 20 },
+          description: "페이지당 항목 수",
+        },
+        {
+          name: "startDate",
+          in: "query",
+          description: "조회 시작일 (YYYY-MM-DD)",
+          schema: { type: "string", format: "date" },
+        },
+        {
+          name: "endDate",
+          in: "query",
+          description: "조회 종료일 (YYYY-MM-DD)",
+          schema: { type: "string", format: "date" },
+        },
+        {
+          name: "sort",
+          in: "query",
+          description:
+            "정렬 필드 (total_tokens, total_prompt_tokens, total_completion_tokens, total_calls)",
+          schema: { type: "string", default: "total_tokens" },
+        },
+        {
+          name: "order",
+          in: "query",
+          description: "정렬 순서",
+          schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
+        },
+      ],
+      responses: {
+        "200": { description: "성공" },
+        "400": { description: "모델 이름이 필요합니다." },
+        "403": { description: "관리자 권한이 필요합니다." },
+      },
+    }
+  );
+
   // 사용자별 AI 사용량 통계 조회
   router.get("/api/admin/stats/ai-usage-by-user", getAiUsageStatsByUser, {
     summary: "[Admin] 사용자별 AI 사용량 통계",
-    description: "기간별로 각 사용자의 AI 사용량을 모델별로 상세히 조회합니다.",
+    description:
+      "기간별로 각 사용자의 AI 사용량을 모델별로 상세히 페이지네이션하여 조회합니다.",
     tags: ["Admin"],
     auth: true,
     parameters: [
+      {
+        name: "page",
+        in: "query",
+        description: "페이지 번호",
+        schema: { type: "integer", default: 1 },
+      },
+      {
+        name: "limit",
+        in: "query",
+        description: "페이지당 항목 수",
+        schema: { type: "integer", default: 20 },
+      },
       {
         name: "startDate",
         in: "query",
@@ -335,6 +439,18 @@ export function createAdminRouter(): Router {
         in: "query",
         description: "조회 종료일 (YYYY-MM-DD)",
         schema: { type: "string", format: "date" },
+      },
+      {
+        name: "sort",
+        in: "query",
+        description: "정렬 필드 (total_tokens, total_calls)",
+        schema: { type: "string", default: "total_tokens" },
+      },
+      {
+        name: "order",
+        in: "query",
+        description: "정렬 순서",
+        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
       },
     ],
     responses: {
@@ -387,6 +503,71 @@ export function createAdminRouter(): Router {
       },
     },
   });
+
+  // 특정 사용자의 AI 사용 기록 조회
+  router.get(
+    "/api/admin/users/:userId/ai-usage",
+    getAiUsageLogsForUser,
+    {
+      summary: "[Admin] 특정 사용자 AI 사용 기록 조회",
+      description:
+        "특정 사용자의 모든 AI API 호출 기록을 페이지네이션하여 조회합니다. 기간 및 정렬 필터링을 지원합니다.",
+      tags: ["Admin"],
+      auth: true,
+      parameters: [
+        {
+          name: "userId",
+          in: "path",
+          required: true,
+          schema: { type: "integer" },
+          description: "사용자 ID",
+        },
+        {
+          name: "page",
+          in: "query",
+          schema: { type: "integer", default: 1 },
+          description: "페이지 번호",
+        },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", default: 20 },
+          description: "페이지당 항목 수",
+        },
+        {
+          name: "startDate",
+          in: "query",
+          schema: { type: "string", format: "date" },
+          description: "조회 시작일 (YYYY-MM-DD)",
+        },
+        {
+          name: "endDate",
+          in: "query",
+          schema: { type: "string", format: "date" },
+          description: "조회 종료일 (YYYY-MM-DD)",
+        },
+        {
+          name: "sort",
+          in: "query",
+          description: "정렬 필드 (e.g., total_tokens, created_at)",
+          schema: { type: "string", default: "created_at" },
+        },
+        {
+          name: "order",
+          in: "query",
+          description: "정렬 순서",
+          schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
+        },
+      ],
+      responses: {
+        "200": {
+          description: "성공",
+        },
+        "403": { description: "관리자 권한이 필요합니다." },
+        "400": { description: "잘못된 사용자 ID입니다." },
+      },
+    }
+  );
 
   return router;
 }

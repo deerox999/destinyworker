@@ -1,6 +1,7 @@
 import { PrismaD1 } from "@prisma/adapter-d1";
 import { PrismaClient } from "@prisma/client";
 import { jsonResponse } from "../../common/utils";
+import { paginate } from "../../common/paginationUtils";
 
 export interface CelebrityRequestData {
   name: string;
@@ -86,27 +87,14 @@ export async function createCelebrityRequest(
  */
 export async function getCelebrityRequests(
   request: Request,
-  env: any,
-  params?: Record<string, string>
+  env: any
 ): Promise<Response> {
   try {
-    const adapter = new PrismaD1(env.DB);
-    const prisma = new PrismaClient({ adapter });
-
-    const requests = await prisma.celebrityRequest.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
+    return await paginate(request, env.DB, {
+      tableName: "CelebrityRequest",
+      searchField: "name",
+      defaultLimit: 10,
     });
-
-    return jsonResponse(
-      {
-        success: true,
-        data: requests,
-      },
-      200,
-      request
-    );
   } catch (error) {
     console.error("Celebrity requests fetch error:", error);
     return jsonResponse(
@@ -114,8 +102,7 @@ export async function getCelebrityRequests(
         error: "유명인물 요청 목록 조회 중 오류가 발생했습니다.",
         details: error instanceof Error ? error.message : "알 수 없는 오류",
       },
-      500,
-      request
+      500
     );
   }
 }

@@ -106,9 +106,7 @@ async function isQuerySajuRelated(
 ): Promise<boolean> {
   try {
     const { response } = await ai.run("@cf/meta/llama-3-8b-instruct", {
-      prompt: `Is the following user query about "saju", "fortune-telling", "destiny", "tarot", "astrology", or other esoteric/divination topics? Answer with only "yes" or "no".
-
-Query: "${query}"`,
+      prompt: `Is the following user query about "saju", "fortune-telling", "destiny", "tarot", "astrology", or other esoteric/divination topics? Answer with only "yes" or "no". Query: "${query}"`,
       max_tokens: 5,
     });
 
@@ -338,10 +336,7 @@ export async function SajuChat(
   }>();
 
   // 언어 유효성 검사, 기본값 'ko'
-  const lang: SupportedLanguage =
-    i18n && ["ko", "en", "ja", "zh", "vi"].includes(i18n)
-      ? (i18n as SupportedLanguage)
-      : "ko";
+  const lang: SupportedLanguage = i18n && ["ko", "en", "ja", "zh", "vi"].includes(i18n) ? (i18n as SupportedLanguage) : "ko";
 
   if (!userQuery) {
     return jsonResponse({ error: "'message' is required." }, 400, request);

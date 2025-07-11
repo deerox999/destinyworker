@@ -5,6 +5,7 @@ interface PaginateOptions {
   tableName: string;
   searchField?: string;
   defaultLimit?: number;
+  baseWhereClauses?: { clause: string; binding: any }[];
 }
 
 /**
@@ -19,38 +20,51 @@ export async function paginate(
   db: D1Database,
   options: PaginateOptions
 ) {
-  const { tableName, searchField, defaultLimit = 10 } = options;
+  const {
+    tableName,
+    searchField,
+    defaultLimit = 10,
+    baseWhereClauses = [],
+  } = options;
   const { searchParams } = new URL(request.url);
 
   const page = parseInt(searchParams.get("page") || "1", 10);
   const limit = parseInt(searchParams.get("limit") || `${defaultLimit}`, 10);
   const search = searchParams.get("search") || "";
+  const sort = searchParams.get("sort") || "id";
+  const order = searchParams.get("order") || "desc";
   const offset = (page - 1) * limit;
+
+  const whereConditions = [...baseWhereClauses];
+  if (search && searchField) {
+    whereConditions.push({
+      clause: `${searchField} LIKE ?`,
+      binding: `%${search}%`,
+    });
+  }
+
+  const whereClause =
+    whereConditions.length > 0
+      ? `WHERE ${whereConditions.map((c) => c.clause).join(" AND ")}`
+      : "";
+  const bindings = whereConditions.map((c) => c.binding);
 
   let dataQuery: D1PreparedStatement;
   let countQuery: D1PreparedStatement;
 
   const baseDataQuery = `SELECT * FROM ${tableName}`;
   const baseCountQuery = `SELECT count(*) as count FROM ${tableName}`;
+  const orderByClause = `ORDER BY ${sort} ${order}`;
 
-  if (search && searchField) {
-    const whereClause = `WHERE ${searchField} LIKE ?`;
-    const searchTerm = `%${search}%`;
+  dataQuery = db
+    .prepare(
+      `${baseDataQuery} ${whereClause} ${orderByClause} LIMIT ? OFFSET ?`
+    )
+    .bind(...bindings, limit, offset);
 
-    dataQuery = db
-      .prepare(
-        `${baseDataQuery} ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`
-      )
-      .bind(searchTerm, limit, offset);
-    countQuery = db
-      .prepare(`${baseCountQuery} ${whereClause}`)
-      .bind(searchTerm);
-  } else {
-    dataQuery = db
-      .prepare(`${baseDataQuery} ORDER BY id DESC LIMIT ? OFFSET ?`)
-      .bind(limit, offset);
-    countQuery = db.prepare(baseCountQuery);
-  }
+  countQuery = db
+    .prepare(`${baseCountQuery} ${whereClause}`)
+    .bind(...bindings);
 
   try {
     const [dataResult, countResult] = await Promise.all([

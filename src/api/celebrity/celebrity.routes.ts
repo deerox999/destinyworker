@@ -253,9 +253,47 @@ export function createCelebrityRouter(): Router {
 
   router.get("/api/celebrities/requests", getCelebrityRequests, {
     summary: "유명인물 요청 목록 조회",
-    description: "모든 유명인물 추가 요청 목록을 조회합니다. (관리자용)",
+    description:
+      "페이지네이션을 지원하는 유명인물 추가 요청 목록을 조회합니다. (관리자용)",
     tags: ["유명인물"],
-    auth: true, // 핸들러 내부에서 관리자 권한을 체크해야 함
+    auth: true,
+    parameters: [
+      {
+        name: "page",
+        in: "query",
+        description: "페이지 번호",
+        required: false,
+        schema: { type: "integer", default: 1 },
+      },
+      {
+        name: "limit",
+        in: "query",
+        description: "페이지당 항목 수",
+        required: false,
+        schema: { type: "integer", default: 10 },
+      },
+      {
+        name: "search",
+        in: "query",
+        description: "검색어 (요청된 이름으로 검색)",
+        required: false,
+        schema: { type: "string" },
+      },
+      {
+        name: "sort",
+        in: "query",
+        description: "정렬 필드",
+        required: false,
+        schema: { type: "string", default: "createdAt" },
+      },
+      {
+        name: "order",
+        in: "query",
+        description: "정렬 순서",
+        required: false,
+        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
+      },
+    ],
     responses: {
       "200": { description: "조회 성공" },
       "401": { description: "인증 실패 (관리자 권한 필요)" },
