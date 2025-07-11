@@ -1,17 +1,17 @@
-import { createAppRouter } from "./routes";
-import { generateOpenApiFromRouter } from "./autoOpenApi";
+import { createAppRouter } from "../api/routes";
+import { generateOpenApiFromRouter } from "./swagger/autoOpenApi";
 
 const allowedOrigins = [
-  'http://localhost:9999',
-  'https://localhost:9999',
-  'http://localhost:9393',
-  'https://localhost:9393',
-  'http://127.0.0.1:9999',
-  'https://127.0.0.1:9999',
-  'http://127.0.0.1:9393',
-  'https://127.0.0.1:9393',
-  'https://youram.me',
-  'https://destiny-91f.pages.dev'
+  "http://localhost:9999",
+  "https://localhost:9999",
+  "http://localhost:9393",
+  "https://localhost:9393",
+  "http://127.0.0.1:9999",
+  "https://127.0.0.1:9999",
+  "http://127.0.0.1:9393",
+  "https://127.0.0.1:9393",
+  "https://youram.me",
+  "https://destiny-91f.pages.dev",
 ];
 
 // CORS 헤더 추가 함수

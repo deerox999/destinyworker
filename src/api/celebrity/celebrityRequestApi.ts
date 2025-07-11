@@ -1,6 +1,6 @@
-import { PrismaD1 } from '@prisma/adapter-d1';
-import { PrismaClient } from '@prisma/client';
-import { jsonResponse } from '../../common/utils';
+import { PrismaD1 } from "@prisma/adapter-d1";
+import { PrismaClient } from "@prisma/client";
+import { jsonResponse } from "../../common/utils";
 
 export interface CelebrityRequestData {
   name: string;
@@ -15,23 +15,38 @@ export interface CelebrityRequestData {
 export async function createCelebrityRequest(
   request: Request,
   env: any,
-  params: any
+  params?: Record<string, string>
 ): Promise<Response> {
   try {
     const adapter = new PrismaD1(env.DB);
     const prisma = new PrismaClient({ adapter });
 
-    const body = await request.json() as CelebrityRequestData;
-    
+    const body = (await request.json()) as CelebrityRequestData;
+
     // 필수 필드 검증
-    if (!body.name || !body.description || !body.birthDate || !body.occupation) {
-      return jsonResponse({ error: 'name, description, birthDate, occupation은 필수 항목입니다.' }, 400, request);
+    if (
+      !body.name ||
+      !body.description ||
+      !body.birthDate ||
+      !body.occupation
+    ) {
+      return jsonResponse(
+        {
+          error: "name, description, birthDate, occupation은 필수 항목입니다.",
+        },
+        400,
+        request
+      );
     }
 
     // 생년월일 형식 검증 (YYYY-MM-DD)
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(body.birthDate)) {
-      return jsonResponse({ error: 'birthDate는 YYYY-MM-DD 형식이어야 합니다.' }, 400, request);
+      return jsonResponse(
+        { error: "birthDate는 YYYY-MM-DD 형식이어야 합니다." },
+        400,
+        request
+      );
     }
 
     // 유명인물 요청 생성
@@ -44,18 +59,25 @@ export async function createCelebrityRequest(
       },
     });
 
-    return jsonResponse({
+    return jsonResponse(
+      {
         success: true,
         data: celebrityRequest,
-        message: '유명인물 요청이 성공적으로 등록되었습니다.'
-      }, 201, request);
-
+        message: "유명인물 요청이 성공적으로 등록되었습니다.",
+      },
+      201,
+      request
+    );
   } catch (error) {
-    console.error('Celebrity request creation error:', error);
-    return jsonResponse({ 
-        error: '유명인물 요청 등록 중 오류가 발생했습니다.',
-        details: error instanceof Error ? error.message : '알 수 없는 오류'
-      }, 500, request);
+    console.error("Celebrity request creation error:", error);
+    return jsonResponse(
+      {
+        error: "유명인물 요청 등록 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "알 수 없는 오류",
+      },
+      500,
+      request
+    );
   }
 }
 
@@ -65,7 +87,7 @@ export async function createCelebrityRequest(
 export async function getCelebrityRequests(
   request: Request,
   env: any,
-  params: any
+  params?: Record<string, string>
 ): Promise<Response> {
   try {
     const adapter = new PrismaD1(env.DB);
@@ -73,25 +95,27 @@ export async function getCelebrityRequests(
 
     const requests = await prisma.celebrityRequest.findMany({
       orderBy: {
-        createdAt: 'desc'
-      }
+        createdAt: "desc",
+      },
     });
 
-    return jsonResponse({
+    return jsonResponse(
+      {
         success: true,
-        data: requests
-      }, 200, request);
-
+        data: requests,
+      },
+      200,
+      request
+    );
   } catch (error) {
-    console.error('Celebrity requests fetch error:', error);
-    return jsonResponse({ 
-      error: '유명인물 요청 목록 조회 중 오류가 발생했습니다.',
-      details: error instanceof Error ? error.message : '알 수 없는 오류'
-    }, 500, request);
+    console.error("Celebrity requests fetch error:", error);
+    return jsonResponse(
+      {
+        error: "유명인물 요청 목록 조회 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "알 수 없는 오류",
+      },
+      500,
+      request
+    );
   }
 }
-
-export const celebrityRequestApiHandlers = {
-  createCelebrityRequest,
-  getCelebrityRequests,
-}; 

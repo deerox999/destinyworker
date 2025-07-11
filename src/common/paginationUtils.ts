@@ -36,11 +36,15 @@ export async function paginate(
   if (search && searchField) {
     const whereClause = `WHERE ${searchField} LIKE ?`;
     const searchTerm = `%${search}%`;
-    
+
     dataQuery = db
-      .prepare(`${baseDataQuery} ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`)
+      .prepare(
+        `${baseDataQuery} ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`
+      )
       .bind(searchTerm, limit, offset);
-    countQuery = db.prepare(`${baseCountQuery} ${whereClause}`).bind(searchTerm);
+    countQuery = db
+      .prepare(`${baseCountQuery} ${whereClause}`)
+      .bind(searchTerm);
   } else {
     dataQuery = db
       .prepare(`${baseDataQuery} ORDER BY id DESC LIMIT ? OFFSET ?`)
@@ -51,14 +55,17 @@ export async function paginate(
   try {
     const [dataResult, countResult] = await Promise.all([
       dataQuery.all(),
-      countQuery.first<{ count: number }>()
+      countQuery.first<{ count: number }>(),
     ]);
-    
+
     let data = dataResult.results || [];
-    if (data.length > 0 && 'metadata' in data[0]) {
-      data = data.map(item => {
+    if (data.length > 0 && "metadata" in data[0]) {
+      data = data.map((item) => {
         try {
-          const metadata = typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata;
+          const metadata =
+            typeof item.metadata === "string"
+              ? JSON.parse(item.metadata)
+              : item.metadata;
           return { ...item, metadata };
         } catch (e) {
           // JSON 파싱 실패 시 원본 metadata 유지
@@ -79,9 +86,8 @@ export async function paginate(
         pageSize: limit,
       },
     });
-
   } catch (error) {
     console.error(`Pagination error for table ${tableName}:`, error);
     throw new Error(`Failed to retrieve paginated data from ${tableName}.`);
   }
-} 
+}

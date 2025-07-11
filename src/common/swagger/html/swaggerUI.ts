@@ -9,10 +9,11 @@ export function generateSwaggerHTML(): string {
     { name: "관리자", tags: ["관리자"] },
   ];
 
-  const swaggerUrls = apiGroups.map(group => {
-    const url = group.tags.length > 0
-      ? `/api/openapi.json?tags=${group.tags.join(',')}`
-      : `/api/openapi.json`;
+  const swaggerUrls = apiGroups.map((group) => {
+    const url =
+      group.tags.length > 0
+        ? `/api/openapi.json?tags=${group.tags.join(",")}`
+        : `/api/openapi.json`;
     return { url, name: group.name };
   });
 
@@ -50,12 +51,16 @@ export function generateSwaggerHTML(): string {
 
 export function generateApiListHTML(): string {
   const endpoints = [
-    { method: 'POST', path: '/api/auth/google/login', description: 'Google OAuth 로그인' },
-    { method: 'POST', path: '/api/auth/logout', description: '로그아웃' },
-    { method: 'GET', path: '/api/auth/me', description: '사용자 정보 조회' },
-    { method: 'POST', path: '/api/auth/refresh', description: '토큰 갱신' },
-    { method: 'GET', path: '/docs', description: 'Swagger UI 문서' },
-    { method: 'GET', path: '/api/openapi.json', description: 'OpenAPI 스펙' }
+    {
+      method: "POST",
+      path: "/api/auth/google/login",
+      description: "Google OAuth 로그인",
+    },
+    { method: "POST", path: "/api/auth/logout", description: "로그아웃" },
+    { method: "GET", path: "/api/auth/me", description: "사용자 정보 조회" },
+    { method: "POST", path: "/api/auth/refresh", description: "토큰 갱신" },
+    { method: "GET", path: "/docs", description: "Swagger UI 문서" },
+    { method: "GET", path: "/api/openapi.json", description: "OpenAPI 스펙" },
   ];
 
   return `
@@ -202,14 +207,18 @@ export function generateApiListHTML(): string {
   </div>
 
   <div class="api-list">
-    ${endpoints.map(endpoint => `
+    ${endpoints
+      .map(
+        (endpoint) => `
       <div class="api-item">
         <span class="method ${endpoint.method}">${endpoint.method}</span>
         <span class="path">${endpoint.path}</span>
         <span class="description">${endpoint.description}</span>
       </div>
-    `).join('')}
+    `
+      )
+      .join("")}
   </div>
 </body>
 </html>`;
-} 
+}

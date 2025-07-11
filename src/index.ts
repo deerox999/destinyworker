@@ -1,6 +1,6 @@
 import { corsHeaders, htmlResponse, jsonResponse } from "./common/utils";
-import { createAppRouter } from "./common/routes";
-import { generateSwaggerHTML } from "./html/swaggerUI";
+import { createAppRouter } from "./api/routes";
+import { generateSwaggerHTML } from "./common/swagger/html/swaggerUI";
 
 // 애플리케이션 라우터 초기화
 const appRouter = createAppRouter();
@@ -51,14 +51,22 @@ export default {
       }
 
       // 404 처리
-      return jsonResponse({ error: "엔드포인트를 찾을 수 없습니다." }, 404, request);
+      return jsonResponse(
+        { error: "엔드포인트를 찾을 수 없습니다." },
+        404,
+        request
+      );
     } catch (error) {
       console.error("Global Error:", error);
-      return jsonResponse({
-        error: "서버 내부 오류가 발생했습니다.",
-        message: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
-      }, 500, request);
+      return jsonResponse(
+        {
+          error: "서버 내부 오류가 발생했습니다.",
+          message: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+        500,
+        request
+      );
     }
   },
 } satisfies ExportedHandler<any>;

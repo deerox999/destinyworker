@@ -14,28 +14,6 @@ export interface Env extends RagEnv {
 }
 
 /**
- * Cloudflare Workers AI 고급 사용법 가이드
- *
- * 1. AI Gateway: 요청 로깅, 캐싱, 재시도, 폴백 모델 설정 가능
- * 2. 타입 안전성: 모델별 특화된 입력/출력 타입 활용
- * 3. 다양한 옵션: returnRawResponse, stream, 모델별 특수 파라미터
- * 4. AutoRAG: 자동 검색 증강 생성 (RAG) 기능
- * 5. 모델 검색: 사용 가능한 모델 동적 탐색
- *
- * @cf/qwen/qwen2.5-coder-32b-instruct는 'Coder'로서의 논리적, 구조적 사고에 강점이 있습니다.
- * 사주 명리학도 일종의 규칙과 패턴을 따르는 시스템이므로, 이 점이 파인튜닝 시 긍정적인 영향을 줄 수 있습니다.
- *
- * price
- * 사용량은 10000개의 뉴런 당 US$0.11의 비율을 기준으로 청구서에 뉴런으로 표시됩니다.
- * US$0.66 per M input tokens
- * US$1 per M output tokens
- *
- * Workers AI: 월 10,000 뉴런 (Workers Paid 플랜에 포함)
- * 예상 사용량: 한 번의 요청당 약 1.78 뉴런
- * 월 무료 할당량으로 약 5,617번의 요청 처리 가능
- */
-
-/**
  * API 요청 본문에 대한 타입 정의
  */
 interface DetailedFortuneTellingRequest {
@@ -161,7 +139,10 @@ function createApiResponse(
   }
 
   // 일반(non-streaming) 응답 처리
-  if (!aiResult || (typeof aiResult === "object" && Object.keys(aiResult).length === 0)) {
+  if (
+    !aiResult ||
+    (typeof aiResult === "object" && Object.keys(aiResult).length === 0)
+  ) {
     throw new Error("AI 모델로부터 유효한 응답을 받지 못했습니다.");
   }
 
@@ -181,15 +162,16 @@ function createApiResponse(
 /**
  * 상세 사주 풀이 요청을 처리합니다.
  */
-async function handleDetailedFortuneTelling(
+export async function FortuneTelling(
   request: Request,
-  env: Env
+  env: Env,
+  params?: Record<string, string>
 ): Promise<Response> {
   try {
     const body: DetailedFortuneTellingRequest = await request.json();
 
     const model = body.model || "@cf/qwen/qwen2.5-coder-32b-instruct";
-    
+
     // RAG 파이프라인 실행
     // 1. 사용자의 프롬프트를 기반으로 관련 문서 검색
     const queryVector = await createEmbedding(env.AI, body.userPrompt || "");
@@ -197,7 +179,10 @@ async function handleDetailedFortuneTelling(
       env.VECTORIZE_INDEX,
       queryVector
     );
-    const contextDocs = await getDocumentsFromD1(env.DB, similarDocIds.map(id => id.toString()));
+    const contextDocs = await getDocumentsFromD1(
+      env.DB,
+      similarDocIds.map((id) => id.toString())
+    );
 
     // 2. 검색된 문서를 시스템 프롬프트에 컨텍스트로 추가
     const ragContext =
@@ -243,45 +228,13 @@ async function handleDetailedFortuneTelling(
     return createApiResponse(result, body, model, request);
   } catch (error) {
     console.error("상세 사주 풀이 API 오류:", error);
-    return jsonResponse({
-      error: "AI 모델 실행 중 오류가 발생했습니다.",
-      details: error instanceof Error ? error.message : "Unknown error",
-    }, 500, request);
+    return jsonResponse(
+      {
+        error: "AI 모델 실행 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500,
+      request
+    );
   }
 }
-
-/**
- * 사용 가능한 AI 모델과 그 적합도 점수를 반환합니다.
- */
-async function getAvailableModels(request: Request, env: Env): Promise<Response> {
-  try {
-    // ... 모델 목록 가져오는 로직 (생략) ...
-    const models = [
-      { model: '@cf/qwen/qwen2.5-coder-32b-instruct', score: 95, reason: '논리적/구조적 사고' },
-      // ... 기타 모델들
-    ];
-
-    
-    return jsonResponse({ models }, 200, request);
-  } catch (error) {
-    return jsonResponse({ error: 'Failed to fetch models' }, 500, request);
-  }
-}
-
-/**
- * 이 Worker의 fetch 핸들러입니다.
- * 요청 경로에 따라 적절한 핸들러로 분기합니다.
- */
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-
-    // 경로 기반 라우팅
-    if (url.pathname.endsWith("/models")) {
-      return getAvailableModels(request, env);
-    }
-    
-    // 기본값은 상세 사주 풀이 핸들러
-    return handleDetailedFortuneTelling(request, env);
-  },
-} satisfies ExportedHandler<Env>;

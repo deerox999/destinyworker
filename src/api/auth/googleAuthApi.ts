@@ -1,4 +1,4 @@
-import { jsonResponse } from '../../common/utils';
+import { jsonResponse } from "../../common/utils";
 
 // 사용자 인터페이스
 interface User {
@@ -128,14 +128,14 @@ async function verifyGoogleToken(
     let response = await fetch(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${token}`
     );
-    
+
     // 실패시 userinfo 엔드포인트 시도 (access_token)
     if (!response.ok) {
       response = await fetch(
         `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`
       );
     }
-    
+
     if (!response.ok) {
       return null;
     }
@@ -158,17 +158,18 @@ async function verifyGoogleToken(
     }
 
     // 이메일 인증 확인
-    const emailVerified = data.email_verified === true || 
-                         data.email_verified === "true" || 
-                         data.verified_email === true ||
-                         data.verified_email === "true";
+    const emailVerified =
+      data.email_verified === true ||
+      data.email_verified === "true" ||
+      data.verified_email === true ||
+      data.verified_email === "true";
 
     return {
       sub: data.sub || data.id,
       email: data.email,
       name: data.name || data.given_name + " " + data.family_name || data.email,
       picture: data.picture,
-      email_verified: emailVerified
+      email_verified: emailVerified,
     };
   } catch (error) {
     console.error("Google token verification failed:", error);
@@ -273,230 +274,230 @@ async function deleteSession(db: any, jwtToken: string): Promise<boolean> {
   }
 }
 
-// Google OAuth API 핸들러들
-export const googleAuthApiHandlers = {
-  // Google 로그인
-  async googleLogin(request: Request, env: any): Promise<Response> {
-    if (!env.DB) {
+// Google 로그인
+export async function googleLogin(
+  request: Request,
+  env: any
+): Promise<Response> {
+  if (!env.DB) {
+    return jsonResponse({ error: "데이터베이스가 설정되지 않았습니다." }, 500);
+  }
+
+  if (!env.GOOGLE_CLIENT_ID || !env.JWT_SECRET) {
+    return jsonResponse({ error: "OAuth 설정이 누락되었습니다." }, 500);
+  }
+
+  try {
+    const body = (await request.json()) as { token?: string };
+    const { token } = body;
+
+    if (!token) {
+      return jsonResponse({ error: "Google 토큰이 필요합니다." }, 400);
+    }
+
+    // Google 토큰 검증
+    const googleUserInfo = await verifyGoogleToken(token, env.GOOGLE_CLIENT_ID);
+    if (!googleUserInfo) {
+      return jsonResponse({ error: "유효하지 않은 Google 토큰입니다." }, 401);
+    }
+
+    // 사용자 조회 또는 생성
+    const user = await findOrCreateUser(env.DB, googleUserInfo);
+    if (!user) {
       return jsonResponse(
-        { error: "데이터베이스가 설정되지 않았습니다." },
+        { error: "사용자 처리 중 오류가 발생했습니다." },
         500
       );
     }
 
-    if (!env.GOOGLE_CLIENT_ID || !env.JWT_SECRET) {
-      return jsonResponse({ error: "OAuth 설정이 누락되었습니다." }, 500);
+    // JWT 토큰 생성
+    const jwtToken = await generateJWT(
+      { userId: user.id, email: user.email },
+      env.JWT_SECRET
+    );
+
+    // 세션 저장
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await saveSession(env.DB, user.id, jwtToken, expiresAt);
+
+    // 만료된 세션 정리
+    await cleanupExpiredSessions(env.DB);
+
+    // 로그인 기록 추가
+    try {
+      const stmt = env.DB.prepare(`
+        INSERT INTO login_histories (user_id, action) 
+        VALUES (?, 'login')
+      `);
+      await stmt.bind(user.id).run();
+    } catch (e) {
+      console.error("Login history save error:", e);
+      // 이 에러는 로그인 자체를 실패시키지는 않음
     }
 
-    try {
-      const body = (await request.json()) as { token?: string };
-      const { token } = body;
+    return jsonResponse({
+      success: true,
+      token: jwtToken,
+      user: user,
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    return jsonResponse({ error: "로그인 처리 중 오류가 발생했습니다." }, 500);
+  }
+}
 
-      if (!token) {
-        return jsonResponse({ error: "Google 토큰이 필요합니다." }, 400);
-      }
+// 로그아웃
+export async function logout(request: Request, env: any): Promise<Response> {
+  if (!env.DB || !env.JWT_SECRET) {
+    return jsonResponse(
+      { error: "데이터베이스가 설정되지 않았거나 JWT 시크릿이 없습니다." },
+      500
+    );
+  }
 
-      // Google 토큰 검증
-      const googleUserInfo = await verifyGoogleToken(token, env.GOOGLE_CLIENT_ID);
-      if (!googleUserInfo) {
-        return jsonResponse({ error: "유효하지 않은 Google 토큰입니다." }, 401);
-      }
+  try {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return jsonResponse({ error: "인증 토큰이 필요합니다." }, 401);
+    }
 
-      // 사용자 조회 또는 생성
-      const user = await findOrCreateUser(env.DB, googleUserInfo);
-      if (!user) {
-        return jsonResponse(
-          { error: "사용자 처리 중 오류가 발생했습니다." },
-          500
-        );
-      }
+    const token = authHeader.substring(7);
 
-      // JWT 토큰 생성
-      const jwtToken = await generateJWT(
-        { userId: user.id, email: user.email },
-        env.JWT_SECRET
-      );
+    // 토큰에서 사용자 정보 추출
+    const payload = await verifyJWT(token, env.JWT_SECRET);
+    if (!payload) {
+      // 토큰이 유효하지 않아도 세션은 삭제 시도
+      await deleteSession(env.DB, token);
+      return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401);
+    }
 
-      // 세션 저장
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      await saveSession(env.DB, user.id, jwtToken, expiresAt);
+    const deleted = await deleteSession(env.DB, token);
 
-      // 만료된 세션 정리
-      await cleanupExpiredSessions(env.DB);
-
-      // 로그인 기록 추가
+    if (deleted) {
+      // 로그아웃 기록 추가
       try {
         const stmt = env.DB.prepare(`
           INSERT INTO login_histories (user_id, action) 
-          VALUES (?, 'login')
+          VALUES (?, 'logout')
         `);
-        await stmt.bind(user.id).run();
-      } catch(e) {
-        console.error("Login history save error:", e);
-        // 이 에러는 로그인 자체를 실패시키지는 않음
+        await stmt.bind(payload.userId).run();
+      } catch (e) {
+        console.error("Logout history save error:", e);
       }
-
-      return jsonResponse({
-        success: true,
-        token: jwtToken,
-        user: user,
-      });
-    } catch (error) {
-      console.error("Login error:", error);
-      return jsonResponse(
-        { error: "로그인 처리 중 오류가 발생했습니다." },
-        500
-      );
+      return jsonResponse({ success: true, message: "로그아웃되었습니다." });
+    } else {
+      return jsonResponse({ error: "유효하지 않은 세션입니다." }, 401);
     }
-  },
+  } catch (error) {
+    console.error("Logout error:", error);
+    return jsonResponse(
+      { error: "로그아웃 처리 중 오류가 발생했습니다." },
+      500
+    );
+  }
+}
 
-  // 로그아웃
-  async logout(request: Request, env: any): Promise<Response> {
-    if (!env.DB || !env.JWT_SECRET) {
-      return jsonResponse(
-        { error: "데이터베이스가 설정되지 않았거나 JWT 시크릿이 없습니다." },
-        500
-      );
-    }
+// 사용자 정보 조회
+export async function getUserInfo(
+  request: Request,
+  env: any
+): Promise<Response> {
+  if (!env.DB || !env.JWT_SECRET) {
+    return jsonResponse({ error: "서버 설정이 누락되었습니다." }, 500);
+  }
 
-    try {
-      const authHeader = request.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return jsonResponse({ error: "인증 토큰이 필요합니다." }, 401);
-      }
-
-      const token = authHeader.substring(7);
-
-      // 토큰에서 사용자 정보 추출
-      const payload = await verifyJWT(token, env.JWT_SECRET);
-      if (!payload) {
-        // 토큰이 유효하지 않아도 세션은 삭제 시도
-        await deleteSession(env.DB, token);
-        return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401);
-      }
-      
-      const deleted = await deleteSession(env.DB, token);
-
-      if (deleted) {
-        // 로그아웃 기록 추가
-        try {
-          const stmt = env.DB.prepare(`
-            INSERT INTO login_histories (user_id, action) 
-            VALUES (?, 'logout')
-          `);
-          await stmt.bind(payload.userId).run();
-        } catch (e) {
-          console.error("Logout history save error:", e);
-        }
-        return jsonResponse({ success: true, message: "로그아웃되었습니다." });
-      } else {
-        return jsonResponse({ error: "유효하지 않은 세션입니다." }, 401);
-      }
-    } catch (error) {
-      console.error("Logout error:", error);
-      return jsonResponse(
-        { error: "로그아웃 처리 중 오류가 발생했습니다." },
-        500
-      );
-    }
-  },
-
-  // 사용자 정보 조회
-  async getUserInfo(request: Request, env: any): Promise<Response> {
-    if (!env.DB || !env.JWT_SECRET) {
-      return jsonResponse({ error: "서버 설정이 누락되었습니다." }, 500);
+  try {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return jsonResponse({ error: "인증 토큰이 필요합니다." }, 401);
     }
 
-    try {
-      const authHeader = request.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return jsonResponse({ error: "인증 토큰이 필요합니다." }, 401);
-      }
+    const token = authHeader.substring(7);
+    const payload = await verifyJWT(token, env.JWT_SECRET);
 
-      const token = authHeader.substring(7);
-      const payload = await verifyJWT(token, env.JWT_SECRET);
-
-      if (!payload) {
-        return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401);
-      }
-
-      // 세션 확인
-      const sessionStmt = env.DB.prepare(
-        "SELECT * FROM sessions WHERE jwt_token = ? AND expires_at > CURRENT_TIMESTAMP"
-      );
-      const session = await sessionStmt.bind(token).first();
-
-      if (!session) {
-        return jsonResponse({ error: "만료된 세션입니다." }, 401);
-      }
-
-      // 사용자 정보 조회
-      const userStmt = env.DB.prepare(
-        "SELECT id, email, name, picture, created_at FROM users WHERE id = ?"
-      );
-      const user = await userStmt.bind(payload.userId).first();
-
-      if (!user) {
-        return jsonResponse({ error: "사용자를 찾을 수 없습니다." }, 404);
-      }
-
-      return jsonResponse({
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          picture: user.picture,
-          created_at: user.created_at,
-        },
-      });
-    } catch (error) {
-      console.error("Get user info error:", error);
-      return jsonResponse(
-        { error: "사용자 정보 조회 중 오류가 발생했습니다." },
-        500
-      );
-    }
-  },
-
-  // 토큰 갱신
-  async refreshToken(request: Request, env: any): Promise<Response> {
-    if (!env.DB || !env.JWT_SECRET) {
-      return jsonResponse({ error: "서버 설정이 누락되었습니다." }, 500);
+    if (!payload) {
+      return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401);
     }
 
-    try {
-      const authHeader = request.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return jsonResponse({ error: "인증 토큰이 필요합니다." }, 401);
-      }
+    // 세션 확인
+    const sessionStmt = env.DB.prepare(
+      "SELECT * FROM sessions WHERE jwt_token = ? AND expires_at > CURRENT_TIMESTAMP"
+    );
+    const session = await sessionStmt.bind(token).first();
 
-      const oldToken = authHeader.substring(7);
-      const payload = await verifyJWT(oldToken, env.JWT_SECRET);
-
-      if (!payload) {
-        return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401);
-      }
-
-      // 기존 세션 삭제
-      await deleteSession(env.DB, oldToken);
-
-      // 새 JWT 토큰 생성
-      const newJwtToken = await generateJWT(
-        { userId: payload.userId, email: payload.email },
-        env.JWT_SECRET
-      );
-
-      // 새 세션 저장
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      await saveSession(env.DB, payload.userId, newJwtToken, expiresAt);
-
-      return jsonResponse({
-        success: true,
-        token: newJwtToken,
-      });
-    } catch (error) {
-      console.error("Token refresh error:", error);
-      return jsonResponse({ error: "토큰 갱신 중 오류가 발생했습니다." }, 500);
+    if (!session) {
+      return jsonResponse({ error: "만료된 세션입니다." }, 401);
     }
-  },
-};
+
+    // 사용자 정보 조회
+    const userStmt = env.DB.prepare(
+      "SELECT id, email, name, picture, created_at FROM users WHERE id = ?"
+    );
+    const user = await userStmt.bind(payload.userId).first();
+
+    if (!user) {
+      return jsonResponse({ error: "사용자를 찾을 수 없습니다." }, 404);
+    }
+
+    return jsonResponse({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+        created_at: user.created_at,
+      },
+    });
+  } catch (error) {
+    console.error("Get user info error:", error);
+    return jsonResponse(
+      { error: "사용자 정보 조회 중 오류가 발생했습니다." },
+      500
+    );
+  }
+}
+
+// 토큰 갱신
+export async function refreshToken(
+  request: Request,
+  env: any
+): Promise<Response> {
+  if (!env.DB || !env.JWT_SECRET) {
+    return jsonResponse({ error: "서버 설정이 누락되었습니다." }, 500);
+  }
+
+  try {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return jsonResponse({ error: "인증 토큰이 필요합니다." }, 401);
+    }
+
+    const oldToken = authHeader.substring(7);
+    const payload = await verifyJWT(oldToken, env.JWT_SECRET);
+
+    if (!payload) {
+      return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401);
+    }
+
+    // 기존 세션 삭제
+    await deleteSession(env.DB, oldToken);
+
+    // 새 JWT 토큰 생성
+    const newJwtToken = await generateJWT(
+      { userId: payload.userId, email: payload.email },
+      env.JWT_SECRET
+    );
+
+    // 새 세션 저장
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await saveSession(env.DB, payload.userId, newJwtToken, expiresAt);
+
+    return jsonResponse({
+      success: true,
+      token: newJwtToken,
+    });
+  } catch (error) {
+    console.error("Token refresh error:", error);
+    return jsonResponse({ error: "토큰 갱신 중 오류가 발생했습니다." }, 500);
+  }
+}

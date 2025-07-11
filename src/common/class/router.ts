@@ -3,10 +3,14 @@
  * API 경로와 핸들러를 자동으로 매칭하여 처리하는 시스템
  */
 
-import { jsonResponse } from "./utils";
+import { jsonResponse } from "../utils";
 
 export interface RouteHandler {
-  (request: Request, env: any, params?: Record<string, string>): Promise<Response>;
+  (
+    request: Request,
+    env: any,
+    params?: Record<string, string>
+  ): Promise<Response>;
 }
 
 // Swagger 메타데이터 인터페이스
@@ -33,7 +37,12 @@ export class Router {
   /**
    * 라우트를 등록합니다
    */
-  register(method: string, path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
+  register(
+    method: string,
+    path: string,
+    handler: RouteHandler,
+    swagger?: SwaggerMeta
+  ) {
     this.routes.push({ method, path, handler, swagger });
   }
 
@@ -41,28 +50,28 @@ export class Router {
    * GET 메서드 라우트를 등록합니다
    */
   get(path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
-    this.register('GET', path, handler, swagger);
+    this.register("GET", path, handler, swagger);
   }
 
   /**
    * POST 메서드 라우트를 등록합니다
    */
   post(path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
-    this.register('POST', path, handler, swagger);
+    this.register("POST", path, handler, swagger);
   }
 
   /**
    * PUT 메서드 라우트를 등록합니다
    */
   put(path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
-    this.register('PUT', path, handler, swagger);
+    this.register("PUT", path, handler, swagger);
   }
 
   /**
    * DELETE 메서드 라우트를 등록합니다
    */
   delete(path: string, handler: RouteHandler, swagger?: SwaggerMeta) {
-    this.register('DELETE', path, handler, swagger);
+    this.register("DELETE", path, handler, swagger);
   }
 
   /**
@@ -74,9 +83,11 @@ export class Router {
     const pathname = url.pathname;
 
     // CORS Preflight(OPTIONS) 요청 자동 처리
-    if (method === 'OPTIONS') {
+    if (method === "OPTIONS") {
       // 해당 경로에 GET, POST 등 다른 메서드로 등록된 라우트가 있는지 확인
-      const hasRoute = this.routes.some(route => this.matchPath(route.path, pathname));
+      const hasRoute = this.routes.some((route) =>
+        this.matchPath(route.path, pathname)
+      );
       if (hasRoute) {
         return jsonResponse(null, 204, request);
       }
@@ -92,10 +103,14 @@ export class Router {
           return await route.handler(request, env, match.params);
         } catch (error) {
           console.error(`라우트 처리 오류 [${method} ${pathname}]:`, error);
-          return jsonResponse({
-            error: "서버 내부 오류가 발생했습니다.",
-            message: error instanceof Error ? error.message : "Unknown error"
-          }, 500, request);
+          return jsonResponse(
+            {
+              error: "서버 내부 오류가 발생했습니다.",
+              message: error instanceof Error ? error.message : "Unknown error",
+            },
+            500,
+            request
+          );
         }
       }
     }
@@ -107,9 +122,12 @@ export class Router {
    * 경로 패턴과 실제 경로를 매칭합니다
    * 예: "/api/json/:userId" 와 "/api/json/123" 매칭
    */
-  private matchPath(pattern: string, pathname: string): { params: Record<string, string> } | null {
-    const patternParts = pattern.split('/');
-    const pathnameParts = pathname.split('/');
+  private matchPath(
+    pattern: string,
+    pathname: string
+  ): { params: Record<string, string> } | null {
+    const patternParts = pattern.split("/");
+    const pathnameParts = pathname.split("/");
 
     if (patternParts.length !== pathnameParts.length) {
       return null;
@@ -121,7 +139,7 @@ export class Router {
       const patternPart = patternParts[i];
       const pathnamePart = pathnameParts[i];
 
-      if (patternPart.startsWith(':')) {
+      if (patternPart.startsWith(":")) {
         // 파라미터 부분 (예: :userId)
         const paramName = patternPart.slice(1);
         params[paramName] = pathnamePart;
@@ -148,4 +166,4 @@ export class Router {
   merge(router: Router) {
     this.routes.push(...router.getRoutes());
   }
-} 
+}

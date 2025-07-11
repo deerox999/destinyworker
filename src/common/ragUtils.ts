@@ -46,7 +46,10 @@ export async function createEmbedding(ai: Ai, text: string): Promise<number[]> {
  * @param texts 임베딩할 텍스트 배열
  * @returns 생성된 벡터의 배열 (2차원 부동 소수점 배열)
  */
-export async function createEmbeddings(ai: Ai, texts: string[]): Promise<number[][]> {
+export async function createEmbeddings(
+  ai: Ai,
+  texts: string[]
+): Promise<number[][]> {
   if (texts.length === 0) {
     return [];
   }
@@ -103,7 +106,9 @@ export async function getDocumentsFromD1(
   const { results } = await db
     .prepare(`SELECT * FROM documents WHERE id IN (${placeholders})`)
     .bind(...ids)
-    .all<Omit<DocumentWithMetadata, "metadata"> & { metadata: string | null }>();
+    .all<
+      Omit<DocumentWithMetadata, "metadata"> & { metadata: string | null }
+    >();
 
   if (!results) {
     return [];
@@ -123,4 +128,4 @@ export async function getDocumentsFromD1(
     }
     return { ...doc, metadata: parsedMetadata };
   });
-} 
+}
