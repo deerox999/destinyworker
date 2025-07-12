@@ -10,6 +10,13 @@
       "database_name": "destiny"
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "VIEW_CACHE_KV",
+      "id": "f76d441ea2524c58a72e355fb4df71b2",
+      "preview_id": "68d8ef3bc1644f2f81cca8b57f842267"
+    }
+  ],
   "ai": {
     "binding": "AI"
   },

@@ -1,6 +1,8 @@
 import { createAppRouter } from "../api/routes";
 import { generateOpenApiFromRouter } from "./swagger/autoOpenApi";
 
+
+
 const allowedOrigins = [
   "http://localhost:9999",
   "https://localhost:9999",

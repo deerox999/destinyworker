@@ -1,15 +1,14 @@
 import { Router } from "../../common/class/router";
 import {
-  getCelebrityComments,
   createCelebrityComment,
-  updateCelebrityComment,
   deleteCelebrityComment,
+  getCelebrities,
+  getCelebrityById,
+  getCelebrityComments,
   toggleCelebrityCommentLike,
+  updateCelebrityComment,
 } from "./celebrityProfileApi";
-import {
-  createCelebrityRequest,
-  getCelebrityRequests,
-} from "./celebrityRequestApi";
+import { createCelebrityRequest } from "./celebrityRequestApi";
 
 export function createCelebrityRouter(): Router {
   const router = new Router();
@@ -26,6 +25,65 @@ export function createCelebrityRouter(): Router {
     },
     required: ["내용"],
   };
+
+  // 유명인물 목록
+  router.get("/api/celebrities", getCelebrities, {
+    summary: "유명인물 목록 조회",
+    description: "페이지네이션, 다국어 지원과 함께 유명인물 목록을 조회합니다.",
+    tags: ["유명인물"],
+    auth: false,
+    parameters: [
+      {
+        name: "page",
+        in: "query",
+        description: "페이지 번호",
+        schema: { type: "integer", default: 1 },
+      },
+      {
+        name: "limit",
+        in: "query",
+        description: "페이지 당 항목 수",
+        schema: { type: "integer", default: 10 },
+      },
+      {
+        name: "lang",
+        in: "query",
+        description: "언어 코드 (e.g., 'ko', 'en')",
+        schema: { type: "string", default: "ko" },
+      },
+    ],
+    responses: {
+      "200": { description: "성공" },
+    },
+  });
+
+  // 유명인물 상세
+  router.get("/api/celebrities/:id", getCelebrityById, {
+    summary: "특정 유명인물 정보 조회",
+    description:
+      "ID와 언어 코드를 사용하여 특정 유명인물의 상세 정보를 조회합니다.",
+    tags: ["유명인물"],
+    auth: false,
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        description: "유명인물 ID",
+        schema: { type: "string" },
+      },
+      {
+        name: "lang",
+        in: "query",
+        description: "언어 코드 (e.g., 'ko', 'en')",
+        schema: { type: "string", default: "ko" },
+      },
+    ],
+    responses: {
+      "200": { description: "성공" },
+      "404": { description: "유명인물을 찾을 수 없음" },
+    },
+  });
 
   // 유명인물 댓글
   router.get("/api/celebrities/:id/comments", getCelebrityComments, {
@@ -247,56 +305,6 @@ export function createCelebrityRouter(): Router {
     responses: {
       "201": { description: "요청 성공" },
       "400": { description: "잘못된 요청 데이터" },
-      "500": { description: "서버 오류" },
-    },
-  });
-
-  router.get("/api/celebrities/requests", getCelebrityRequests, {
-    summary: "유명인물 요청 목록 조회",
-    description:
-      "페이지네이션을 지원하는 유명인물 추가 요청 목록을 조회합니다. (관리자용)",
-    tags: ["유명인물"],
-    auth: true,
-    parameters: [
-      {
-        name: "page",
-        in: "query",
-        description: "페이지 번호",
-        required: false,
-        schema: { type: "integer", default: 1 },
-      },
-      {
-        name: "limit",
-        in: "query",
-        description: "페이지당 항목 수",
-        required: false,
-        schema: { type: "integer", default: 10 },
-      },
-      {
-        name: "search",
-        in: "query",
-        description: "검색어 (요청된 이름으로 검색)",
-        required: false,
-        schema: { type: "string" },
-      },
-      {
-        name: "sort",
-        in: "query",
-        description: "정렬 필드",
-        required: false,
-        schema: { type: "string", default: "createdAt" },
-      },
-      {
-        name: "order",
-        in: "query",
-        description: "정렬 순서",
-        required: false,
-        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
-      },
-    ],
-    responses: {
-      "200": { description: "조회 성공" },
-      "401": { description: "인증 실패 (관리자 권한 필요)" },
       "500": { description: "서버 오류" },
     },
   });

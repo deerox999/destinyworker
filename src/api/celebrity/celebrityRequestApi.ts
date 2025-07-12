@@ -1,7 +1,5 @@
-import { PrismaD1 } from "@prisma/adapter-d1";
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../../common/prismaUtils";
 import { jsonResponse } from "../../common/utils";
-import { paginate } from "../../common/paginationUtils";
 
 export interface CelebrityRequestData {
   name: string;
@@ -19,9 +17,7 @@ export async function createCelebrityRequest(
   params?: Record<string, string>
 ): Promise<Response> {
   try {
-    const adapter = new PrismaD1(env.DB);
-    const prisma = new PrismaClient({ adapter });
-
+    const prisma = createPrismaClient(env.DB);
     const body = (await request.json()) as CelebrityRequestData;
 
     // 필수 필드 검증
@@ -78,31 +74,6 @@ export async function createCelebrityRequest(
       },
       500,
       request
-    );
-  }
-}
-
-/**
- * 유명인물 요청 목록 조회 (관리자용)
- */
-export async function getCelebrityRequests(
-  request: Request,
-  env: any
-): Promise<Response> {
-  try {
-    return await paginate(request, env.DB, {
-      tableName: "CelebrityRequest",
-      searchField: "name",
-      defaultLimit: 10,
-    });
-  } catch (error) {
-    console.error("Celebrity requests fetch error:", error);
-    return jsonResponse(
-      {
-        error: "유명인물 요청 목록 조회 중 오류가 발생했습니다.",
-        details: error instanceof Error ? error.message : "알 수 없는 오류",
-      },
-      500
     );
   }
 }

@@ -1,5 +1,5 @@
-import { PrismaD1 } from "@prisma/adapter-d1";
 import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../../common/prismaUtils";
 import {
   createEmbedding,
   findSimilarVectors,
@@ -157,8 +157,7 @@ export async function SajuChatList(
   request: Request,
   env: RagEnv
 ): Promise<Response> {
-  const adapter = new PrismaD1(env.DB);
-  const prisma = new PrismaClient({ adapter });
+  const prisma = createPrismaClient(env.DB);
 
   try {
     const user = await getUserFromToken(request);
@@ -239,8 +238,7 @@ export async function SajuChat(
   const pathSegments = url.pathname.split("/").filter(Boolean);
   const conversationId = pathSegments[3];
 
-  const adapter = new PrismaD1(env.DB);
-  const prisma = new PrismaClient({ adapter });
+  const prisma = createPrismaClient(env.DB);
 
   const {
     message: userQuery,
@@ -405,9 +403,7 @@ export async function SajuChatFull(
   env: RagEnv,
   params?: Record<string, string>
 ): Promise<Response> {
-  const adapter = new PrismaD1(env.DB);
-  const prisma = new PrismaClient({ adapter });
-
+  const prisma = createPrismaClient(env.DB);
   const url = new URL(request.url);
   const pathSegments = url.pathname.split("/").filter(Boolean);
   const conversationId = pathSegments[3];
@@ -461,8 +457,7 @@ export async function SajuChatDelete(
   env: RagEnv,
   params?: Record<string, string>
 ): Promise<Response> {
-  const adapter = new PrismaD1(env.DB);
-  const prisma = new PrismaClient({ adapter });
+  const prisma = createPrismaClient(env.DB);
 
   const url = new URL(request.url);
   const pathSegments = url.pathname.split("/").filter(Boolean);

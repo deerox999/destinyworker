@@ -105,7 +105,7 @@ try {
   safeSql = safeSql
     .replace(/DROP TABLE "([^"]+)"/g, 'DROP TABLE IF EXISTS "$1"')
     .replace(/DROP INDEX "([^"]+)"/g, 'DROP INDEX IF EXISTS "$1"');
-  
+
   // 4. 변경사항이 있는지 확인
   if (safeSql.trim() === '') {
     console.log('✅ 적용할 변경사항이 없습니다.');

@@ -1,14 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-import { PrismaD1 } from "@prisma/adapter-d1";
-import { jsonResponse, getUserFromToken } from "../../common/utils";
-
-const createPrismaClient = (db: D1Database) => {
-  const adapter = new PrismaD1(db);
-  return new PrismaClient({
-    adapter,
-    log: ["error"], // 에러만 로깅
-  });
-};
+import { createPrismaClient } from "../../common/prismaUtils";
+import { getUserFromToken, jsonResponse } from "../../common/utils";
 
 // 한글 -> 영어 필드 변환
 const toDbFields = (data: any) => ({

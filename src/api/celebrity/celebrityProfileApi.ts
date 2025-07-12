@@ -1,36 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaD1 } from "@prisma/adapter-d1";
-import { jsonResponse, getUserFromToken } from "../../common/utils";
-
-const createPrismaClient = (db: D1Database) => {
-  const adapter = new PrismaD1(db);
-  return new PrismaClient({
-    adapter,
-    log: ["error"],
-  });
-};
-
-// 관리자 권한 체크
-const isAdmin = async (request: Request, env: any): Promise<boolean> => {
-  const user = await getUserFromToken(request);
-  if (!user) return false;
-
-  // 토큰에서 role 확인하거나, DB에서 재확인
-  if (user.role === "admin") return true;
-
-  // DB에서 재확인 (토큰이 오래된 경우 대비)
-  try {
-    const prisma = createPrismaClient(env.DB);
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { role: true },
-    });
-    await prisma.$disconnect();
-    return dbUser?.role === "admin";
-  } catch {
-    return false;
-  }
-};
+import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
+import { getUserFromToken, jsonResponse } from "../../common/utils";
 
 // 중첩된 댓글에서 모든 댓글 ID 추출
 const getAllCommentIds = (comments: any[]): number[] => {
@@ -66,10 +36,6 @@ const validateCommentData = (data: any): boolean => {
   return data?.내용?.trim();
 };
 
-// 중복 조회 방지를 위한 메모리 캐시 (30분 유지)
-const viewCache = new Map<string, number>();
-const CACHE_DURATION = 30 * 60 * 1000; // 30분
-
 // 클라이언트 식별자 생성
 const getClientFingerprint = (request: Request): string => {
   const ip =
@@ -81,50 +47,56 @@ const getClientFingerprint = (request: Request): string => {
   return `${ip}:${userAgent.substring(0, 50)}`;
 };
 
-// 조회수 증가 함수 (중복 방지)
+// wrangler kv namespace create VIEW_CACHE_KV --preview
+
+// 조회수 증가 함수 (Cloudflare KV 사용)
 const incrementViewCount = async (
   prisma: PrismaClient,
   celebrityId: string,
-  request: Request
+  request: Request,
+  env: any
 ): Promise<number> => {
   try {
+    // KV 바인딩이 없으면, 중복 체크 없이 단순 증가 처리 (개발 환경 등)
+    if (!env.VIEW_CACHE_KV) {
+      console.warn("VIEW_CACHE_KV is not bound. View count will be incremented without duplication check.");
+      const viewCount = await prisma.celebrityViewCount.upsert({
+        where: { celebrityId },
+        update: { viewCount: { increment: 1 } },
+        create: { celebrityId, viewCount: 1 },
+      });
+      return viewCount.viewCount;
+    }
+
     const fingerprint = getClientFingerprint(request);
-    const cacheKey = `${celebrityId}:${fingerprint}`;
-    const now = Date.now();
+    const cacheKey = `view:${celebrityId}:${fingerprint}`;
 
-    // 캐시에서 최근 조회 기록 확인
-    const lastView = viewCache.get(cacheKey);
-    if (lastView && now - lastView < CACHE_DURATION) {
+    // KV에서 최근 조회 기록 확인
+    const alreadyViewed = await env.VIEW_CACHE_KV.get(cacheKey);
+    if (alreadyViewed) {
       // 30분 이내 동일 사용자의 조회는 조회수 증가 안함
-      const existingCount = await getViewCount(prisma, celebrityId);
-      return existingCount;
+      return await getViewCount(prisma, celebrityId);
     }
-
-    // 캐시에 조회 기록 저장
-    viewCache.set(cacheKey, now);
-
-    // 오래된 캐시 항목들 정리 (메모리 절약)
-    if (viewCache.size > 1000) {
-      const cutoff = now - CACHE_DURATION;
-      for (const [key, timestamp] of viewCache.entries()) {
-        if (timestamp < cutoff) {
-          viewCache.delete(key);
-        }
-      }
-    }
-
+    
     // 조회수 증가
-    const viewCount = await prisma.celebrityViewCount.upsert({
+    const updatedView = await prisma.celebrityViewCount.upsert({
       where: { celebrityId },
       update: { viewCount: { increment: 1 } },
       create: { celebrityId, viewCount: 1 },
     });
-    return viewCount.viewCount;
+    
+    // KV에 조회 기록 저장 (TTL: 1일)
+    await env.VIEW_CACHE_KV.put(cacheKey, "1", { expirationTtl: 60 * 60 * 24 });
+
+    return updatedView.viewCount;
+    
   } catch (error) {
-    console.error("Failed to increment view count:", error);
-    return 0;
+    console.error("Failed to increment view count with KV:", error);
+    // 오류 발생 시, 기능 장애를 막기 위해 현재 조회수라도 반환
+    return await getViewCount(prisma, celebrityId);
   }
 };
+
 
 // 조회수 조회 함수
 const getViewCount = async (
@@ -143,6 +115,138 @@ const getViewCount = async (
   }
 };
 
+// 유명인물 목록 조회 (페이지네이션, 다국어 지원)
+export async function getCelebrities(
+  request: Request,
+  env: any
+): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(url.searchParams.get("limit") || "10"))
+    );
+    const lang = url.searchParams.get("lang") || "ko";
+    const skip = (page - 1) * limit;
+
+    const prisma = createPrismaClient(env.DB);
+
+    const [total, celebrities] = await Promise.all([
+      prisma.celebrity.count(),
+      prisma.celebrity.findMany({
+        skip,
+        take: limit,
+        include: {
+          translations: {
+            where: { languageCode: lang },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    await prisma.$disconnect();
+
+    const result = celebrities.map((c: any) => {
+      const t = c.translations[0];
+      return {
+        id: c.id,
+        이름: t?.name || "",
+        성별: c.gender === "MALE" ? "남자" : "여자",
+        직업: t?.occupation || "",
+        설명: t?.description || "",
+        이미지: c.imageUrl,
+        년: c.birthYear,
+        월: c.birthMonth,
+        일: c.birthDay,
+        달력: c.calendar === "SOLAR" ? "양력" : "음력",
+      };
+    });
+
+    return jsonResponse({
+      success: true,
+      celebrities: result,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    return jsonResponse(
+      {
+        error: "유명인물 목록 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+// 특정 유명인물 상세 조회 (다국어 지원)
+export async function getCelebrityById(
+  request: Request,
+  env: any,
+  params?: Record<string, string>
+): Promise<Response> {
+  try {
+    const celebrityId = params?.id;
+    if (!celebrityId) {
+      return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
+    }
+
+    const url = new URL(request.url);
+    const lang = url.searchParams.get("lang") || "ko";
+
+    const prisma = createPrismaClient(env.DB);
+
+    const celebrity = await prisma.celebrity.findUnique({
+      where: { id: celebrityId },
+      include: {
+        translations: {
+          where: { languageCode: lang },
+        },
+      },
+    });
+
+    await prisma.$disconnect();
+
+    if (!celebrity) {
+      return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
+    }
+
+    const t = celebrity.translations[0];
+    const result = {
+      id: celebrity.id,
+      이름: t?.name || "",
+      성별: celebrity.gender === "MALE" ? "남자" : "여자",
+      직업: t?.occupation || "",
+      설명: t?.description || "",
+      이미지: celebrity.imageUrl,
+      년: celebrity.birthYear,
+      월: celebrity.birthMonth,
+      일: celebrity.birthDay,
+      달력: celebrity.calendar === "SOLAR" ? "양력" : "음력",
+    };
+
+    return jsonResponse({
+      success: true,
+      celebrity: result,
+    });
+  } catch (error) {
+    return jsonResponse(
+      {
+        error: "유명인물 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+
 // 유명인물 댓글 목록 조회 (페이징 지원, 계층 구조, 조회수 증가, 정렬 기능, 추천 여부 포함)
 export async function getCelebrityComments(
   request: Request,
@@ -153,6 +257,17 @@ export async function getCelebrityComments(
     const celebrityId = params?.id;
     if (!celebrityId)
       return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
+
+    const prisma = createPrismaClient(env.DB);
+
+    // celebrity 존재 여부 확인
+    const celebrity = await prisma.celebrity.findUnique({
+      where: { id: celebrityId },
+    });
+    if (!celebrity) {
+      await prisma.$disconnect();
+      return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
+    }
 
     const url = new URL(request.url);
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
@@ -178,10 +293,8 @@ export async function getCelebrityComments(
         break;
     }
 
-    const prisma = createPrismaClient(env.DB);
-
     // 조회수 증가
-    const viewCount = await incrementViewCount(prisma, celebrityId, request);
+    const viewCount = await incrementViewCount(prisma, celebrityId, request, env);
 
     // 최상위 댓글만 조회 (대댓글은 중첩으로 포함)
     const [total, comments] = await Promise.all([
@@ -280,6 +393,15 @@ export async function createCelebrityComment(
     }
 
     const prisma = createPrismaClient(env.DB);
+
+    // celebrity 존재 여부 확인
+    const celebrity = await prisma.celebrity.findUnique({
+      where: { id: celebrityId },
+    });
+    if (!celebrity) {
+      await prisma.$disconnect();
+      return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
+    }
 
     // 부모 댓글 존재 확인 (대댓글인 경우)
     if (body.부모댓글ID) {

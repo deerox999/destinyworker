@@ -1,15 +1,6 @@
-import { PrismaClient } from "@prisma/client";
-import { PrismaD1 } from "@prisma/adapter-d1";
-import { jsonResponse, getUserFromToken } from "../../common/utils";
+import { createPrismaClient } from "../../common/prismaUtils";
+import { getUserFromToken, jsonResponse } from "../../common/utils";
 import { deleteR2Object } from "./r2Api";
-
-const createPrismaClient = (db: D1Database) => {
-  const adapter = new PrismaD1(db);
-  return new PrismaClient({
-    adapter,
-    log: ["error"], // 에러만 로깅
-  });
-};
 
 // 프로필 이름 유효성 검사
 const validateUserName = (userName: string): boolean => {

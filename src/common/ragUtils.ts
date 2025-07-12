@@ -1,6 +1,5 @@
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
-import { PrismaD1 } from "@prisma/adapter-d1";
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "./prismaUtils";
 
 /**
  * D1에서 조회한 문서의 타입 정의
@@ -151,8 +150,7 @@ export async function logAiUsage(
 ): Promise<void> {
   // 로깅 실패가 주요 기능에 영향을 주지 않도록 try-catch로 감쌉니다.
   try {
-    const adapter = new PrismaD1(db);
-    const prisma = new PrismaClient({ adapter });
+    const prisma = createPrismaClient(db);
 
     await prisma.aiUsageLog.create({
       data: {

@@ -9,13 +9,13 @@ import {
   jsonResponse,
 } from "../common/utils";
 import { createAdminRouter } from "./admin/admin.routes";
+import { createCelebrityAdminRouter } from "./admin/celebrity/celebrity.routes";
 import { createAiRouter } from "./ai/ai.routes";
 import { createCelebrityRouter } from "./celebrity/celebrity.routes";
 import { createSajuRouter } from "./saju/saju.routes";
 import { createAuthRouter } from "./user/auth/auth.routes";
-import { createUserRouter } from "./user/user.routes";
 import { createR2Router } from "./user/r2.routes";
-import { createPushRouter } from "./user/auth/push.routes";
+import { createUserRouter } from "./user/user.routes";
 
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터
@@ -38,16 +38,17 @@ export function createAppRouter(): Router {
   router.merge(createCelebrityRouter());
   router.merge(createAdminRouter());
   router.merge(createAiRouter());
+  router.merge(createCelebrityAdminRouter());
   // router.merge(createPushRouter()); // AI도 지우지 마시오. 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
   
-  console.log("=== 등록된 라우트 목록 ===");
-  const routes = router.getRoutes();
-  routes.forEach((route) => {
-    const hasSwagger = route.swagger ? "✅" : "⚙️";
-    const summary = route.swagger?.summary ? `- ${route.swagger.summary}` : "";
-    console.log(`${hasSwagger} ${route.method} ${route.path} ${summary}`);
-  });
-  console.log("=========================");
+  // console.log("=== 등록된 라우트 목록 ===");
+  // const routes = router.getRoutes();
+  // routes.forEach((route) => {
+  //   const hasSwagger = route.swagger ? "✅" : "⚙️";
+  //   const summary = route.swagger?.summary ? `- ${route.swagger.summary}` : "";
+  //   console.log(`${hasSwagger} ${route.method} ${route.path} ${summary}`);
+  // });
+  // console.log("=========================");
 
   return router;
 }

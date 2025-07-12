@@ -26,7 +26,9 @@ export async function paginate(
     defaultLimit = 10,
     baseWhereClauses = [],
   } = options;
+  console.log("paginate", tableName, searchField, defaultLimit, baseWhereClauses);
   const { searchParams } = new URL(request.url);
+  console.log("searchParams", searchParams);
 
   const page = parseInt(searchParams.get("page") || "1", 10);
   const limit = parseInt(searchParams.get("limit") || `${defaultLimit}`, 10);
