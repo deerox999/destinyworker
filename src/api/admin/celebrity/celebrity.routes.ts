@@ -1,6 +1,7 @@
 import { Router } from "../../../common/class/router";
 import {
   createCelebrity,
+  createCelebritiesBatch,
   deleteCelebrity,
   updateCelebrity,
   getCelebrityRequests,
@@ -101,6 +102,72 @@ export function createCelebrityAdminRouter(): Router {
     },
     responses: {
       "201": { description: "생성 성공" },
+      "400": { description: "잘못된 요청 데이터" },
+      "401": { description: "인증 실패" },
+      "403": { description: "권한 없음" },
+    },
+  });
+
+  // [Admin] 유명인물 대량 생성
+  router.post("/api/admin/celebrities/batch", createCelebritiesBatch, {
+    summary: "[Admin] 유명인물 대량 생성",
+    description: "여러 유명인물을 한 번에 생성합니다. (관리자용)",
+    tags: ["유명인물", "Admin"],
+    auth: true,
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            properties: {
+              celebrities: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    birthYear: { type: "number" },
+                    birthMonth: { type: "number" },
+                    birthDay: { type: "number" },
+                    birthHour: { type: "number" },
+                    birthMinute: { type: "number" },
+                    calendar: { type: "string", enum: ["SOLAR", "LUNAR"] },
+                    gender: { type: "string", enum: ["MALE", "FEMALE"] },
+                    imageUrl: { type: "string" },
+                    translations: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          languageCode: { type: "string" },
+                          name: { type: "string" },
+                          occupation: { type: "string" },
+                          description: { type: "string" },
+                        },
+                        required: ["languageCode", "name"],
+                      },
+                    },
+                  },
+                  required: [
+                    "id",
+                    "birthYear",
+                    "birthMonth",
+                    "birthDay",
+                    "calendar",
+                    "gender",
+                    "translations",
+                  ],
+                },
+              },
+            },
+            required: ["celebrities"],
+          },
+        },
+      },
+    },
+    responses: {
+      "201": { description: "대량 생성 성공" },
       "400": { description: "잘못된 요청 데이터" },
       "401": { description: "인증 실패" },
       "403": { description: "권한 없음" },

@@ -2,6 +2,125 @@ import { jsonResponse } from "../../../common/utils";
 import { isAdmin, createPrismaClient } from "../../../common/prismaUtils";
 import { paginate } from "../../../common/paginationUtils";
 
+// [Admin] 유명인물 대량 생성
+export async function createCelebritiesBatch(
+  request: Request,
+  env: any
+): Promise<Response> {
+  try {
+    const isUserAdmin = await isAdmin(request, env);
+    if (!isUserAdmin) {
+      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const body = (await request.json()) as any;
+    const { celebrities } = body;
+
+    // 배열 데이터 검증
+    if (!Array.isArray(celebrities) || celebrities.length === 0) {
+      return jsonResponse({ error: "유명인물 배열 데이터가 필요합니다." }, 400);
+    }
+
+    // 각 유명인물 데이터 검증
+    const validationErrors: string[] = [];
+    const validCelebrities: any[] = [];
+    const allTranslations: any[] = [];
+
+    celebrities.forEach((celebrity, index) => {
+      const {
+        id,
+        birthYear,
+        birthMonth,
+        birthDay,
+        calendar,
+        gender,
+        translations,
+      } = celebrity;
+
+      if (
+        !id ||
+        !birthYear ||
+        !birthMonth ||
+        !birthDay ||
+        !calendar ||
+        !gender ||
+        !translations?.length
+      ) {
+        validationErrors.push(`${index + 1}번째 유명인물: 필수 데이터가 누락되었습니다.`);
+        return;
+      }
+
+      validCelebrities.push({
+        id,
+        birthYear: parseInt(birthYear),
+        birthMonth: parseInt(birthMonth),
+        birthDay: parseInt(birthDay),
+        birthHour: celebrity.birthHour ? parseInt(celebrity.birthHour) : null,
+        birthMinute: celebrity.birthMinute ? parseInt(celebrity.birthMinute) : null,
+        calendar, // "SOLAR" | "LUNAR"
+        gender, // "MALE" | "FEMALE"
+        imageUrl: celebrity.imageUrl,
+      });
+
+      // 번역 데이터 추가
+      translations.forEach((t: any) => {
+        allTranslations.push({
+          celebrityId: id,
+          languageCode: t.languageCode,
+          name: t.name,
+          occupation: t.occupation,
+          description: t.description,
+        });
+      });
+    });
+
+    if (validationErrors.length > 0) {
+      return jsonResponse({ 
+        error: "데이터 검증 실패", 
+        details: validationErrors 
+      }, 400);
+    }
+
+    const prisma = createPrismaClient(env.DB);
+
+    try {
+      // 대량 생성을 위한 트랜잭션
+      await prisma.$transaction([
+        // 1. 모든 Celebrity 생성
+        prisma.celebrity.createMany({
+          data: validCelebrities,
+        }),
+        // 2. 모든 Translation 생성
+        prisma.celebrityTranslation.createMany({
+          data: allTranslations,
+        }),
+      ]);
+
+      await prisma.$disconnect();
+
+      return jsonResponse(
+        { 
+          success: true, 
+          message: `${validCelebrities.length}명의 유명인물이 생성되었습니다.`,
+          createdCount: validCelebrities.length
+        },
+        201
+      );
+    } catch (error) {
+      await prisma.$disconnect();
+      throw error;
+    }
+  } catch (error) {
+    return jsonResponse(
+      {
+        error: "유명인물 대량 생성 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
 // [Admin] 유명인물 생성
 export async function createCelebrity(
   request: Request,
