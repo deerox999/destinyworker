@@ -32,13 +32,6 @@ export function createCelebrityAdminRouter(): Router {
         schema: { type: "integer", default: 10 },
       },
       {
-        name: "search",
-        in: "query",
-        description: "검색어 (ID로 검색)",
-        required: false,
-        schema: { type: "string" },
-      },
-      {
         name: "sort",
         in: "query",
         description: "정렬 필드",
@@ -53,12 +46,19 @@ export function createCelebrityAdminRouter(): Router {
         schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
       },
       {
-        name: "languageCode",
+        name: "id",
         in: "query",
-        description: "조회할 언어 코드",
+        description: "ID로 검색 (정확한 ID 매칭)",
         required: false,
-        schema: { type: "string", default: "ko" },
-      }
+        schema: { type: "string" },
+      },
+      {
+        name: "search",
+        in: "query",
+        description: "통합 검색 (ID, 이름, 직업, 설명에서 검색, 모든 언어 지원)",
+        required: false,
+        schema: { type: "string" },
+      },
     ],
     responses: {
       "200": { description: "조회 성공" },

@@ -361,15 +361,53 @@ export async function getCelebrities(
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
     const skip = Number((page - 1) * limit);
-    const search = searchParams.get("search") || "";
     const sort = searchParams.get("sort") || "createdAt";
     const order = searchParams.get("order")?.toLowerCase() || "desc";
-
-    const where = search ? {
-      id: {
-        contains: search
-      }
-    } : {};
+    const id = searchParams.get("id") || "";
+    const search = searchParams.get("search") || "";
+    
+    let where = {};
+    
+    if (id) {
+      where = {
+        id: {
+          contains: id,
+        },
+      };
+    } else if (search) {
+      where = {
+        OR: [
+          {
+            id: {
+              contains: search,
+            },
+          },
+          {
+            translations: {
+              some: {
+                OR: [
+                  {
+                    name: {
+                      contains: search,
+                    },
+                  },
+                  {
+                    occupation: {
+                      contains: search,
+                    },
+                  },
+                  {
+                    description: {
+                      contains: search,
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      };
+    }
 
     const queryOptions = {
       where,
