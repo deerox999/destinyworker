@@ -34,7 +34,8 @@
     }
   ],
   "vars": {
-    "GOOGLE_CLIENT_ID": "337392205026-edu53b4l8cb843u6vq1s2aniljfhq0e4.apps.googleusercontent.com"
+    "GOOGLE_CLIENT_ID": "337392205026-edu53b4l8cb843u6vq1s2aniljfhq0e4.apps.googleusercontent.com",
+    "ENVIRONMENT": "development"
   },
   "observability": {
     "enabled": true

@@ -2,28 +2,14 @@ import { corsHeaders, htmlResponse, jsonResponse } from "./common/utils";
 import { createAppRouter } from "./api/routes";
 import { generateSwaggerHTML } from "./common/swagger/html/swaggerUI";
 
-// 애플리케이션 라우터 초기화
-const appRouter = createAppRouter();
-
 export default {
   async fetch(
     request: Request,
     env: any,
     ctx: ExecutionContext
   ): Promise<Response> {
+    const appRouter = createAppRouter(env);
     const url = new URL(request.url);
-
-    // CORS preflight 처리는 router에서 하도록 이관
-    // if (request.method === "OPTIONS") {
-    //   return jsonResponse(null, 204, request, {
-    //     "Access-Control-Max-Age": "86400", // Preflight 요청 캐시 시간(초)
-    //   });
-    // }
-
-    // 루트 또는 /docs 경로에 대한 Swagger UI 제공
-    if (url.pathname === "/" || url.pathname === "/docs") {
-      return htmlResponse(generateSwaggerHTML(), 200, request);
-    }
 
     try {
       // API 라우팅 처리

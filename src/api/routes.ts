@@ -20,15 +20,18 @@ import { createUserRouter } from "./user/user.routes";
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터
  */
-export function createAppRouter(): Router {
+export function createAppRouter(env: any): Router {
   const router = new Router();
 
-  // 정적 페이지
-  router.get("/", async () => htmlResponse(generateApiListHTML()));
-  router.get("/docs", async () => htmlResponse(generateSwaggerHTML()));
-  router.get("/api/openapi.json", async (request: Request) =>
-    jsonResponse(generateOpenApiSpec(request.url))
-  );
+  // production이 아닐 때만 Swagger 관련 엔드포인트 노출
+  if (env.ENVIRONMENT !== "production") {
+    // 정적 페이지
+    router.get("/", async () => htmlResponse(generateApiListHTML()));
+    router.get("/docs", async () => htmlResponse(generateSwaggerHTML()));
+    router.get("/api/openapi.json", async (request: Request) =>
+      jsonResponse(generateOpenApiSpec(request.url))
+    );
+  }
 
   // 모듈화된 라우터 병합
   router.merge(createAuthRouter());
