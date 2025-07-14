@@ -23,13 +23,11 @@ import { createUserRouter } from "./user/user.routes";
 export function createAppRouter(env: any): Router {
   const router = new Router();
 
-  // production이 아닐 때만 Swagger 관련 엔드포인트 노출
-  if (env.ENVIRONMENT !== "production") {
-    // 정적 페이지
+  if (env.ENVIRONMENT !== "production") { // production이 아닐 때만 Swagger 관련 엔드포인트 노출
     router.get("/", async () => htmlResponse(generateApiListHTML()));
     router.get("/docs", async () => htmlResponse(generateSwaggerHTML()));
     router.get("/api/openapi.json", async (request: Request) =>
-      jsonResponse(generateOpenApiSpec(request.url))
+      jsonResponse(generateOpenApiSpec(request.url, env))
     );
   }
 

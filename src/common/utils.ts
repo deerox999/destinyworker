@@ -72,13 +72,13 @@ export function htmlResponse(html: string, status = 200, request?: Request) {
 }
 
 // OpenAPI 스펙 생성 함수
-export function generateOpenApiSpec(requestUrl: string) {
+export function generateOpenApiSpec(requestUrl: string, env: any) {
   const url = new URL(requestUrl);
   const tagsQuery = url.searchParams.get("tags");
   const filterTags = tagsQuery ? tagsQuery.split(",") : [];
 
   // 라우터 기반으로 OpenAPI 스펙 자동 생성
-  const appRouter = createAppRouter();
+  const appRouter = createAppRouter(env);
   return generateOpenApiFromRouter(
     appRouter,
     {
