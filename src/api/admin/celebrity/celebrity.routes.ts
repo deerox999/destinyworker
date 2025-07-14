@@ -1,4 +1,4 @@
-import { Router } from "../../../common/class/router";
+import { Hono, Context } from "hono";
 import {
   createCelebrity,
   createCelebritiesBatch,
@@ -8,14 +8,17 @@ import {
   getCelebrities,
 } from "./celebrity";
 
-export function createCelebrityAdminRouter(): Router {
-  const router = new Router();
+export function createCelebrityAdminRouter(): Hono {
+  const app = new Hono();
 
   // 유명인물 목록 조회
-  router.get("/api/admin/celebrities", getCelebrities, {
+  const getCelebritiesHandler = (c: Context) => getCelebrities(c);
+  app.get("/celebrities", getCelebritiesHandler);
+  getCelebritiesHandler.swagger = {
     summary: "유명인물 목록 조회",
     description: "페이지네이션을 지원하는 유명인물 목록을 조회합니다.",
     tags: ["유명인물"],
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "page",
@@ -55,7 +58,8 @@ export function createCelebrityAdminRouter(): Router {
       {
         name: "search",
         in: "query",
-        description: "통합 검색 (ID, 이름, 직업, 설명에서 검색, 모든 언어 지원)",
+        description:
+          "통합 검색 (ID, 이름, 직업, 설명에서 검색, 모든 언어 지원)",
         required: false,
         schema: { type: "string" },
       },
@@ -64,14 +68,16 @@ export function createCelebrityAdminRouter(): Router {
       "200": { description: "조회 성공" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // [Admin] 유명인물 생성
-  router.post("/api/admin/celebrities", createCelebrity, {
+  const createCelebrityHandler = (c: Context) => createCelebrity(c);
+  app.post("/celebrities", createCelebrityHandler);
+  createCelebrityHandler.swagger = {
     summary: "[Admin] 유명인물 생성",
     description: "새로운 유명인물과 관련 다국어 정보를 생성합니다. (관리자용)",
     tags: ["유명인물", "Admin"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       required: true,
       content: {
@@ -106,14 +112,17 @@ export function createCelebrityAdminRouter(): Router {
       "401": { description: "인증 실패" },
       "403": { description: "권한 없음" },
     },
-  });
+  };
 
   // [Admin] 유명인물 대량 생성
-  router.post("/api/admin/celebrities/batch", createCelebritiesBatch, {
+  const createCelebritiesBatchHandler = (c: Context) =>
+    createCelebritiesBatch(c);
+  app.post("/celebrities/batch", createCelebritiesBatchHandler);
+  createCelebritiesBatchHandler.swagger = {
     summary: "[Admin] 유명인물 대량 생성",
     description: "여러 유명인물을 한 번에 생성합니다. (관리자용)",
     tags: ["유명인물", "Admin"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       required: true,
       content: {
@@ -172,14 +181,16 @@ export function createCelebrityAdminRouter(): Router {
       "401": { description: "인증 실패" },
       "403": { description: "권한 없음" },
     },
-  });
+  };
 
   // [Admin] 유명인물 수정
-  router.put("/api/admin/celebrities/:id", updateCelebrity, {
+  const updateCelebrityHandler = (c: Context) => updateCelebrity(c);
+  app.put("/celebrities/:id", updateCelebrityHandler);
+  updateCelebrityHandler.swagger = {
     summary: "[Admin] 유명인물 수정",
     description: "기존 유명인물의 정보를 수정합니다. (관리자용)",
     tags: ["유명인물", "Admin"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -215,14 +226,16 @@ export function createCelebrityAdminRouter(): Router {
       "403": { description: "권한 없음" },
       "404": { description: "유명인물을 찾을 수 없음" },
     },
-  });
+  };
 
   // [Admin] 유명인물 삭제
-  router.delete("/api/admin/celebrities/:id", deleteCelebrity, {
+  const deleteCelebrityHandler = (c: Context) => deleteCelebrity(c);
+  app.delete("/celebrities/:id", deleteCelebrityHandler);
+  deleteCelebrityHandler.swagger = {
     summary: "[Admin] 유명인물 삭제",
     description: "특정 유명인물을 삭제합니다. (관리자용)",
     tags: ["유명인물", "Admin"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -238,14 +251,16 @@ export function createCelebrityAdminRouter(): Router {
       "403": { description: "권한 없음" },
       "404": { description: "유명인물을 찾을 수 없음" },
     },
-  });
+  };
 
-  router.get("/api/admin/celebrities/requests", getCelebrityRequests, {
+  const getCelebrityRequestsHandler = (c: Context) => getCelebrityRequests(c);
+  app.get("/celebrities/requests", getCelebrityRequestsHandler);
+  getCelebrityRequestsHandler.swagger = {
     summary: "유명인물 요청 목록 조회",
     description:
       "페이지네이션을 지원하는 유명인물 추가 요청 목록을 조회합니다. (관리자용)",
     tags: ["유명인물"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "page",
@@ -288,7 +303,7 @@ export function createCelebrityAdminRouter(): Router {
       "401": { description: "인증 실패 (관리자 권한 필요)" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
-  return router;
+  return app;
 }

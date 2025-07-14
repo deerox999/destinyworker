@@ -1,5 +1,6 @@
 import { createPrismaClient } from "../../common/prismaUtils";
-import { getUserFromToken, jsonResponse } from "../../common/utils";
+import { getUserFromToken } from "../../common/utils";
+import { Context } from "hono";
 
 // 한글 -> 영어 필드 변환
 const toDbFields = (data: any) => ({
@@ -55,28 +56,27 @@ const validateSajuData = (data: any): boolean => {
 
 // 프로필 목록 조회
 export async function getSajuProfiles(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(request);
-    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(c);
+    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
     const profiles = await prisma.sajuProfile.findMany({
       where: { userId: userInfo.id },
       orderBy: { updatedAt: "desc" },
     });
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       profiles: profiles.map(toKoreanFields),
       count: profiles.length,
     });
   } catch (error) {
-    return jsonResponse(
+    console.error("사주 프로필 목록 조회 실패:", error);
+    return c.json(
       {
         error: "조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -88,26 +88,24 @@ export async function getSajuProfiles(
 
 // 프로필 생성
 export async function createSajuProfile(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(request);
-    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(c);
+    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const body = await request.json();
+    const body = await c.req.json();
     if (!validateSajuData(body)) {
-      return jsonResponse({ error: "잘못된 데이터입니다." }, 400);
+      return c.json({ error: "잘못된 데이터입니다." }, 400);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
     const profile = await prisma.sajuProfile.create({
       data: { userId: userInfo.id, ...toDbFields(body) },
     });
     await prisma.$disconnect();
 
-    return jsonResponse(
+    return c.json(
       {
         success: true,
         id: profile.id,
@@ -116,7 +114,8 @@ export async function createSajuProfile(
       201
     );
   } catch (error) {
-    return jsonResponse(
+    console.error("사주 프로필 생성 실패:", error);
+    return c.json(
       {
         error: "생성 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -128,23 +127,21 @@ export async function createSajuProfile(
 
 // 프로필 수정
 export async function updateSajuProfile(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(request);
-    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(c);
+    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const profileId = Number(params?.id);
-    if (!profileId) return jsonResponse({ error: "잘못된 ID입니다." }, 400);
+    const profileId = Number(c.req.param("id"));
+    if (!profileId) return c.json({ error: "잘못된 ID입니다." }, 400);
 
-    const body = await request.json();
+    const body = await c.req.json();
     if (!validateSajuData(body)) {
-      return jsonResponse({ error: "잘못된 데이터입니다." }, 400);
+      return c.json({ error: "잘못된 데이터입니다." }, 400);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // 소유권 확인
     const existing = await prisma.sajuProfile.findUnique({
@@ -154,12 +151,12 @@ export async function updateSajuProfile(
 
     if (!existing) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "프로필을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "프로필을 찾을 수 없습니다." }, 404);
     }
 
     if (existing.userId !== userInfo.id) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "권한이 없습니다." }, 403);
+      return c.json({ error: "권한이 없습니다." }, 403);
     }
 
     await prisma.sajuProfile.update({
@@ -168,9 +165,10 @@ export async function updateSajuProfile(
     });
     await prisma.$disconnect();
 
-    return jsonResponse({ success: true, message: "수정 완료" });
+    return c.json({ success: true, message: "수정 완료" });
   } catch (error) {
-    return jsonResponse(
+    console.error("사주 프로필 수정 실패:", error);
+    return c.json(
       {
         error: "수정 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -182,18 +180,16 @@ export async function updateSajuProfile(
 
 // 프로필 삭제
 export async function deleteSajuProfile(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(request);
-    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(c);
+    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const profileId = Number(params?.id);
-    if (!profileId) return jsonResponse({ error: "잘못된 ID입니다." }, 400);
+    const profileId = Number(c.req.param("id"));
+    if (!profileId) return c.json({ error: "잘못된 ID입니다." }, 400);
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // 소유권 확인
     const existing = await prisma.sajuProfile.findUnique({
@@ -203,20 +199,21 @@ export async function deleteSajuProfile(
 
     if (!existing) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "프로필을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "프로필을 찾을 수 없습니다." }, 404);
     }
 
     if (existing.userId !== userInfo.id) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "권한이 없습니다." }, 403);
+      return c.json({ error: "권한이 없습니다." }, 403);
     }
 
     await prisma.sajuProfile.delete({ where: { id: profileId } });
     await prisma.$disconnect();
 
-    return jsonResponse({ success: true, message: "삭제 완료" });
+    return c.json({ success: true, message: "삭제 완료" });
   } catch (error) {
-    return jsonResponse(
+    console.error("사주 프로필 삭제 실패:", error);
+    return c.json(
       {
         error: "삭제 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -228,34 +225,33 @@ export async function deleteSajuProfile(
 
 // 특정 프로필 조회
 export async function getSajuProfile(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(request);
-    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = await getUserFromToken(c);
+    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const profileId = Number(params?.id);
-    if (!profileId) return jsonResponse({ error: "잘못된 ID입니다." }, 400);
+    const profileId = Number(c.req.param("id"));
+    if (!profileId) return c.json({ error: "잘못된 ID입니다." }, 400);
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
     const profile = await prisma.sajuProfile.findUnique({
       where: { id: profileId },
     });
     await prisma.$disconnect();
 
     if (!profile)
-      return jsonResponse({ error: "프로필을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "프로필을 찾을 수 없습니다." }, 404);
     if (profile.userId !== userInfo.id)
-      return jsonResponse({ error: "권한이 없습니다." }, 403);
+      return c.json({ error: "권한이 없습니다." }, 403);
 
-    return jsonResponse({
+    return c.json({
       success: true,
       profile: toKoreanFields(profile),
     });
   } catch (error) {
-    return jsonResponse(
+    console.error("사주 프로필 조회 실패:", error);
+    return c.json(
       {
         error: "조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",

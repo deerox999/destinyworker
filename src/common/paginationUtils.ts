@@ -1,5 +1,5 @@
 import { D1Database } from "@cloudflare/workers-types";
-import { jsonResponse } from "./utils";
+import { Context } from "hono";
 
 interface PaginateOptions {
   tableName: string;
@@ -16,7 +16,7 @@ interface PaginateOptions {
  * @returns 표준화된 페이지네이션 응답을 포함하는 Response 객체
  */
 export async function paginate(
-  request: Request,
+  c: Context,
   db: D1Database,
   options: PaginateOptions
 ) {
@@ -26,15 +26,12 @@ export async function paginate(
     defaultLimit = 10,
     baseWhereClauses = [],
   } = options;
-  console.log("paginate", tableName, searchField, defaultLimit, baseWhereClauses);
-  const { searchParams } = new URL(request.url);
-  console.log("searchParams", searchParams);
 
-  const page = parseInt(searchParams.get("page") || "1", 10);
-  const limit = parseInt(searchParams.get("limit") || `${defaultLimit}`, 10);
-  const search = searchParams.get("search") || "";
-  const sort = searchParams.get("sort") || "id";
-  const order = searchParams.get("order") || "desc";
+  const page = parseInt(c.req.query("page") || "1", 10);
+  const limit = parseInt(c.req.query("limit") || `${defaultLimit}`, 10);
+  const search = c.req.query("search") || "";
+  const sort = c.req.query("sort") || "id";
+  const order = c.req.query("order") || "desc";
   const offset = (page - 1) * limit;
 
   const whereConditions = [...baseWhereClauses];
@@ -64,9 +61,7 @@ export async function paginate(
     )
     .bind(...bindings, limit, offset);
 
-  countQuery = db
-    .prepare(`${baseCountQuery} ${whereClause}`)
-    .bind(...bindings);
+  countQuery = db.prepare(`${baseCountQuery} ${whereClause}`).bind(...bindings);
 
   try {
     const [dataResult, countResult] = await Promise.all([
@@ -93,7 +88,7 @@ export async function paginate(
     const totalItems = countResult?.count || 0;
     const totalPages = Math.ceil(totalItems / limit);
 
-    return jsonResponse({
+    return c.json({
       data,
       pagination: {
         totalItems,

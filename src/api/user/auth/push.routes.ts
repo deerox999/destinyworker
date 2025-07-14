@@ -1,12 +1,14 @@
-import { Router } from "../../../common/class/router";
+import { Context, Hono } from "hono";
 import { getVapidPublicKey, subscribe, unsubscribe } from "./pushApi";
 /*
 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
 */
-export function createPushRouter(): Router {
-  const router = new Router();
+export function createPushRouter(): Hono {
+  const app = new Hono();
 
-  router.get("/api/push/vapid-public-key", getVapidPublicKey, {
+  const getVapidPublicKeyHandler = (c: Context) => getVapidPublicKey(c);
+  app.get("/vapid-public-key", getVapidPublicKeyHandler);
+  getVapidPublicKeyHandler.swagger = {
     summary: "VAPID 공개 키 조회",
     description: "웹 푸시 구독에 필요한 VAPID 공개 키를 반환합니다.",
     tags: ["푸시"],
@@ -27,13 +29,15 @@ export function createPushRouter(): Router {
       },
       "500": { description: "서버에 VAPID 키가 설정되지 않음" },
     },
-  });
+  };
 
-  router.post("/api/push/subscribe", subscribe, {
+  const subscribeHandler = (c: Context) => subscribe(c);
+  app.post("/subscribe", subscribeHandler);
+  subscribeHandler.swagger = {
     summary: "푸시 구독 정보 저장",
     description: "클라이언트의 PushSubscription 객체를 서버에 저장합니다.",
     tags: ["푸시"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       required: true,
       content: {
@@ -63,14 +67,16 @@ export function createPushRouter(): Router {
       "401": { description: "인증 실패" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
-  router.post("/api/push/unsubscribe", unsubscribe, {
+  const unsubscribeHandler = (c: Context) => unsubscribe(c);
+  app.post("/unsubscribe", unsubscribeHandler);
+  unsubscribeHandler.swagger = {
     summary: "푸시 구독 정보 삭제",
     description:
       "서버에 저장된 클라이언트의 PushSubscription 객체를 삭제합니다.",
     tags: ["푸시"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       required: true,
       content: {
@@ -92,7 +98,7 @@ export function createPushRouter(): Router {
       "404": { description: "구독 정보를 찾을 수 없음" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
-  return router;
+  return app;
 }

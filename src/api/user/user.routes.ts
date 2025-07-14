@@ -1,14 +1,16 @@
-import { Router } from "../../common/class/router";
+import { Context, Hono } from "hono";
 import { getUserProfile, updateUserProfile } from "./userApi";
 
-export function createUserRouter(): Router {
-  const router = new Router();
+export function createUserRouter(): Hono {
+  const app = new Hono();
 
-  router.get("/api/user/profile", getUserProfile, {
+  const getUserProfileHandler = (c: Context) => getUserProfile(c);
+  app.get("/profile", getUserProfileHandler);
+  getUserProfileHandler.swagger = {
     summary: "사용자 프로필 조회",
     description: "현재 로그인한 사용자의 프로필 정보를 조회합니다.",
     tags: ["사용자"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
       "200": {
         description: "프로필 조회 성공",
@@ -38,13 +40,15 @@ export function createUserRouter(): Router {
       "401": { description: "인증 실패" },
       "404": { description: "사용자를 찾을 수 없음" },
     },
-  });
+  };
 
-  router.put("/api/user/profile", updateUserProfile, {
+  const updateUserProfileHandler = (c: Context) => updateUserProfile(c);
+  app.put("/profile", updateUserProfileHandler);
+  updateUserProfileHandler.swagger = {
     summary: "프로필 수정",
     description: "사용자의 프로필 이름 또는 사진을 수정합니다.",
     tags: ["사용자"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       required: true,
       content: {
@@ -91,7 +95,7 @@ export function createUserRouter(): Router {
       "401": { description: "인증 실패" },
       "404": { description: "사용자를 찾을 수 없음" },
     },
-  });
+  };
 
-  return router;
+  return app;
 }

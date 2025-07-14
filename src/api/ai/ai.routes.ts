@@ -1,4 +1,4 @@
-import { Router } from "../../common/class/router";
+import { Context, Hono } from "hono";
 import { FortuneTelling } from "./DestinyTellerApi";
 import { SajuAnalysisWithGemini } from "./geminiApi";
 import {
@@ -15,16 +15,18 @@ import {
   SajuChatList,
 } from "./SajuKnowledgeApi";
 
-export function createAiRouter(): Router {
-  const router = new Router();
+export function createAiRouter(): Hono {
+  const app = new Hono();
 
   // 상세 사주 풀이
-  router.post("/api/ai/detailed-fortune-telling", FortuneTelling, {
+  const FortuneTellingHandler = (c: Context) => FortuneTelling(c);
+  app.post("/detailed-fortune-telling", FortuneTellingHandler);
+  FortuneTellingHandler.swagger = {
     summary: "상세 사주 풀이 (RAG 결합)",
     description:
       "사용자 프롬프트와 사주 지식 베이스(RAG)를 결합하여 AI가 상세한 운세 풀이를 제공합니다. 스트리밍 응답을 지원합니다.",
     tags: ["AI"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       content: {
         "application/json": {
@@ -59,15 +61,18 @@ export function createAiRouter(): Router {
       "400": { description: "잘못된 요청" },
       "500": { description: "AI 모델 실행 오류" },
     },
-  });
+  };
 
   // Gemini 사주 분석 (신규)
-  router.post("/api/ai/gemini-saju-analysis", SajuAnalysisWithGemini, {
+  const SajuAnalysisWithGeminiHandler = (c: Context) =>
+    SajuAnalysisWithGemini(c);
+  app.post("/gemini-saju-analysis", SajuAnalysisWithGeminiHandler);
+  SajuAnalysisWithGeminiHandler.swagger = {
     summary: "Gemini AI 기반 사주 분석",
     description:
       "Google의 Gemini AI 모델과 RAG를 결합하여 심층적인 사주 분석을 제공합니다. 스트리밍과 다양한 고급 옵션을 지원합니다.",
     tags: ["AI"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       content: {
         "application/json": {
@@ -76,8 +81,7 @@ export function createAiRouter(): Router {
             properties: {
               model: {
                 type: "string",
-                description:
-                  "사용할 Gemini 모델. 예: 'gemini-1.5-pro-latest'",
+                description: "사용할 Gemini 모델. 예: 'gemini-1.5-pro-latest'",
                 default: "gemini-1.5-pro-latest",
               },
               userPrompt: {
@@ -149,15 +153,17 @@ export function createAiRouter(): Router {
       "401": { description: "인증 실패" },
       "500": { description: "Gemini API 또는 서버 오류" },
     },
-  });
+  };
 
   // RAG 문서 추가
-  router.post("/api/rag/documents", RagAddDocuments, {
+  const RagAddDocumentsHandler = (c: Context) => RagAddDocuments(c);
+  app.post("/rag/documents", RagAddDocumentsHandler);
+  RagAddDocumentsHandler.swagger = {
     summary: "[RAG] 문서 일괄 추가",
     description:
       "RAG 시스템에 여러 지식 문서를 한 번에 추가하고 벡터 인덱싱을 수행합니다. 메타데이터도 함께 저장할 수 있습니다.",
     tags: ["AI - RAG"],
-    auth: true, // 관리자 권한 필요
+    security: [{ BearerAuth: [] }], // 관리자 권한 필요
     requestBody: {
       content: {
         "application/json": {
@@ -251,15 +257,17 @@ export function createAiRouter(): Router {
       "409": { description: "모든 문서가 이미 존재함" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // RAG 문서 메타데이터 수정
-  router.put("/api/rag/documents/:id", RagUpdate, {
+  const RagUpdateHandler = (c: Context) => RagUpdate(c, c.env);
+  app.put("/rag/documents/:id", RagUpdateHandler);
+  RagUpdateHandler.swagger = {
     summary: "[RAG] 문서 메타데이터 수정",
     description:
       "ID로 특정 문서의 메타데이터 전체를 수정합니다. 벡터 인덱스는 재계산되지 않습니다.",
     tags: ["AI - RAG"],
-    auth: true, // 관리자 권한 필요
+    security: [{ BearerAuth: [] }], // 관리자 권한 필요
     parameters: [
       {
         name: "id",
@@ -321,15 +329,17 @@ export function createAiRouter(): Router {
       "404": { description: "해당 ID의 문서를 찾을 수 없음" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // RAG 문서 목록 조회
-  router.get("/api/rag/documents", RagDocuments, {
+  const RagDocumentsHandler = (c: Context) => RagDocuments(c);
+  app.get("/rag/documents", RagDocumentsHandler);
+  RagDocumentsHandler.swagger = {
     summary: "[RAG] 문서 목록 조회",
     description:
       "RAG 시스템에 저장된 모든 문서를 페이지네이션 및 검색 기능과 함께 조회합니다.",
     tags: ["AI - RAG"],
-    auth: true, // 관리자 권한 필요
+    security: [{ BearerAuth: [] }], // 관리자 권한 필요
     parameters: [
       {
         name: "page",
@@ -402,15 +412,17 @@ export function createAiRouter(): Router {
       },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // RAG 문서 삭제
-  router.delete("/api/rag/documents", RagDelete, {
+  const RagDeleteHandler = (c: Context) => RagDelete(c);
+  app.delete("/rag/documents", RagDeleteHandler);
+  RagDeleteHandler.swagger = {
     summary: "[RAG] 문서 일괄 삭제",
     description:
       "ID 목록을 이용해 D1과 Vectorize 인덱스에서 여러 문서를 한 번에 삭제합니다.",
     tags: ["AI - RAG"],
-    auth: true, // 관리자 권한 필요
+    security: [{ BearerAuth: [] }], // 관리자 권한 필요
     requestBody: {
       required: true,
       content: {
@@ -434,15 +446,17 @@ export function createAiRouter(): Router {
       "400": { description: "잘못된 요청 (ID 목록이 없거나 형식이 잘못됨)" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // RAG 메타데이터 스키마 조회
-  router.get("/api/rag/metadata-schema", RagGetMetadataSchema, {
+  const RagGetMetadataSchemaHandler = (c: Context) => RagGetMetadataSchema(c);
+  app.get("/rag/metadata-schema", RagGetMetadataSchemaHandler);
+  RagGetMetadataSchemaHandler.swagger = {
     summary: "[RAG] 메타데이터 스키마 조회",
     description:
       "문서 추가/수정에 필요한 메타데이터의 '설계도'를 제공합니다. 프론트엔드에서 이 정보를 바탕으로 입력 폼을 동적으로 생성할 수 있습니다. 예를 들어 'category' 필드는 드롭다운으로, 나머지는 텍스트 입력으로 구현할 수 있습니다.",
     tags: ["AI - RAG"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
       "200": {
         description: "스키마 정보 조회 성공",
@@ -491,15 +505,17 @@ export function createAiRouter(): Router {
       },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // 대화형 RAG 새 대화 시작
-  router.post("/api/ai/saju-chat", SajuChat, {
+  const SajuChatHandler = (c: Context) => SajuChat(c);
+  app.post("/saju-chat", SajuChatHandler);
+  SajuChatHandler.swagger = {
     summary: "[대화형 RAG] 새 대화 시작",
     description:
       "사주 지식 기반의 대화형 AI와 새로운 대화를 시작합니다. 첫 질문을 보내면 고유한 conversationId가 반환됩니다.",
     tags: ["AI - 대화형 RAG"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       content: {
         "application/json": {
@@ -507,7 +523,11 @@ export function createAiRouter(): Router {
             type: "object",
             properties: {
               message: { type: "string", description: "사용자의 첫 질문" },
-              i18n: { type: "string", description: "언어 코드 (ko, en, ja, zh, vi)", default: "ko" },
+              i18n: {
+                type: "string",
+                description: "언어 코드 (ko, en, ja, zh, vi)",
+                default: "ko",
+              },
             },
             required: ["message"],
           },
@@ -532,15 +552,17 @@ export function createAiRouter(): Router {
       "400": { description: "메시지 누락" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // 대화형 RAG 대화 이어가기
-  router.post("/api/ai/saju-chat/:id", SajuChat, {
+  const SajuChatIdHandler = (c: Context) => SajuChat(c);
+  app.post("/saju-chat/:id", SajuChatIdHandler);
+  SajuChatIdHandler.swagger = {
     summary: "[대화형 RAG] 대화 이어가기",
     description:
       "기존 대화의 맥락을 이어받아 답변을 생성합니다. Path에 conversationId를 포함하여 요청해야 합니다.",
     tags: ["AI - 대화형 RAG"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -557,7 +579,11 @@ export function createAiRouter(): Router {
             type: "object",
             properties: {
               message: { type: "string", description: "사용자의 다음 질문" },
-              i18n: { type: "string", description: "언어 코드 (ko, en, ja, zh, vi)", default: "ko" },
+              i18n: {
+                type: "string",
+                description: "언어 코드 (ko, en, ja, zh, vi)",
+                default: "ko",
+              },
             },
             required: ["message"],
           },
@@ -582,15 +608,17 @@ export function createAiRouter(): Router {
       "400": { description: "메시지 누락" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // 대화형 RAG 목록 조회
-  router.get("/api/ai/saju-chat/history", SajuChatList, {
+  const SajuChatListHandler = (c: Context) => SajuChatList(c);
+  app.get("/saju-chat/history", SajuChatListHandler);
+  SajuChatListHandler.swagger = {
     summary: "[대화형 RAG] 내 대화 목록 조회",
     description:
       "현재 로그인한 사용자의 모든 대화 목록을 최신순으로 조회합니다.",
     tags: ["AI - 대화형 RAG"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
       "200": {
         description: "대화 목록 조회 성공",
@@ -622,14 +650,17 @@ export function createAiRouter(): Router {
       "401": { description: "인증 실패" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
+  app.get("/saju-chat/history", SajuChatListHandler);
 
   // 대화형 RAG 특정 대화 기록 조회
-  router.get("/api/ai/saju-chat/:id", SajuChatFull, {
+  const SajuChatFullHandler = (c: Context) => SajuChatFull(c);
+  app.get("/saju-chat/:id", SajuChatFullHandler);
+  SajuChatFullHandler.swagger = {
     summary: "[대화형 RAG] 특정 대화 기록 조회",
     description: "특정 대화 ID에 해당하는 모든 메시지 기록을 조회합니다.",
     tags: ["AI - 대화형 RAG"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -671,14 +702,16 @@ export function createAiRouter(): Router {
       "404": { description: "대화를 찾을 수 없거나 권한이 없음" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   // 대화형 RAG 특정 대화 삭제
-  router.delete("/api/ai/saju-chat/:id", SajuChatDelete, {
+  const SajuChatDeleteHandler = (c: Context) => SajuChatDelete(c);
+  app.delete("/saju-chat/:id", SajuChatDeleteHandler);
+  SajuChatDeleteHandler.swagger = {
     summary: "[대화형 RAG] 특정 대화 삭제",
     description: "특정 대화 ID에 해당하는 모든 메시지 기록을 삭제합니다.",
     tags: ["AI - 대화형 RAG"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -694,7 +727,7 @@ export function createAiRouter(): Router {
       "404": { description: "대화를 찾을 수 없거나 권한이 없음" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
-  return router;
+  return app;
 }

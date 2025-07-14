@@ -1,4 +1,4 @@
-import { Router } from "../../common/class/router";
+import { Context, Hono } from "hono";
 import {
   getSajuProfiles,
   createSajuProfile,
@@ -7,14 +7,16 @@ import {
   deleteSajuProfile,
 } from "./sajuProfileApi";
 
-export function createSajuRouter(): Router {
-  const router = new Router();
+export function createSajuRouter(): Hono {
+  const app = new Hono();
 
-  router.get("/api/saju-profiles", getSajuProfiles, {
+  const getSajuProfilesHandler = (c: Context) => getSajuProfiles(c);
+  app.get("/saju-profiles", getSajuProfilesHandler);
+  getSajuProfilesHandler.swagger = {
     summary: "내 사주 프로필 목록 조회",
     description: "현재 로그인한 사용자의 사주 프로필 목록을 조회합니다.",
     tags: ["사주 프로필"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
       "200": {
         description: "성공",
@@ -52,7 +54,7 @@ export function createSajuRouter(): Router {
       "401": { description: "인증 실패" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
   const sajuProfileSchema = {
     type: "object",
@@ -93,11 +95,13 @@ export function createSajuRouter(): Router {
     required: ["이름", "년", "월", "일", "달력", "성별"],
   };
 
-  router.post("/api/saju-profiles", createSajuProfile, {
+  const createSajuProfileHandler = (c: Context) => createSajuProfile(c);
+  app.post("/saju-profiles", createSajuProfileHandler);
+  createSajuProfileHandler.swagger = {
     summary: "사주 프로필 생성",
     description: "새로운 사주 프로필을 생성합니다.",
     tags: ["사주 프로필"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     requestBody: {
       required: true,
       content: {
@@ -124,13 +128,15 @@ export function createSajuRouter(): Router {
       "401": { description: "인증 실패" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
-  router.get("/api/saju-profiles/:id", getSajuProfile, {
+  const getSajuProfileHandler = (c: Context) => getSajuProfile(c);
+  app.get("/saju-profiles/:id", getSajuProfileHandler);
+  getSajuProfileHandler.swagger = {
     summary: "사주 프로필 상세 조회",
     description: "특정 사주 프로필의 상세 정보를 조회합니다.",
     tags: ["사주 프로필"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -176,13 +182,15 @@ export function createSajuRouter(): Router {
       "404": { description: "프로필을 찾을 수 없음" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
-  router.put("/api/saju-profiles/:id", updateSajuProfile, {
+  const updateSajuProfileHandler = (c: Context) => updateSajuProfile(c);
+  app.put("/saju-profiles/:id", updateSajuProfileHandler);
+  updateSajuProfileHandler.swagger = {
     summary: "사주 프로필 수정",
     description: "기존 사주 프로필을 수정합니다.",
     tags: ["사주 프로필"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -219,13 +227,15 @@ export function createSajuRouter(): Router {
       "404": { description: "프로필을 찾을 수 없음" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
-  router.delete("/api/saju-profiles/:id", deleteSajuProfile, {
+  const deleteSajuProfileHandler = (c: Context) => deleteSajuProfile(c);
+  app.delete("/saju-profiles/:id", deleteSajuProfileHandler);
+  deleteSajuProfileHandler.swagger = {
     summary: "사주 프로필 삭제",
     description: "사주 프로필을 삭제합니다.",
     tags: ["사주 프로필"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -256,7 +266,7 @@ export function createSajuRouter(): Router {
       "404": { description: "프로필을 찾을 수 없음" },
       "500": { description: "서버 오류" },
     },
-  });
-
-  return router;
+  };
+  
+  return app;
 }

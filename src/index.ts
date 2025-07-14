@@ -1,65 +1,51 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { createAppRouter } from "./api/routes";
-import { corsHeaders, jsonResponse } from "./common/utils";
-import { Hono } from 'hono'
 
-// import { Hono } from 'hono'
+const app = new Hono();
 
-// const app = new Hono()
+const allowedOrigins = [
+  "http://localhost:9999",
+  "http://127.0.0.1:9999",
+  "http://localhost:9393",
+  "http://127.0.0.1:9393",
+  "https://youram.me",
+  "https://destiny-91f.pages.dev",
+];
 
-// app.get('/', (c) => {
-//   return c.text('Hello Hono!')
-// })
+// CORS 미들웨어 적용
+app.use(
+  "*",
+  cors({
+    origin: allowedOrigins, // 실제 프로덕션에서는 특정 도메인으로 제한하세요.
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    maxAge: 86400,
+  })
+);
 
-// export default app
-// const app = new Hono()
+// 에러 핸들링
+app.onError((err, c) => {
+  console.error(`Global Error: ${err}`);
+  return c.json(
+    {
+      error: "서버 내부 오류가 발생했습니다.",
+      message: err instanceof Error ? err.message : "Unknown error",
+      stack: err instanceof Error ? err.stack : undefined,
+    },
+    500
+  );
+});
 
-export default {
-  async fetch(
-    request: Request,
-    env: any,
-    ctx: ExecutionContext
-  ): Promise<Response> {
-    const appRouter = createAppRouter(env);
-    const url = new URL(request.url);
+// 404 핸들링
+app.notFound((c) => {
+  return c.json({ error: "엔드포인트를 찾을 수 없습니다." }, 404);
+});
 
-    try {
-      // API 라우팅 처리
-      const response = await appRouter.handle(request, env);
-      if (response) {
-        // 모든 응답에 CORS 헤더 추가
-        const newHeaders = new Headers(response.headers);
-        const cors = corsHeaders(request);
+// 라우트 등록
+// Hono v4부터는 .route()를 사용하여 여러 라우트를 한 번에 연결할 수 있습니다.
+// createAppRouter가 Hono 인스턴스를 반환하도록 수정해야 합니다.
+const routes = createAppRouter();
+app.route("/", routes);
 
-        Object.entries(cors).forEach(([key, value]) => {
-          if (!newHeaders.has(key)) {
-            newHeaders.set(key, value);
-          }
-        });
-
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: newHeaders,
-        });
-      }
-
-      // 404 처리
-      return jsonResponse(
-        { error: "엔드포인트를 찾을 수 없습니다." },
-        404,
-        request
-      );
-    } catch (error) {
-      console.error("Global Error:", error);
-      return jsonResponse(
-        {
-          error: "서버 내부 오류가 발생했습니다.",
-          message: error instanceof Error ? error.message : "Unknown error",
-          stack: error instanceof Error ? error.stack : undefined,
-        },
-        500,
-        request
-      );
-    }
-  },
-} satisfies ExportedHandler<any>;
+export default app;

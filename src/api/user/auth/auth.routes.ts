@@ -1,4 +1,4 @@
-import { Router } from "../../../common/class/router";
+import { Context, Hono } from "hono";
 import {
   googleLogin,
   logout,
@@ -6,10 +6,12 @@ import {
   refreshToken,
 } from "./googleAuthApi";
 
-export function createAuthRouter(): Router {
-  const router = new Router();
+export function createAuthRouter(): Hono {
+  const app = new Hono();
 
-  router.post("/api/auth/google/login", googleLogin, {
+  const googleLoginHandler = (c: Context) => googleLogin(c);
+  app.post("/google/login", googleLoginHandler);
+  googleLoginHandler.swagger = {
     summary: "Google OAuth 로그인",
     description: "Google OAuth를 통해 로그인하고 JWT 토큰을 발급받습니다.",
     tags: ["인증"],
@@ -48,8 +50,8 @@ export function createAuthRouter(): Router {
                       email: { type: "string" },
                       name: { type: "string" },
                       picture: { type: "string" },
-                      created_at: { type: "string", format: "date-time" },
-                      updated_at: { type: "string", format: "date-time" },
+                      createdAt: { type: "string", format: "date-time" },
+                      updatedAt: { type: "string", format: "date-time" },
                     },
                   },
                 },
@@ -62,13 +64,14 @@ export function createAuthRouter(): Router {
         "500": { description: "서버 오류" },
       },
     },
-  });
+  };
 
-  router.post("/api/auth/logout", logout, {
+  const logoutHandler = (c: Context) => logout(c);
+  logoutHandler.swagger = {
     summary: "로그아웃",
     description: "현재 세션을 종료하고 토큰을 무효화합니다.",
     tags: ["인증"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
       "200": {
         description: "로그아웃 성공",
@@ -86,13 +89,16 @@ export function createAuthRouter(): Router {
       },
       "401": { description: "인증 토큰이 없거나 세션이 유효하지 않음" },
     },
-  });
+  };
+  app.post("/logout", logoutHandler);
 
-  router.get("/api/auth/me", getUserInfo, {
+  const getUserInfoHandler = (c: Context) => getUserInfo(c);
+  app.get("/me", getUserInfoHandler);
+  getUserInfoHandler.swagger = {
     summary: "사용자 정보 조회",
     description: "현재 로그인한 사용자의 정보를 조회합니다.",
     tags: ["인증"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
       "200": {
         description: "사용자 정보 조회 성공",
@@ -108,7 +114,7 @@ export function createAuthRouter(): Router {
                     email: { type: "string" },
                     name: { type: "string" },
                     picture: { type: "string" },
-                    created_at: { type: "string", format: "date-time" },
+                    createdAt: { type: "string", format: "date-time" },
                   },
                 },
               },
@@ -119,13 +125,15 @@ export function createAuthRouter(): Router {
       "401": { description: "유효하지 않은 토큰 또는 만료된 세션" },
       "404": { description: "사용자를 찾을 수 없음" },
     },
-  });
+  };
 
-  router.post("/api/auth/refresh", refreshToken, {
+  const refreshTokenHandler = (c: Context) => refreshToken(c);
+  app.post("/refresh", refreshTokenHandler);
+  refreshTokenHandler.swagger = {
     summary: "토큰 갱신",
     description: "JWT 토큰을 갱신합니다.",
     tags: ["인증"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
       "200": {
         description: "토큰 갱신 성공",
@@ -143,7 +151,7 @@ export function createAuthRouter(): Router {
       },
       "401": { description: "유효하지 않은 토큰" },
     },
-  });
+  };
 
-  return router;
+  return app;
 }

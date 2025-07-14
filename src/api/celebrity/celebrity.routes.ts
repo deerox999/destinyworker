@@ -1,4 +1,4 @@
-import { Router } from "../../common/class/router";
+import { Context, Hono } from "hono";
 import {
   createCelebrityComment,
   deleteCelebrityComment,
@@ -10,8 +10,8 @@ import {
 } from "./celebrityProfileApi";
 import { createCelebrityRequest } from "./celebrityRequestApi";
 
-export function createCelebrityRouter(): Router {
-  const router = new Router();
+export function createCelebrityRouter(): Hono {
+  const app = new Hono();
 
   const commentSchema = {
     type: "object",
@@ -26,12 +26,13 @@ export function createCelebrityRouter(): Router {
     required: ["내용"],
   };
 
-  // 유명인물 목록
-  router.get("/api/celebrities", getCelebrities, {
+  const getCelebritiesHandler = (c: Context) => getCelebrities(c);
+  app.get("/", getCelebritiesHandler);
+  getCelebritiesHandler.swagger = {
     summary: "유명인물 목록 조회",
     description: "페이지네이션, 다국어 지원과 함께 유명인물 목록을 조회합니다.",
     tags: ["유명인물"],
-    auth: false,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "page",
@@ -55,10 +56,12 @@ export function createCelebrityRouter(): Router {
     responses: {
       "200": { description: "성공" },
     },
-  });
+  };
 
   // 유명인물 상세
-  router.get("/api/celebrities/:id", getCelebrityById, {
+  const getCelebrityByIdHandler = (c: Context) => getCelebrityById(c);
+  app.get("/:id", getCelebrityByIdHandler);
+  getCelebrityByIdHandler.swagger = {
     summary: "특정 유명인물 정보 조회",
     description:
       "ID와 언어 코드를 사용하여 특정 유명인물의 상세 정보를 조회합니다.",
@@ -83,10 +86,11 @@ export function createCelebrityRouter(): Router {
       "200": { description: "성공" },
       "404": { description: "유명인물을 찾을 수 없음" },
     },
-  });
+  };
 
-  // 유명인물 댓글
-  router.get("/api/celebrities/:id/comments", getCelebrityComments, {
+  const getCelebrityCommentsHandler = (c: Context) => getCelebrityComments(c);
+  app.get("/:id/comments", getCelebrityCommentsHandler);
+  getCelebrityCommentsHandler.swagger = {
     summary: "유명인물 댓글 목록 조회",
     description:
       "특정 유명인물의 댓글 목록을 페이지네이션, 정렬, 추천 여부와 함께 조회합니다.",
@@ -129,13 +133,16 @@ export function createCelebrityRouter(): Router {
       },
       "400": { description: "잘못된 유명인물 ID" },
     },
-  });
+  };
 
-  router.post("/api/celebrities/:id/comments", createCelebrityComment, {
+  const createCelebrityCommentHandler = (c: Context) =>
+    createCelebrityComment(c);
+  app.post("/:id/comments", createCelebrityCommentHandler);
+  createCelebrityCommentHandler.swagger = {
     summary: "유명인물 댓글 작성",
     description: "특정 유명인물에게 새로운 댓글이나 대댓글을 작성합니다.",
     tags: ["유명인물"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     parameters: [
       {
         name: "id",
@@ -152,128 +159,128 @@ export function createCelebrityRouter(): Router {
       "401": { description: "인증 실패" },
       "404": { description: "유명인물을 찾을 수 없음" },
     },
-  });
+  };
 
-  router.put(
-    "/api/celebrities/:id/comments/:commentId",
-    updateCelebrityComment,
-    {
-      summary: "유명인물 댓글 수정",
-      description: "자신이 작성한 댓글을 수정합니다.",
-      tags: ["유명인물"],
-      auth: true,
-      parameters: [
-        {
-          name: "id",
-          in: "path",
-          required: true,
-          description: "유명인물 ID",
-          schema: { type: "string" },
-        },
-        {
-          name: "commentId",
-          in: "path",
-          required: true,
-          description: "댓글 ID",
-          schema: { type: "integer" },
-        },
-      ],
-      requestBody: {
-        content: { "application/json": { schema: commentSchema } },
+  const updateCelebrityCommentHandler = (c: Context) =>
+    updateCelebrityComment(c);
+  app.put("/:id/comments/:commentId", updateCelebrityCommentHandler);
+  updateCelebrityCommentHandler.swagger = {
+    summary: "유명인물 댓글 수정",
+    description: "자신이 작성한 댓글을 수정합니다.",
+    tags: ["유명인물"],
+    security: [{ BearerAuth: [] }],
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        description: "유명인물 ID",
+        schema: { type: "string" },
       },
-      responses: {
-        "200": { description: "수정 성공" },
-        "400": { description: "잘못된 요청 데이터" },
-        "401": { description: "인증 실패" },
-        "403": { description: "권한 없음" },
-        "404": { description: "댓글을 찾을 수 없음" },
+      {
+        name: "commentId",
+        in: "path",
+        required: true,
+        description: "댓글 ID",
+        schema: { type: "integer" },
       },
-    }
-  );
+    ],
+    requestBody: {
+      content: { "application/json": { schema: commentSchema } },
+    },
+    responses: {
+      "200": { description: "수정 성공" },
+      "400": { description: "잘못된 요청 데이터" },
+      "401": { description: "인증 실패" },
+      "403": { description: "권한 없음" },
+      "404": { description: "댓글을 찾을 수 없음" },
+    },
+  };
 
-  router.delete(
-    "/api/celebrities/:id/comments/:commentId",
-    deleteCelebrityComment,
-    {
-      summary: "유명인물 댓글 삭제",
-      description: "자신이 작성한 댓글 또는 관리자가 댓글을 삭제합니다.",
-      tags: ["유명인물"],
-      auth: true,
-      parameters: [
-        {
-          name: "id",
-          in: "path",
-          required: true,
-          description: "유명인물 ID",
-          schema: { type: "string" },
-        },
-        {
-          name: "commentId",
-          in: "path",
-          required: true,
-          description: "댓글 ID",
-          schema: { type: "integer" },
-        },
-      ],
-      responses: {
-        "200": { description: "삭제 성공" },
-        "401": { description: "인증 실패" },
-        "403": { description: "권한 없음" },
-        "404": { description: "댓글을 찾을 수 없음" },
+  const deleteCelebrityCommentHandler = (c: Context) =>
+    deleteCelebrityComment(c);
+  app.delete("/:id/comments/:commentId", deleteCelebrityCommentHandler);
+  deleteCelebrityCommentHandler.swagger = {
+    summary: "유명인물 댓글 삭제",
+    description: "자신이 작성한 댓글 또는 관리자가 댓글을 삭제합니다.",
+    tags: ["유명인물"],
+    security: [{ BearerAuth: [] }],
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        description: "유명인물 ID",
+        schema: { type: "string" },
       },
-    }
-  );
+      {
+        name: "commentId",
+        in: "path",
+        required: true,
+        description: "댓글 ID",
+        schema: { type: "integer" },
+      },
+    ],
+    responses: {
+      "200": { description: "삭제 성공" },
+      "401": { description: "인증 실패" },
+      "403": { description: "권한 없음" },
+      "404": { description: "댓글을 찾을 수 없음" },
+    },
+  };
 
   // 댓글 추천 토글
-  router.post(
-    "/api/celebrities/:id/comments/:commentId/like",
-    toggleCelebrityCommentLike,
-    {
-      summary: "댓글 추천 토글",
-      description:
-        "유명인물 댓글을 추천하거나 추천을 취소합니다. 이미 추천한 댓글이면 추천 취소, 추천하지 않은 댓글이면 추천합니다.",
-      tags: ["유명인물"],
-      auth: true,
-      parameters: [
-        {
-          name: "id",
-          in: "path",
-          required: true,
-          description: "유명인물 ID",
-          schema: { type: "string" },
-        },
-        {
-          name: "commentId",
-          in: "path",
-          required: true,
-          description: "댓글 ID",
-          schema: { type: "integer" },
-        },
-      ],
-      responses: {
-        "200": {
-          description: "추천/추천 취소 성공",
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  success: { type: "boolean" },
-                  action: { type: "string", enum: ["liked", "unliked"] },
-                  likeCount: { type: "integer" },
-                },
+
+  const toggleCelebrityCommentLikeHandler = (c: Context) =>
+    toggleCelebrityCommentLike(c);
+  app.post("/:id/comments/:commentId/like", toggleCelebrityCommentLikeHandler);
+  toggleCelebrityCommentLikeHandler.swagger = {
+    summary: "댓글 추천 토글",
+    description:
+      "유명인물 댓글을 추천하거나 추천을 취소합니다. 이미 추천한 댓글이면 추천 취소, 추천하지 않은 댓글이면 추천합니다.",
+    tags: ["유명인물"],
+    security: [{ BearerAuth: [] }],
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        description: "유명인물 ID",
+        schema: { type: "string" },
+      },
+      {
+        name: "commentId",
+        in: "path",
+        required: true,
+        description: "댓글 ID",
+        schema: { type: "integer" },
+      },
+    ],
+    responses: {
+      "200": {
+        description: "추천/추천 취소 성공",
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                success: { type: "boolean" },
+                action: { type: "string", enum: ["liked", "unliked"] },
+                likeCount: { type: "integer" },
               },
             },
           },
         },
-        "401": { description: "인증 실패" },
-        "404": { description: "댓글을 찾을 수 없음" },
       },
-    }
-  );
+      "401": { description: "인증 실패" },
+      "404": { description: "댓글을 찾을 수 없음" },
+    },
+  };
 
-  // 유명인물 요청
-  router.post("/api/celebrities/request", createCelebrityRequest, {
+  const createCelebrityRequestHandler = (c: Context) =>
+    createCelebrityRequest(c);
+  app.post("/request", createCelebrityRequestHandler);
+  createCelebrityRequestHandler.swagger = {
     summary: "유명인물 추가 요청",
     description: "새로운 유명인물 추가를 요청합니다.",
     tags: ["유명인물"],
@@ -307,7 +314,7 @@ export function createCelebrityRouter(): Router {
       "400": { description: "잘못된 요청 데이터" },
       "500": { description: "서버 오류" },
     },
-  });
+  };
 
-  return router;
+  return app;
 }

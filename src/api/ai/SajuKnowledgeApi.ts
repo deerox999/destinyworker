@@ -7,12 +7,13 @@ import {
   logAiUsage,
   RagEnv,
 } from "../../common/ragUtils";
-import { getUserFromToken, jsonResponse } from "../../common/utils";
+import { getUserFromToken } from "../../common/utils";
 import {
   getPersonaPrompt,
   getRejectionMessage,
   SupportedLanguage,
 } from "./prompt/sajuTeacher";
+import { Context } from "hono";
 
 /**
  * 사용자의 질문이 사주 관련 주제인지 확인합니다.
@@ -154,15 +155,14 @@ async function saveConversationTurn(
  * 사용자의 전체 대화 목록을 조회합니다.
  */
 export async function SajuChatList(
-  request: Request,
-  env: RagEnv
+  c: Context
 ): Promise<Response> {
-  const prisma = createPrismaClient(env.DB);
+  const prisma = createPrismaClient(c.env.DB);
 
   try {
-    const user = await getUserFromToken(request);
+    const user = await getUserFromToken(c);
     if (!user) {
-      return jsonResponse({ error: "Unauthorized" }, 401, request);
+      return c.json({ error: "Unauthorized" }, 401);
     }
 
     const results: {
@@ -206,20 +206,18 @@ export async function SajuChatList(
       updatedAt: r.last_activity,
     }));
 
-    return jsonResponse(
+    return c.json(
       {
         success: true,
         conversations,
       },
-      200,
-      request
+      200
     );
   } catch (error) {
     console.error("Error fetching conversation list:", error);
-    return jsonResponse(
+    return c.json(
       { error: "Failed to fetch conversation list." },
-      500,
-      request
+      500
     );
   } finally {
     await prisma.$disconnect();
@@ -230,20 +228,16 @@ export async function SajuChatList(
  * 대화형 사주 챗봇의 핵심 핸들러
  */
 export async function SajuChat(
-  request: Request,
-  env: RagEnv,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
-  const url = new URL(request.url);
-  const pathSegments = url.pathname.split("/").filter(Boolean);
-  const conversationId = pathSegments[3];
+  const conversationId = c.req.param("id");
 
-  const prisma = createPrismaClient(env.DB);
+  const prisma = createPrismaClient(c.env.DB);
 
   const {
     message: userQuery,
     i18n,
-  } = await request.json<{
+  } = await c.req.json<{
     message: string;
     i18n?: string;
   }>();
@@ -255,26 +249,26 @@ export async function SajuChat(
       : "ko";
 
   if (!userQuery) {
-    return jsonResponse({ error: "'message' is required." }, 400, request);
+    return c.json({ error: "'message' is required." }, 400);
   }
 
   // 1. 질문 연관성 검사
-  const isRelevant = await isQuerySajuRelated(env.AI, userQuery);
+  const isRelevant = await isQuerySajuRelated(c.env.AI, userQuery);
   if (!isRelevant) {
     const responseConversationId = conversationId || null;
-    return jsonResponse(
+    return c.json(
       {
         conversationId: responseConversationId,
         answer: getRejectionMessage(lang),
       },
       200,
-      request
+      c.req.header()
     );
   }
 
-  const user = await getUserFromToken(request);
+  const user = await getUserFromToken(c);
   if (!user) {
-    return jsonResponse({ error: "Unauthorized: Invalid token" }, 401, request);
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
 
   const newConversationId = conversationId || crypto.randomUUID();
@@ -286,15 +280,15 @@ export async function SajuChat(
       : [];
 
     // 3. RAG 및 조건부 웹 검색
-    const queryVector = await createEmbedding(env.AI, userQuery);
+    const queryVector = await createEmbedding(c.env.AI, userQuery);
 
     const similarDocIds = await findSimilarVectors(
-      env.VECTORIZE_INDEX,
+      c.env.VECTORIZE_INDEX,
       queryVector,
       15 // 내부 검색 결과 수를 늘려 정확도 향상 시도
     );
     const ragDocs = await getDocumentsFromD1(
-      env.DB,
+      c.env.DB,
       similarDocIds.map((id) => id.toString())
     );
 
@@ -304,7 +298,7 @@ export async function SajuChat(
       console.log(
         `Found only ${ragDocs.length} documents from RAG. Performing web search as a fallback.`
       );
-      webSearchResults = await performWebSearch(userQuery, env.BRAVE_API_KEY);
+      webSearchResults = await performWebSearch(userQuery, c.env.BRAVE_API_KEY);
     }
 
     const ragContext =
@@ -348,7 +342,7 @@ ${fullContext}`;
 
     // 5. LLM 호출 및 사용량 기록
     const model = "@cf/google/gemma-3-12b-it";
-    const llmResponse: any = await env.AI.run(model, {
+    const llmResponse: any = await c.env.AI.run(model, {
       messages,
       max_tokens: 2048, // 답변 끊김 방지를 위해 max_tokens 증가
     });
@@ -363,7 +357,7 @@ ${fullContext}`;
       typeof llmResponse.usage.completion_tokens === "number" &&
       typeof llmResponse.usage.total_tokens === "number"
     ) {
-      await logAiUsage(env.DB, user.id, model, llmResponse.usage);
+      await logAiUsage(c.env.DB, user.id, model, llmResponse.usage);
     }
 
     // 6. 새로운 대화 내용 D1에 저장
@@ -375,20 +369,20 @@ ${fullContext}`;
       assistantResponse
     );
 
-    return jsonResponse(
+    return c.json(
       {
         conversationId: newConversationId,
         answer: assistantResponse,
       },
       200,
-      request
+      c.req.header()
     );
   } catch (error) {
     console.error("Saju chat error:", error);
-    return jsonResponse(
+    return c.json(
       { error: "Failed to process saju chat." },
       500,
-      request
+      c.req.header()
     );
   } finally {
     await prisma.$disconnect();
@@ -399,19 +393,15 @@ ${fullContext}`;
  * 특정 대화의 전체 메시지 기록을 조회합니다.
  */
 export async function SajuChatFull(
-  request: Request,
-  env: RagEnv,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
-  const prisma = createPrismaClient(env.DB);
-  const url = new URL(request.url);
-  const pathSegments = url.pathname.split("/").filter(Boolean);
-  const conversationId = pathSegments[3];
+  const prisma = createPrismaClient(c.env.DB);
+  const conversationId = c.req.param("id");
 
   try {
-    const user = await getUserFromToken(request);
+    const user = await getUserFromToken(c);
     if (!user) {
-      return jsonResponse({ error: "Unauthorized" }, 401, request);
+      return c.json({ error: "Unauthorized" }, 401);
     }
 
     const firstMessage = await prisma.conversationHistory.findFirst({
@@ -419,30 +409,27 @@ export async function SajuChatFull(
     });
 
     if (!firstMessage) {
-      return jsonResponse(
+      return c.json(
         { error: "Conversation not found or access denied" },
-        404,
-        request
+        404
       );
     }
 
     const messages = await getConversationHistory(prisma, conversationId);
 
-    return jsonResponse(
+    return c.json(
       {
         success: true,
         conversationId,
         messages,
       },
-      200,
-      request
+      200
     );
   } catch (error) {
     console.error(`Error fetching conversation ${conversationId}:`, error);
-    return jsonResponse(
+    return c.json(
       { error: "Failed to fetch conversation." },
-      500,
-      request
+      500
     );
   } finally {
     await prisma.$disconnect();
@@ -453,20 +440,16 @@ export async function SajuChatFull(
  * 특정 대화 및 관련 메시지를 모두 삭제합니다.
  */
 export async function SajuChatDelete(
-  request: Request,
-  env: RagEnv,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
-  const prisma = createPrismaClient(env.DB);
+  const prisma = createPrismaClient(c.env.DB);
 
-  const url = new URL(request.url);
-  const pathSegments = url.pathname.split("/").filter(Boolean);
-  const conversationId = pathSegments[3];
+  const conversationId = c.req.param("id");
 
   try {
-    const user = await getUserFromToken(request);
+    const user = await getUserFromToken(c);
     if (!user) {
-      return jsonResponse({ error: "Unauthorized" }, 401, request);
+      return c.json({ error: "Unauthorized" }, 401);
     }
 
     // 대화 소유권 확인
@@ -476,10 +459,9 @@ export async function SajuChatDelete(
     });
 
     if (!conversation) {
-      return jsonResponse(
+      return c.json(
         { error: "Conversation not found or access denied" },
-        404,
-        request
+        404
       );
     }
 
@@ -488,21 +470,19 @@ export async function SajuChatDelete(
       where: { conversationId, userId: user.id },
     });
 
-    return jsonResponse(
+    return c.json(
       {
         success: true,
         message: `Conversation ${conversationId} and its ${count} messages have been deleted.`,
         deletedMessagesCount: count,
       },
-      200,
-      request
+      200
     );
   } catch (error) {
     console.error(`Error deleting conversation ${conversationId}:`, error);
-    return jsonResponse(
+    return c.json(
       { error: "Failed to delete conversation." },
-      500,
-      request
+      500
     );
   } finally {
     await prisma.$disconnect();
