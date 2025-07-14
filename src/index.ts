@@ -1,6 +1,17 @@
-import { corsHeaders, htmlResponse, jsonResponse } from "./common/utils";
 import { createAppRouter } from "./api/routes";
-import { generateSwaggerHTML } from "./common/swagger/html/swaggerUI";
+import { corsHeaders, jsonResponse } from "./common/utils";
+import { Hono } from 'hono'
+
+// import { Hono } from 'hono'
+
+// const app = new Hono()
+
+// app.get('/', (c) => {
+//   return c.text('Hello Hono!')
+// })
+
+// export default app
+// const app = new Hono()
 
 export default {
   async fetch(
