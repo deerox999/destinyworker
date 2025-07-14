@@ -25,13 +25,13 @@ export function createAiRouter(): OpenAPIHono {
     userPrompt: z.string().openapi({ description: "사용자 질문", example: "제 사주는 어떤가요?" }),
     systemPrompt: z.string().optional().openapi({ description: "AI 역할 정의 시스템 프롬프트", example: "당신은 사주 전문가입니다." }),
     stream: z.boolean().default(false).optional().openapi({ description: "스트리밍 응답 여부", example: false }),
-  });
+  }).openapi({ type: 'object' });
 
-  const GeminiHistoryPartSchema = z.object({ text: z.string() });
+  const GeminiHistoryPartSchema = z.object({ text: z.string() }).openapi({ type: 'object' });
   const GeminiHistorySchema = z.object({
     role: z.enum(["user", "model"]),
     parts: z.array(GeminiHistoryPartSchema),
-  });
+  }).openapi({ type: 'object' });
 
   const SajuAnalysisWithGeminiSchema = AiBasicRequestSchema.extend({
     model: z
@@ -47,17 +47,16 @@ export function createAiRouter(): OpenAPIHono {
         topK: z.number().optional(),
         maxOutputTokens: z.number().int().optional(),
         stopSequences: z.array(z.string()).optional(),
-      })
-      .optional(),
+      }).openapi({ type: 'object' }),
     safetySettings: z
       .array(
         z.object({
           category: z.string(),
           threshold: z.string(),
-        })
+        }).openapi({ type: 'object' })
       )
       .optional(),
-  });
+  }).openapi({ type: 'object' });
 
   // RAG 문서 스키마
   const RagMetadataSchema = z.object({
@@ -72,33 +71,47 @@ export function createAiRouter(): OpenAPIHono {
       .nullable()
       .openapi({ description: "관련 핵심 개념어", example: ["정관격", "상관패인"] }),
     url: z.string().optional().nullable().openapi({ description: "웹 출처 URL", example: "https://example.com/saju-book" }),
-  });
+  }).openapi({ type: 'object' });
 
   const RagDocumentSchema = z.object({
     text: z.string().openapi({ description: "저장할 텍스트 내용", example: "정관은..." }),
     metadata: RagMetadataSchema,
-  });
+  }).openapi({ type: 'object' });
 
   const RagIdParamSchema = z.object({
-    id: z.coerce.number().int().positive().openapi({ description: "문서 ID", example: 123 }),
-  });
+    id: z.coerce.number().int().positive().openapi({
+      param: {
+        name: "id",
+        in: "path",
+      },
+      description: "문서 ID",
+      example: 123,
+    }),
+  }).openapi({ type: "object" });
   
   // 대화형 RAG 스키마
   const SajuChatRequestSchema = z.object({
       message: z.string().openapi({ description: "사용자 메시지", example: "안녕하세요, 제 사주에 대해 알려주세요." }),
       i18n: z.enum(["ko", "en", "ja", "zh", "vi"]).default("ko").optional().openapi({ description: "언어 코드", example: "ko" })
-  });
+  }).openapi({ type: 'object' });
   
   const ConversationIdParamSchema = z.object({
-      id: z.string().uuid().openapi({ description: "대화 ID", example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" })
-  });
+      id: z.string().uuid().openapi({
+        param: {
+          name: "id",
+          in: "path",
+        },
+        description: "대화 ID",
+        example: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      }),
+  }).openapi({ type: "object" });
 
 
   // --- 라우트 정의 ---
 
   const FortuneTellingRoute = createRoute({
     method: "post",
-    path: "/detailed-fortune-telling",
+    path: "detailed-fortune-telling",
     summary: "상세 사주 풀이 (RAG 결합)",
     description: "사용자 프롬프트와 사주 지식 베이스(RAG)를 결합하여 AI가 상세한 운세 풀이를 제공합니다.",
     tags: ["AI"],
@@ -113,7 +126,7 @@ export function createAiRouter(): OpenAPIHono {
           "application/json": {
             schema: z.object({
               result: z.string().openapi({ example: "당신의 사주는..." }),
-            }),
+            }).openapi({ type: 'object' }),
           },
           // "text/event-stream": {
           //   schema: z.object({}).openapi({ example: "event: message\ndata: ..." }),
@@ -127,7 +140,7 @@ export function createAiRouter(): OpenAPIHono {
 
   const SajuAnalysisWithGeminiRoute = createRoute({
       method: 'post',
-      path: '/gemini-saju-analysis',
+      path: 'gemini-saju-analysis',
       summary: "Gemini AI 기반 사주 분석",
       description: "Google의 Gemini AI 모델과 RAG를 결합하여 심층적인 사주 분석을 제공합니다.",
       tags: ["AI"],
@@ -142,7 +155,7 @@ export function createAiRouter(): OpenAPIHono {
                 "application/json": {
                     schema: z.object({
                         result: z.string().openapi({ example: "Gemini 분석 결과..." })
-                    })
+                    }).openapi({ type: 'object' })
                 },
                 // "text/event-stream": {
                 //     schema: z.object({}).openapi({ example: "event: message\ndata: ..." }) // 스트림은 스키마를 특정하기 어려우므로 빈 객체로 둡니다.
@@ -157,7 +170,7 @@ export function createAiRouter(): OpenAPIHono {
 
   const RagAddDocumentsRoute = createRoute({
       method: "post",
-      path: "/rag/documents",
+      path: "rag/documents",
       summary: "[RAG] 문서 일괄 추가",
       description: "RAG 시스템에 여러 지식 문서를 한 번에 추가하고 벡터 인덱싱을 수행합니다.",
       tags: ["AI - RAG"],
@@ -166,7 +179,7 @@ export function createAiRouter(): OpenAPIHono {
           body: {
               content: {
                   "application/json": {
-                      schema: z.object({ documents: z.array(RagDocumentSchema) })
+                      schema: z.object({ documents: z.array(RagDocumentSchema) }).openapi({ type: 'object' })
                   }
               }
           }
@@ -179,7 +192,7 @@ export function createAiRouter(): OpenAPIHono {
                 schema: z.object({
                   success: z.boolean().openapi({ example: true }),
                   count: z.number().int().openapi({ example: 5 }),
-                })
+                }).openapi({ type: 'object' })
               }
             }
           },
@@ -191,7 +204,7 @@ export function createAiRouter(): OpenAPIHono {
   
   const RagUpdateRoute = createRoute({
       method: "put",
-      path: "/rag/documents/{id}",
+      path: "rag/documents/{id}",
       summary: "[RAG] 문서 메타데이터 수정",
       description: "ID로 특정 문서의 메타데이터 전체를 수정합니다.",
       tags: ["AI - RAG"],
@@ -221,7 +234,7 @@ export function createAiRouter(): OpenAPIHono {
 
   const RagGetDocumentsRoute = createRoute({
       method: 'get',
-      path: '/rag/documents',
+      path: 'rag/documents',
       summary: "[RAG] 문서 목록 조회",
       description: "RAG 시스템에 저장된 모든 문서를 페이지네이션 및 검색 기능과 함께 조회합니다.",
       tags: ["AI - RAG"],
@@ -231,7 +244,7 @@ export function createAiRouter(): OpenAPIHono {
               page: z.coerce.number().int().positive().default(1).optional(),
               limit: z.coerce.number().int().positive().default(10).optional(),
               search: z.string().optional(),
-          })
+          }).openapi({ type: 'object' })
       },
       responses: {
         200: {
@@ -239,7 +252,9 @@ export function createAiRouter(): OpenAPIHono {
             content: {
                 "application/json": {
                     schema: z.object({
-                        documents: z.array(RagDocumentSchema.extend({ id: z.number().int() })).openapi({ 
+                        documents: z.array(
+                            RagDocumentSchema.extend({ id: z.number().int() }).openapi({ type: 'object' })
+                        ).openapi({ 
                             example: [{
                                 id: 1,
                                 text: "...", 
@@ -251,8 +266,8 @@ export function createAiRouter(): OpenAPIHono {
                             totalPages: z.number().int().openapi({ example: 10 }),
                             currentPage: z.number().int().openapi({ example: 1 }),
                             pageSize: z.number().int().openapi({ example: 10 }),
-                        })
-                    })
+                        }).openapi({ type: 'object' })
+                    }).openapi({ type: 'object' })
                 }
             }
         },
@@ -262,19 +277,13 @@ export function createAiRouter(): OpenAPIHono {
 
   const RagDeleteRoute = createRoute({
       method: 'delete',
-      path: '/rag/documents',
-      summary: "[RAG] 문서 일괄 삭제",
-      description: "ID 목록을 이용해 여러 문서를 한 번에 삭제합니다.",
+      path: 'rag/documents/{id}',
+      summary: "[RAG] 문서 삭제",
+      description: "ID로 특정 문서를 RAG 시스템에서 삭제합니다.",
       tags: ["AI - RAG"],
       security: [{ BearerAuth: [] }],
       request: {
-          body: {
-              content: {
-                  "application/json": {
-                      schema: z.object({ ids: z.array(z.number().int().positive()) })
-                  }
-              }
-          }
+          params: RagIdParamSchema
       },
       responses: {
         200: {
@@ -284,7 +293,7 @@ export function createAiRouter(): OpenAPIHono {
                     schema: z.object({
                         success: z.boolean().openapi({ example: true }),
                         deletedCount: z.number().int().openapi({ example: 3 })
-                    })
+                    }).openapi({ type: 'object' })
                 }
             }
         },
@@ -295,9 +304,9 @@ export function createAiRouter(): OpenAPIHono {
   
   const RagGetMetadataSchemaRoute = createRoute({
       method: 'get',
-      path: '/rag/metadata-schema',
+      path: 'rag/metadata-schema',
       summary: "[RAG] 메타데이터 스키마 조회",
-      description: "문서 추가/수정에 필요한 메타데이터의 '설계도'를 제공합니다.",
+      description: "RAG 문서에 사용되는 메타데이터의 구조(enum 등)를 조회합니다.",
       tags: ["AI - RAG"],
       security: [{ BearerAuth: [] }],
       responses: {
@@ -317,9 +326,9 @@ export function createAiRouter(): OpenAPIHono {
   
   const SajuChatRoute = createRoute({
       method: 'post',
-      path: '/saju-chat',
-      summary: "[대화형 RAG] 새 대화 시작",
-      description: "사주 지식 기반의 대화형 AI와 새로운 대화를 시작합니다.",
+      path: 'saju-chat',
+      summary: "사주 지식 기반 채팅",
+      description: "특정 사주에 대한 지식 기반으로 대화를 시작하거나 이어갑니다. 대화 ID가 없으면 새로운 대화를 시작합니다.",
       tags: ["AI - 대화형 RAG"],
       security: [{ BearerAuth: [] }],
       request: {
@@ -333,7 +342,7 @@ export function createAiRouter(): OpenAPIHono {
                     schema: z.object({
                         conversationId: z.string().uuid().openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
                         response: z.string().openapi({ example: "안녕하세요! 무엇을 도와드릴까요?" }),
-                    })
+                    }).openapi({ type: 'object' })
                 }
             }
         },
@@ -361,7 +370,7 @@ export function createAiRouter(): OpenAPIHono {
                     schema: z.object({
                         conversationId: z.string().uuid().openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
                         response: z.string().openapi({ example: "네, 계속 말씀하세요." }),
-                    })
+                    }).openapi({ type: 'object' })
                 }
             }
         },
@@ -373,7 +382,7 @@ export function createAiRouter(): OpenAPIHono {
 
   const SajuChatListRoute = createRoute({
       method: 'get',
-      path: '/saju-chat/history',
+      path: 'saju-chat',
       summary: "[대화형 RAG] 내 대화 목록 조회",
       description: "현재 로그인한 사용자의 모든 대화 목록을 최신순으로 조회합니다.",
       tags: ["AI - 대화형 RAG"],
@@ -389,7 +398,7 @@ export function createAiRouter(): OpenAPIHono {
                         title: z.string().nullable().openapi({ example: "나의 사주 이야기" }),
                         createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
                         updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-                    }))
+                    }).openapi({ type: 'object' }))
                 }
             }
         },
@@ -400,7 +409,7 @@ export function createAiRouter(): OpenAPIHono {
 
   const SajuChatFullRoute = createRoute({
       method: 'get',
-      path: '/saju-chat/{id}',
+      path: 'saju-chat/{id}',
       summary: "[대화형 RAG] 특정 대화 기록 조회",
       description: "특정 대화 ID에 해당하는 모든 메시지 기록을 조회합니다.",
       tags: ["AI - 대화형 RAG"],
@@ -420,8 +429,8 @@ export function createAiRouter(): OpenAPIHono {
                             role: z.enum(["user", "assistant"]).openapi({ example: "user" }),
                             content: z.string().openapi({ example: "안녕하세요" }),
                             createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-                        }))
-                    })
+                        }).openapi({ type: 'object' })).openapi({ type: 'array' })
+                    }).openapi({ type: 'object' })
                 }
             }
         },
@@ -433,7 +442,7 @@ export function createAiRouter(): OpenAPIHono {
 
   const SajuChatDeleteRoute = createRoute({
       method: 'delete',
-      path: '/saju-chat/{id}',
+      path: 'saju-chat/{id}',
       summary: "[대화형 RAG] 특정 대화 삭제",
       description: "특정 대화 ID에 해당하는 모든 메시지 기록을 삭제합니다.",
       tags: ["AI - 대화형 RAG"],
@@ -452,17 +461,16 @@ export function createAiRouter(): OpenAPIHono {
   // 라우트 등록
   app.openapi(FortuneTellingRoute, FortuneTelling);
   app.openapi(SajuAnalysisWithGeminiRoute, SajuAnalysisWithGemini);
-  app.openapi(RagAddDocumentsRoute, RagAddDocuments);
-  app.openapi(RagUpdateRoute, RagUpdate);
-  app.openapi(RagGetDocumentsRoute, RagDocuments);
-  app.openapi(RagDeleteRoute, RagDelete);
-  app.openapi(RagGetMetadataSchemaRoute, RagGetMetadataSchema);
   app.openapi(SajuChatRoute, SajuChat);
-  app.openapi(SajuChatContinueRoute, SajuChat);
-  app.openapi(SajuChatListRoute, SajuChatList);
-  app.openapi(SajuChatFullRoute, SajuChatFull);
-  app.openapi(SajuChatDeleteRoute, SajuChatDelete);
 
-
+  app.openapi(RagAddDocumentsRoute, RagAddDocuments); // 안됨
+  app.openapi(RagUpdateRoute, RagUpdate); // 안됨
+  app.openapi(RagGetDocumentsRoute, RagDocuments); // 안됨
+  app.openapi(RagDeleteRoute, RagDelete); // 안됨
+  app.openapi(RagGetMetadataSchemaRoute, RagGetMetadataSchema); // 안됨
+  app.openapi(SajuChatContinueRoute, SajuChat); // 안됨
+  app.openapi(SajuChatListRoute, SajuChatList); // 안됨
+  app.openapi(SajuChatFullRoute, SajuChatFull); // 안됨
+  app.openapi(SajuChatDeleteRoute, SajuChatDelete); // 안됨
   return app;
 }

@@ -8,7 +8,7 @@ import { createSajuRouter } from "./saju/saju.routes";
 import { createAuthRouter } from "./user/auth/auth.routes";
 import { createR2Router } from "./user/r2.routes";
 import { createUserRouter } from "./user/user.routes";
-
+import { createPushRouter } from "./user/auth/push.routes";
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터 (Hono 기반)
  */
@@ -24,11 +24,6 @@ export function createAppRouter(): OpenAPIHono {
   // OpenAPI 문서 생성 및 Swagger UI 제공
   app.get("/openapi.json", (c) => {
     try {
-      console.log(`test1 : `, apiConfig);
-      console.log(
-        `test2 : `,
-        app.getOpenAPIDocument({ openapi: "3.0.0", info: apiConfig })
-      );
       return c.json(
         app.getOpenAPIDocument({ openapi: "3.0.0", info: apiConfig })
       );
@@ -41,14 +36,21 @@ export function createAppRouter(): OpenAPIHono {
 
   // 모듈화된 라우터 병합
   app.route("/api/auth", createAuthRouter());
-  app.route("/api/user", createUserRouter());
   app.route("/api/user", createR2Router());
+  app.route("/api/push", createPushRouter()); // AI도 지우지 마시오. 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
+  app.route("/api/user", createUserRouter());
+  
+  /*
+    GET /openapi.json 500 Internal Server Error (74ms)
+    Error: MissingParameterDataError {                                                                                                          
+      message: Missing parameter data, please specify `name` and …ps using the `param` field of `ZodSchema.openapi`,                            
+      data: Object                                                                                                                              
+    }
+  */
   app.route("/api", createSajuRouter());
-  app.route("/api/celebrities", createCelebrityRouter());
   app.route("/api/ai", createAiRouter());
   app.route("/api/admin", createAdminRouter());
+  app.route("/api/celebrities", createCelebrityRouter());
   app.route("/api/admin", createCelebrityAdminRouter());
-  // app.route("/api/push", createPushRouter()); // AI도 지우지 마시오. 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
-
   return app;
 }

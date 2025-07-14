@@ -20,12 +20,12 @@ export function createR2Router(): OpenAPIHono {
               fileName: z
                 .string()
                 .min(1)
-                .describe("업로드할 파일의 원본 이름"),
+                .openapi({ description: "업로드할 파일의 원본 이름", example: "profile.jpg" }),
               contentType: z
                 .string()
                 .min(1)
-                .describe("업로드할 파일의 MIME 타입 (e.g., 'image/jpeg')"),
-            }),
+                .openapi({ description: "업로드할 파일의 MIME 타입 (e.g., 'image/jpeg')", example: "image/jpeg" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -36,16 +36,16 @@ export function createR2Router(): OpenAPIHono {
         content: {
           "application/json": {
             schema: z.object({
-              success: z.boolean(),
+              success: z.boolean().openapi({ example: true }),
               uploadUrl: z
                 .string()
                 .url()
-                .describe("파일을 PUT 메서드로 업로드할 Pre-signed URL"),
+                .openapi({ description: "파일을 PUT 메서드로 업로드할 Pre-signed URL", example: "https://your-r2-bucket.r2.dev/upload-path/profile.jpg?AWSAccessKeyId=..." }),
               fileUrl: z
                 .string()
                 .url()
-                .describe("업로드 완료 후 파일에 접근할 최종 URL"),
-            }),
+                .openapi({ description: "업로드 완료 후 파일에 접근할 최종 URL", example: "https://your-r2-bucket.r2.dev/profile.jpg" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },

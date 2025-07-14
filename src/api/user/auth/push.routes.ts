@@ -6,12 +6,12 @@ export function createPushRouter(): OpenAPIHono {
 
   // --- 스키마 정의 ---
   const PushSubscriptionSchema = z.object({
-    endpoint: z.string().url().describe("푸시 서비스 엔드포인트"),
+    endpoint: z.string().url().openapi({ description: "푸시 서비스 엔드포인트", example: "https://fcm.googleapis.com/fcm/send/example" }),
     keys: z.object({
-      p256dh: z.string().describe("P-256 DH 공개 키"),
-      auth: z.string().describe("인증 시크릿"),
-    }),
-  });
+      p256dh: z.string().openapi({ description: "P-256 DH 공개 키", example: "BP_example_key" }),
+      auth: z.string().openapi({ description: "인증 시크릿", example: "example_auth_secret" }),
+    }).openapi({ type: 'object' }),
+  }).openapi({ type: 'object' });
 
   // --- 라우트 정의 ---
   const getVapidPublicKeyRoute = createRoute({
@@ -26,8 +26,8 @@ export function createPushRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: z.object({
-              publicKey: z.string(),
-            }),
+              publicKey: z.string().openapi({ example: "your_vapid_public_key" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -56,7 +56,7 @@ export function createPushRouter(): OpenAPIHono {
         description: "구독 정보 저장 성공",
         content: {
           "application/json": {
-            schema: z.object({ success: z.boolean() }),
+            schema: z.object({ success: z.boolean().openapi({ example: true }) }).openapi({ type: 'object' }),
           },
         },
       },
@@ -64,7 +64,7 @@ export function createPushRouter(): OpenAPIHono {
         description: "이미 구독중",
         content: {
           "application/json": {
-            schema: z.object({ success: z.boolean(), message: z.string() }),
+            schema: z.object({ success: z.boolean().openapi({ example: true }), message: z.string().openapi({ example: "이미 구독중입니다." }) }).openapi({ type: 'object' }),
           },
         },
       },
@@ -86,8 +86,8 @@ export function createPushRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: z.object({
-              endpoint: z.string().url().describe("푸시 서비스 엔드포인트"),
-            }),
+              endpoint: z.string().url().openapi({ description: "푸시 서비스 엔드포인트", example: "https://fcm.googleapis.com/fcm/send/example" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -97,7 +97,7 @@ export function createPushRouter(): OpenAPIHono {
         description: "구독 정보 삭제 성공",
         content: {
           "application/json": {
-            schema: z.object({ success: z.boolean() }),
+            schema: z.object({ success: z.boolean().openapi({ example: true }) }).openapi({ type: 'object' }),
           },
         },
       },

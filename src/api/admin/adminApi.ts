@@ -19,7 +19,7 @@ const toKoreanFields = (profile: any) => ({
 });
 
 // 가입한 유저 목록 조회
-export async function getUsers(c: Context): Promise<Response> {
+export async function getUsers(c: Context): Promise<any> {
   try {
     // 관리자 권한 체크
     if (!(await isAdmin(c))) {
@@ -289,7 +289,7 @@ export async function getLoginHistory(
  */
 export async function getAiUsageStatsByModel(
   c: Context
-): Promise<Response> {
+): Promise<any> {
   if (!(await isAdmin(c))) {
     return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
@@ -391,7 +391,7 @@ export async function getAiUsageStatsByModel(
  */
 export async function getAiUsageStatsByUser(
   c: Context
-): Promise<Response> {
+): Promise<any> {
   if (!(await isAdmin(c))) {
     return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }

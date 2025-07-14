@@ -36,8 +36,15 @@ export function createAdminRouter(): OpenAPIHono {
   });
 
   const UserIdParamSchema = z.object({
-    userId: z.coerce.number().int().positive().openapi({ description: "사용자 ID", example: 1 }),
-  });
+    userId: z.coerce.number().int().positive().openapi({
+      param: {
+        name: "userId",
+        in: "path",
+      },
+      description: "사용자 ID",
+      example: 1,
+    }),
+  }).openapi({ type: 'object' });
 
   const DateRangeQuerySchema = z.object({
     startDate: z.string().optional().openapi({ description: "조회 시작일 (YYYY-MM-DD)", example: "2023-01-01" }),
@@ -57,7 +64,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getUsersRoute = createRoute({
     method: "get",
-    path: "/users",
+    path: "users",
     summary: "가입한 유저 목록 조회",
     description:
       "가입한 모든 유저의 목록을 조회합니다. 페이지네이션과 검색 기능을 지원합니다.",
@@ -83,15 +90,15 @@ export function createAdminRouter(): OpenAPIHono {
                   createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
                   updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
                   profileCount: z.number().int().openapi({ example: 2 }),
-                })
+                }).openapi({ type: 'object' })
               ),
               pagination: z.object({
                 totalItems: z.number().int().openapi({ example: 100 }),
                 totalPages: z.number().int().openapi({ example: 5 }),
                 currentPage: z.number().int().openapi({ example: 1 }),
                 pageSize: z.number().int().openapi({ example: 20 }),
-              }),
-            }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -100,7 +107,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getUserProfilesRoute = createRoute({
     method: "get",
-    path: "/users/{userId}/profiles",
+    path: "users/{userId}/profiles",
     summary: "특정 유저의 프로필 조회",
     description: "특정 유저가 보유한 모든 사주 프로필을 조회합니다.",
     tags: ["Admin"],
@@ -122,10 +129,10 @@ export function createAdminRouter(): OpenAPIHono {
                 picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
                 role: z.string().openapi({ example: "user" }),
                 createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-              }),
-              profiles: z.array(z.any()).openapi({ example: [] }), // toKoreanFields 스키마가 복잡하므로 any로 처리
+              }).openapi({ type: 'object' }),
+              profiles: z.array(z.any().openapi({ type: 'object' })).openapi({ example: [], type: 'array' }), // toKoreanFields 스키마가 복잡하므로 any로 처리
               count: z.number().int().openapi({ example: 2 }),
-            }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -137,7 +144,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAdminStatsRoute = createRoute({
     method: "get",
-    path: "/stats",
+    path: "stats",
     summary: "전체 통계 정보 조회",
     description:
       "전체 사용자 수, 프로필 수 등 관리자용 통계 정보를 조회합니다.",
@@ -154,9 +161,9 @@ export function createAdminRouter(): OpenAPIHono {
                 totalUsers: z.number().int(),
                 totalProfiles: z.number().int(),
                 adminUsers: z.number().int(),
-                averageProfilesPerUser: z.number().nullable(),
-              }),
-            }),
+                averageProfilesPerUser: z.number().nullable().openapi({ example: 1.5 }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -166,7 +173,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getLoginHistoryRoute = createRoute({
     method: "get",
-    path: "/history/login",
+    path: "history/login",
     summary: "로그인/로그아웃 기록 조회",
     description:
       "전체 사용자의 로그인/로그아웃 기록을 페이지네이션으로 조회합니다.",
@@ -177,8 +184,8 @@ export function createAdminRouter(): OpenAPIHono {
         action: z
           .enum(["login", "logout"])
           .optional()
-          .describe("활동 종류 필터링"),
-      }),
+          .openapi({ description: "활동 종류 필터링", example: "login" }),
+      }).openapi({ type: 'object' }),
     },
     responses: {
       200: {
@@ -186,31 +193,31 @@ export function createAdminRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: z.object({
-              success: z.boolean(),
+              success: z.boolean().openapi({ example: true }),
               history: z.array(
                 z.object({
-                  id: z.number(),
-                  action: z.string(),
-                  ip: z.string().nullable(),
-                  userAgent: z.string().nullable(),
-                  createdAt: z.string().datetime(),
+                  id: z.number().openapi({ example: 1 }),
+                  action: z.string().openapi({ example: "login" }),
+                  ip: z.string().nullable().openapi({ example: "192.168.0.1" }),
+                  userAgent: z.string().nullable().openapi({ example: "Mozilla/5.0" }),
+                  createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
                   user: z
                     .object({
-                      id: z.number(),
-                      email: z.string(),
-                      name: z.string(),
-                      picture: z.string().url().nullable(),
+                      id: z.number().openapi({ example: 1 }),
+                      email: z.string().openapi({ example: "user@example.com" }),
+                      name: z.string().openapi({ example: "홍길동" }),
+                      picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
                     })
-                    .nullable(),
-                })
-              ),
+                    .nullable().openapi({ type: 'object' }),
+                }).openapi({ type: 'object' })
+              ).openapi({ type: 'array' }),
               pagination: z.object({
-                totalItems: z.number().int(),
-                totalPages: z.number().int(),
-                currentPage: z.number().int(),
-                pageSize: z.number().int(),
-              }),
-            }),
+                totalItems: z.number().int().openapi({ example: 100 }),
+                totalPages: z.number().int().openapi({ example: 5 }),
+                currentPage: z.number().int().openapi({ example: 1 }),
+                pageSize: z.number().int().openapi({ example: 20 }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -220,7 +227,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAiUsageStatsByModelRoute = createRoute({
     method: "get",
-    path: "/stats/ai-usage-by-model",
+    path: "stats/ai-usage-by-model",
     summary: "[Admin] 모델별 AI 사용량 통계",
     description:
       "기간별로 각 AI 모델의 총 토큰 사용량, 호출 수, 순수 사용자 수를 페이지네이션하여 조회합니다.",
@@ -243,16 +250,16 @@ export function createAdminRouter(): OpenAPIHono {
                   model: z.string(),
                   totalTokens: z.number().int(),
                   callCount: z.number().int(),
-                  userCount: z.number().int(),
-                })
+                  userCount: z.number().int().openapi({ example: 10 }),
+                }).openapi({ type: 'object' })
               ),
               pagination: z.object({
-                totalItems: z.number().int(),
-                totalPages: z.number().int(),
-                currentPage: z.number().int(),
-                pageSize: z.number().int(),
-              }),
-            }),
+                totalItems: z.number().int().openapi({ example: 3 }),
+                totalPages: z.number().int().openapi({ example: 1 }),
+                currentPage: z.number().int().openapi({ example: 1 }),
+                pageSize: z.number().int().openapi({ example: 20 }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -261,14 +268,23 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAiUsageStatsForModelRoute = createRoute({
     method: "get",
-    path: "/stats/ai-usage-by-model/{model}",
+    path: "stats/ai-usage-by-model/{model}",
     summary: "[Admin] 특정 모델의 사용자별 AI 사용량 통계",
     description:
       "특정 AI 모델을 사용한 유저 목록과 각 유저의 토큰 사용량을 페이지네이션하여 조회합니다.",
     tags: ["Admin"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: z.object({ model: z.string().describe("AI 모델 이름") }),
+      params: z.object({
+        model: z.string().openapi({
+          param: {
+            name: "model",
+            in: "path",
+          },
+          description: "AI 모델 이름",
+          example: "gemini-pro",
+        }),
+      }).openapi({ type: "object" }),
       query: PaginationQuerySchema.merge(DateRangeQuerySchema).merge(
         AiUsageSortQuerySchema
       ),
@@ -279,22 +295,22 @@ export function createAdminRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: z.object({
-              success: z.boolean(),
+              success: z.boolean().openapi({ example: true }),
               users: z.array(
                 z.object({
-                  userId: z.number(),
-                  userName: z.string(),
-                  totalTokens: z.number().int(),
-                  callCount: z.number().int(),
-                })
-              ),
+                  userId: z.number().openapi({ example: 1 }),
+                  userName: z.string().openapi({ example: "홍길동" }),
+                  totalTokens: z.number().int().openapi({ example: 1000 }),
+                  callCount: z.number().int().openapi({ example: 10 }),
+                }).openapi({ type: 'object' })
+              ).openapi({ type: 'array' }),
               pagination: z.object({
-                totalItems: z.number().int(),
-                totalPages: z.number().int(),
-                currentPage: z.number().int(),
-                pageSize: z.number().int(),
-              }),
-            }),
+                totalItems: z.number().int().openapi({ example: 100 }),
+                totalPages: z.number().int().openapi({ example: 5 }),
+                currentPage: z.number().int().openapi({ example: 1 }),
+                pageSize: z.number().int().openapi({ example: 20 }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -305,7 +321,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAiUsageStatsByUserRoute = createRoute({
     method: "get",
-    path: "/stats/ai-usage-by-user",
+    path: "stats/ai-usage-by-user",
     summary: "[Admin] 사용자별 AI 사용량 통계",
     description:
       "기간별로 각 사용자의 AI 사용량을 모델별로 상세히 페이지네이션하여 조회합니다.",
@@ -326,17 +342,17 @@ export function createAdminRouter(): OpenAPIHono {
               stats: z.array(
                 z.object({
                   userId: z.number(),
-                  userName: z.string(),
-                  modelUsage: z.any(), // toKoreanFields 스키마가 복잡하므로 any로 처리
-                })
+                  userName: z.string().openapi({ example: "홍길동" }),
+                  modelUsage: z.any().openapi({ type: 'object', example: { "gemini-pro": { totalTokens: 500, callCount: 5 } } }), // toKoreanFields 스키마가 복잡하므로 any로 처리
+                }).openapi({ type: 'object' })
               ),
               pagination: z.object({
-                totalItems: z.number().int(),
-                totalPages: z.number().int(),
-                currentPage: z.number().int(),
-                pageSize: z.number().int(),
-              }),
-            }),
+                totalItems: z.number().int().openapi({ example: 100 }),
+                totalPages: z.number().int().openapi({ example: 5 }),
+                currentPage: z.number().int().openapi({ example: 1 }),
+                pageSize: z.number().int().openapi({ example: 20 }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -345,7 +361,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAiUsageLogsForUserRoute = createRoute({
     method: "get",
-    path: "/users/{userId}/ai-usage",
+    path: "users/{userId}/ai-logs",
     summary: "[Admin] 특정 사용자 AI 사용 기록 조회",
     description:
       "특정 사용자의 모든 AI API 호출 기록을 페이지네이션하여 조회합니다.",
@@ -371,16 +387,16 @@ export function createAdminRouter(): OpenAPIHono {
                   promptTokens: z.number().int(),
                   completionTokens: z.number().int(),
                   totalTokens: z.number().int(),
-                  createdAt: z.string().datetime(),
-                })
+                  createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                }).openapi({ type: 'object' })
               ),
               pagination: z.object({
-                totalItems: z.number().int(),
-                totalPages: z.number().int(),
-                currentPage: z.number().int(),
-                pageSize: z.number().int(),
-              }),
-            }),
+                totalItems: z.number().int().openapi({ example: 100 }),
+                totalPages: z.number().int().openapi({ example: 5 }),
+                currentPage: z.number().int().openapi({ example: 1 }),
+                pageSize: z.number().int().openapi({ example: 20 }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -390,15 +406,13 @@ export function createAdminRouter(): OpenAPIHono {
   });
 
   // 라우트 등록
-  app.openapi(getUsersRoute, async (c) => c.json(await (await getUsers(c)).json()));
-  app.openapi(getUserProfilesRoute, (c) => getUserProfiles(c));
   app.openapi(getAdminStatsRoute, (c) => getAdminStats(c));
-  app.openapi(getLoginHistoryRoute, (c) => getLoginHistory(c));
-  app.openapi(getAiUsageStatsByModelRoute, async (c) => c.json(await (await getAiUsageStatsByModel(c)).json()));
-  // app.openapi(getAiUsageStatsByModelRoute, async (c) => getAiUsageStatsByModel(c));
-  app.openapi(getAiUsageStatsForModelRoute, (c) => getAiUsageStatsForModel(c));
-  app.openapi(getAiUsageStatsByUserRoute, async (c) => c.json(await (await getAiUsageStatsByUser(c)).json()));
-  app.openapi(getAiUsageLogsForUserRoute, (c) => getAiUsageLogsForUser(c));
-
+  app.openapi(getUsersRoute, (c) => getUsers(c)); // 안됨
+  app.openapi(getUserProfilesRoute, (c) => getUserProfiles(c)); // 안됨
+  app.openapi(getLoginHistoryRoute, (c) => getLoginHistory(c)); // 안됨
+  app.openapi(getAiUsageStatsByModelRoute, (c) => getAiUsageStatsByModel(c)); // 안됨
+  app.openapi(getAiUsageStatsForModelRoute, (c) => getAiUsageStatsForModel(c)); // 안됨
+  app.openapi(getAiUsageStatsByUserRoute, (c) => getAiUsageStatsByUser(c)); // 안됨
+  app.openapi(getAiUsageLogsForUserRoute, (c) => getAiUsageLogsForUser(c)); // 안됨
   return app;
 }

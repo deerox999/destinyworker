@@ -23,8 +23,8 @@ export function createAuthRouter(): OpenAPIHono {
             schema: z.object({
               token: z
                 .string()
-                .describe("Google OAuth 토큰(id_token or access_token)"),
-            }),
+                .openapi({ description: "Google OAuth 토큰(id_token or access_token)", example: "your_google_id_token" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -35,18 +35,18 @@ export function createAuthRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: z.object({
-              success: z.boolean(),
-              token: z.string().describe("JWT"),
+              success: z.boolean().openapi({ example: true }),
+              token: z.string().openapi({ description: "JWT", example: "your_jwt_token" }),
               user: z.object({
-                id: z.number(),
-                google_id: z.string(),
-                email: z.string().email(),
-                name: z.string(),
-                picture: z.string().url(),
-                createdAt: z.string().datetime(),
-                updatedAt: z.string().datetime(),
-              }),
-            }),
+                id: z.number().openapi({ example: 1 }),
+                google_id: z.string().openapi({ example: "1234567890" }),
+                email: z.string().email().openapi({ example: "user@example.com" }),
+                name: z.string().openapi({ example: "홍길동" }),
+                picture: z.string().url().openapi({ example: "https://example.com/profile.jpg" }),
+                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -72,9 +72,9 @@ export function createAuthRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: z.object({
-              success: z.boolean(),
-              message: z.string(),
-            }),
+              success: z.boolean().openapi({ example: true }),
+              message: z.string().openapi({ example: "로그아웃 성공" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -99,13 +99,13 @@ export function createAuthRouter(): OpenAPIHono {
           "application/json": {
             schema: z.object({
               user: z.object({
-                id: z.number(),
-                email: z.string().email(),
-                name: z.string(),
-                picture: z.string().url(),
-                createdAt: z.string().datetime(),
-              }),
-            }),
+                id: z.number().openapi({ example: 1 }),
+                email: z.string().email().openapi({ example: "user@example.com" }),
+                name: z.string().openapi({ example: "홍길동" }),
+                picture: z.string().url().openapi({ example: "https://example.com/profile.jpg" }),
+                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -130,9 +130,9 @@ export function createAuthRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: z.object({
-              success: z.boolean(),
-              token: z.string().describe("새로운 JWT"),
-            }),
+              success: z.boolean().openapi({ example: true }),
+              token: z.string().openapi({ description: "새로운 JWT", example: "your_new_jwt_token" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },

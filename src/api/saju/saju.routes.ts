@@ -42,18 +42,18 @@ export function createSajuRouter(): OpenAPIHono {
       .openapi({ description: "출생분 (MM, 00-59)", example: "30" }),
     달력: z.enum(["양력", "음력"]).openapi({ description: "달력 종류", example: "양력" }),
     성별: z.enum(["남자", "여자"]).openapi({ description: "성별", example: "남자" }),
-  });
+  }).openapi({ type: 'object' });
 
   const SajuProfileResponseSchema = SajuProfileSchema.extend({
-    id: z.number().int().positive(),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
-  });
+    id: z.number().int().positive().openapi({ description: "사주 프로필 ID", example: 1 }),
+    createdAt: z.string().datetime().openapi({ description: "생성일", example: "2023-01-01T00:00:00.000Z" }),
+    updatedAt: z.string().datetime().openapi({ description: "수정일", example: "2023-01-01T00:00:00.000Z" }),
+  }).openapi({ type: 'object' });
 
   // 라우트 정의
   const getSajuProfilesRoute = createRoute({
     method: "get",
-    path: "/saju-profiles",
+    path: "saju-profiles",
     summary: "내 사주 프로필 목록 조회",
     description: "현재 로그인한 사용자의 사주 프로필 목록을 조회합니다.",
     tags: ["사주 프로필"],
@@ -65,9 +65,9 @@ export function createSajuRouter(): OpenAPIHono {
           "application/json": {
             schema: z.object({
               success: z.boolean().openapi({ example: true }),
-              profiles: z.array(SajuProfileResponseSchema),
+              profiles: z.array(SajuProfileResponseSchema).openapi({ type: 'array' }),
               count: z.number().int().openapi({ example: 1 }),
-            }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -78,7 +78,7 @@ export function createSajuRouter(): OpenAPIHono {
 
   const createSajuProfileRoute = createRoute({
     method: "post",
-    path: "/saju-profiles",
+    path: "saju-profiles",
     summary: "사주 프로필 생성",
     description: "새로운 사주 프로필을 생성합니다.",
     tags: ["사주 프로필"],
@@ -101,7 +101,7 @@ export function createSajuRouter(): OpenAPIHono {
               success: z.boolean().openapi({ example: true }),
               id: z.number().int().openapi({ example: 1 }),
               message: z.string().openapi({ example: "사주 프로필이 성공적으로 생성되었습니다." }),
-            }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -113,7 +113,7 @@ export function createSajuRouter(): OpenAPIHono {
 
   const getSajuProfileRoute = createRoute({
     method: "get",
-    path: "/saju-profiles/{id}",
+    path: "saju-profiles/{id}",
     summary: "사주 프로필 상세 조회",
     description: "특정 사주 프로필의 상세 정보를 조회합니다.",
     tags: ["사주 프로필"],
@@ -123,9 +123,16 @@ export function createSajuRouter(): OpenAPIHono {
         id: z
           .string()
           .regex(/^\d+$/)
-          .transform(Number)
-          .openapi({ description: "사주 프로필 ID", example: "123" }),
-      }),
+          .pipe(z.coerce.number())
+          .openapi({
+            param: {
+              name: "id",
+              in: "path",
+            },
+            description: "사주 프로필 ID",
+            example: "123",
+          }),
+      }).openapi({ type: "object" }),
     },
     responses: {
       200: {
@@ -135,7 +142,7 @@ export function createSajuRouter(): OpenAPIHono {
             schema: z.object({
               success: z.boolean().openapi({ example: true }),
               profile: SajuProfileResponseSchema,
-            }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -149,7 +156,7 @@ export function createSajuRouter(): OpenAPIHono {
 
   const updateSajuProfileRoute = createRoute({
     method: "put",
-    path: "/saju-profiles/{id}",
+    path: "saju-profiles/{id}",
     summary: "사주 프로필 수정",
     description: "기존 사주 프로필을 수정합니다.",
     tags: ["사주 프로필"],
@@ -159,9 +166,16 @@ export function createSajuRouter(): OpenAPIHono {
         id: z
           .string()
           .regex(/^\d+$/)
-          .transform(Number)
-          .openapi({ description: "사주 프로필 ID", example: "123" }),
-      }),
+          .pipe(z.coerce.number())
+          .openapi({
+            param: {
+              name: "id",
+              in: "path",
+            },
+            description: "사주 프로필 ID",
+            example: "123",
+          }),
+      }).openapi({ type: "object" }),
       body: {
         content: {
           "application/json": {
@@ -178,7 +192,7 @@ export function createSajuRouter(): OpenAPIHono {
             schema: z.object({
               success: z.boolean().openapi({ example: true }),
               message: z.string().openapi({ example: "프로필이 성공적으로 수정되었습니다." }),
-            }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -192,7 +206,7 @@ export function createSajuRouter(): OpenAPIHono {
 
   const deleteSajuProfileRoute = createRoute({
     method: "delete",
-    path: "/saju-profiles/{id}",
+    path: "saju-profiles/{id}",
     summary: "사주 프로필 삭제",
     description: "사주 프로필을 삭제합니다.",
     tags: ["사주 프로필"],
@@ -202,9 +216,16 @@ export function createSajuRouter(): OpenAPIHono {
         id: z
           .string()
           .regex(/^\d+$/)
-          .transform(Number)
-          .openapi({ description: "사주 프로필 ID", example: "123" }),
-      }),
+          .pipe(z.coerce.number())
+          .openapi({
+            param: {
+              name: "id",
+              in: "path",
+            },
+            description: "사주 프로필 ID",
+            example: "123",
+          }),
+      }).openapi({ type: "object" }),
     },
     responses: {
       200: {
@@ -214,7 +235,7 @@ export function createSajuRouter(): OpenAPIHono {
             schema: z.object({
               success: z.boolean().openapi({ example: true }),
               message: z.string().openapi({ example: "프로필이 성공적으로 삭제되었습니다." }),
-            }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
@@ -229,9 +250,8 @@ export function createSajuRouter(): OpenAPIHono {
   // 라우트 등록
   app.openapi(getSajuProfilesRoute, (c) => getSajuProfiles(c));
   app.openapi(createSajuProfileRoute, (c) => createSajuProfile(c));
-  app.openapi(getSajuProfileRoute, (c) => getSajuProfile(c));
-  app.openapi(updateSajuProfileRoute, (c) => updateSajuProfile(c));
-  app.openapi(deleteSajuProfileRoute, (c) => deleteSajuProfile(c));
-
+  app.openapi(getSajuProfileRoute, (c) => getSajuProfile(c)); // 안됨
+  app.openapi(updateSajuProfileRoute, (c) => updateSajuProfile(c)); // 안됨
+  app.openapi(deleteSajuProfileRoute, (c) => deleteSajuProfile(c)); // 안됨
   return app;
 }
