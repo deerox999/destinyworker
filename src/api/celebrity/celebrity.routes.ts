@@ -70,16 +70,16 @@ export function createCelebrityRouter(): OpenAPIHono {
       내가추천함: z.boolean().openapi({ example: true }),
       작성일: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
       수정일: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-  }).openapi({ type: 'object' });
+  });
   
   const RecursiveCommentSchema: z.ZodType<any> = CommentFieldsSchema.extend({
       답글: z.array(CommentFieldsSchema).openapi({ type: 'array' }),
-  }).openapi({ type: 'object' });
+  });
 
   // --- 라우트 정의 ---
   const getCelebritiesRoute = createRoute({
     method: "get",
-    path: "",
+    path: "/",
     summary: "유명인물 목록 조회",
     description: "페이지네이션, 다국어 지원과 함께 유명인물 목록을 조회합니다.",
     tags: ["유명인물"],
@@ -110,7 +110,7 @@ export function createCelebrityRouter(): OpenAPIHono {
 
   const getCelebrityByIdRoute = createRoute({
     method: "get",
-    path: "{id}",
+    path: "/{id}",
     summary: "특정 유명인물 정보 조회",
     description: "ID와 언어 코드를 사용하여 특정 유명인물의 상세 정보를 조회합니다.",
     tags: ["유명인물"],
@@ -136,7 +136,7 @@ export function createCelebrityRouter(): OpenAPIHono {
 
   const getCelebrityCommentsRoute = createRoute({
     method: "get",
-    path: "{id}/comments",
+    path: "/{id}/comments",
     summary: "유명인물 댓글 목록 조회",
     description: "특정 유명인물의 댓글 목록을 페이지네이션, 정렬, 추천 여부와 함께 조회합니다.",
     tags: ["유명인물"],
@@ -209,7 +209,7 @@ export function createCelebrityRouter(): OpenAPIHono {
   
   const updateCelebrityCommentRoute = createRoute({
     method: "put",
-    path: "{id}/comments/{commentId}",
+    path: "/{id}/comments/{commentId}",
     summary: "유명인물 댓글 수정",
     description: "자신이 작성한 댓글을 수정합니다.",
     tags: ["유명인물"],
@@ -248,7 +248,7 @@ export function createCelebrityRouter(): OpenAPIHono {
 
   const deleteCelebrityCommentRoute = createRoute({
     method: "delete",
-    path: "{id}/comments/{commentId}",
+    path: "/{id}/comments/{commentId}",
     summary: "유명인물 댓글 삭제",
     description: "자신이 작성한 댓글 또는 관리자가 댓글을 삭제합니다.",
     tags: ["유명인물"],
@@ -276,7 +276,7 @@ export function createCelebrityRouter(): OpenAPIHono {
   
   const toggleCelebrityCommentLikeRoute = createRoute({
       method: "post",
-      path: "{id}/comments/{commentId}/like",
+      path: "/{id}/comments/{commentId}/like",
       summary: "댓글 추천 토글",
       description: "유명인물 댓글을 추천하거나 추천을 취소합니다.",
       tags: ["유명인물"],

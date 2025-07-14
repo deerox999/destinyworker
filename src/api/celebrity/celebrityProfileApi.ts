@@ -56,7 +56,7 @@ const incrementViewCount = async (
   celebrityId: string,
   c: Context,
   env: any
-): Promise<number> => {
+): Promise<Response> => {
   try {
     // KV 바인딩이 없으면, 중복 체크 없이 단순 증가 처리 (개발 환경 등)
     if (!env.VIEW_CACHE_KV) {
@@ -66,7 +66,10 @@ const incrementViewCount = async (
         update: { viewCount: { increment: 1 } },
         create: { celebrityId, viewCount: 1 },
       });
-      return viewCount.viewCount;
+      return c.json({
+        success: true,
+        viewCount: viewCount.viewCount,
+      });
     }
 
     const fingerprint = getClientFingerprint(c);
@@ -76,7 +79,10 @@ const incrementViewCount = async (
     const alreadyViewed = await env.VIEW_CACHE_KV.get(cacheKey);
     if (alreadyViewed) {
       // 30분 이내 동일 사용자의 조회는 조회수 증가 안함
-      return await getViewCount(prisma, celebrityId);
+      return c.json({
+        success: true,
+        viewCount: await getViewCount(c, prisma, celebrityId),
+      });
     }
     
     // 조회수 증가
@@ -89,30 +95,43 @@ const incrementViewCount = async (
     // KV에 조회 기록 저장 (TTL: 1일)
     await env.VIEW_CACHE_KV.put(cacheKey, "1", { expirationTtl: 60 * 60 * 24 });
 
-    return updatedView.viewCount;
+    return c.json({
+      success: true,
+      viewCount: updatedView.viewCount,
+    });
     
   } catch (error) {
     console.error("Failed to increment view count with KV:", error);
     // 오류 발생 시, 기능 장애를 막기 위해 현재 조회수라도 반환
-    return await getViewCount(prisma, celebrityId);
+    return c.json({
+      success: true,
+      viewCount: await getViewCount(c, prisma, celebrityId),
+    });
   }
 };
 
 
 // 조회수 조회 함수
 const getViewCount = async (
+  c: Context,
   prisma: PrismaClient,
   celebrityId: string
-): Promise<number> => {
+  ): Promise<Response> => {
   try {
     const viewCount = await prisma.celebrityViewCount.findUnique({
       where: { celebrityId },
       select: { viewCount: true },
     });
-    return viewCount?.viewCount || 0;
+    return c.json({
+      success: true,
+      viewCount: viewCount?.viewCount || 0,
+    });
   } catch (error) {
     console.error("Failed to get view count:", error);
-    return 0;
+    return c.json({
+      success: true,
+      viewCount: 0,
+    });
   }
 };
 
@@ -163,7 +182,7 @@ export async function getCelebrities(
       };
     });
 
-    return {
+    return c.json({
       success: true,
       celebrities: result,
       pagination: {
@@ -172,7 +191,7 @@ export async function getCelebrities(
         total,
         totalPages: Math.ceil(total / limit),
       },
-    }
+    });
   } catch (error) {
     console.error("유명인물 목록 조회 실패:", error);
     return c.json(
@@ -188,7 +207,7 @@ export async function getCelebrities(
 // 특정 유명인물 상세 조회 (다국어 지원)
 export async function getCelebrityById(
   c: Context
-): Promise<any> {
+): Promise<Response> {
   try {
     const celebrityId = c.req.param("id");
     if (!celebrityId) {
@@ -228,10 +247,10 @@ export async function getCelebrityById(
       달력: celebrity.calendar === "SOLAR" ? "양력" : "음력",
     };
 
-    return {
+    return c.json({
       success: true,
       celebrity: result,
-    }
+    });
   } catch (error) {
     console.error("유명인물 조회 실패:", error);
     return c.json(
@@ -248,7 +267,7 @@ export async function getCelebrityById(
 // 유명인물 댓글 목록 조회 (페이징 지원, 계층 구조, 조회수 증가, 정렬 기능, 추천 여부 포함)
 export async function getCelebrityComments(
   c: Context
-): Promise<any> {
+  ): Promise<Response> {
   try {
     const celebrityId = c.req.param("id");
     if (!celebrityId)
@@ -341,7 +360,7 @@ export async function getCelebrityComments(
 
     await prisma.$disconnect();
 
-    return {
+    return c.json({
       success: true,
       celebrityId,
       조회수: viewCount,
@@ -356,7 +375,7 @@ export async function getCelebrityComments(
         hasNext: page < Math.ceil(total / limit),
         hasPrev: page > 1,
       },
-    }
+    });
   } catch (error) {
     console.error("댓글 조회 실패:", error);
     return c.json(
@@ -372,7 +391,7 @@ export async function getCelebrityComments(
 // 유명인물 댓글 작성 (로그인 필요)
 export async function createCelebrityComment(
   c: Context
-): Promise<any> {
+): Promise<Response> {
   try {
     const user = await getUserFromToken(c);
     if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
@@ -446,7 +465,7 @@ export async function createCelebrityComment(
 // 유명인물 댓글 수정 (본인만)
 export async function updateCelebrityComment(
   c: Context
-): Promise<any> {
+): Promise<Response> {
   try {
     const user = await getUserFromToken(c);
     if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
