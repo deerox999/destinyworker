@@ -170,7 +170,7 @@ export function createCelebrityRouter(): OpenAPIHono {
 
   const createCelebrityCommentRoute = createRoute({
     method: "post",
-    path: "{id}/comments",
+    path: "/{id}/comments",
     summary: "유명인물 댓글 작성",
     description: "특정 유명인물에게 새로운 댓글이나 대댓글을 작성합니다.",
     tags: ["유명인물"],
@@ -304,7 +304,7 @@ export function createCelebrityRouter(): OpenAPIHono {
 
   const createCelebrityRequestRoute = createRoute({
       method: 'post',
-      path: 'requests',
+      path: '/requests',
       summary: "유명인물 추가 요청",
       description: "새로운 유명인물 추가를 요청합니다.",
       tags: ["유명인물"],
