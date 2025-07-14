@@ -1,4 +1,5 @@
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import { Context } from "hono";
 import {
   createEmbedding,
   findSimilarVectors,
@@ -7,7 +8,6 @@ import {
   RagEnv,
 } from "../../common/ragUtils";
 import { getUserFromToken } from "../../common/utils";
-import { Context } from "hono";
 
 export interface Env extends RagEnv {
   AI: Ai;

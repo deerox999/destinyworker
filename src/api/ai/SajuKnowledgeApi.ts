@@ -1,11 +1,11 @@
 import { PrismaClient } from "@prisma/client";
+import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
 import {
   createEmbedding,
   findSimilarVectors,
   getDocumentsFromD1,
-  logAiUsage,
-  RagEnv,
+  logAiUsage
 } from "../../common/ragUtils";
 import { getUserFromToken } from "../../common/utils";
 import {
@@ -13,7 +13,6 @@ import {
   getRejectionMessage,
   SupportedLanguage,
 } from "./prompt/sajuTeacher";
-import { Context } from "hono";
 
 /**
  * 사용자의 질문이 사주 관련 주제인지 확인합니다.

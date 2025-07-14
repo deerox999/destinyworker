@@ -1,4 +1,4 @@
-import { Context, Hono } from "hono";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
   getAdminStats,
   getAiUsageLogsForUser,
@@ -10,574 +10,395 @@ import {
   getUsers,
 } from "./adminApi";
 
-export function createAdminRouter(): Hono {
-  const app = new Hono();
+export function createAdminRouter(): OpenAPIHono {
+  const app = new OpenAPIHono();
 
-  const getUsersHandler = (c: Context) => getUsers(c);
-  app.get("/users", getUsersHandler);
-  getUsersHandler.swagger = {
+  // --- 스키마 정의 ---
+  const PaginationQuerySchema = z.object({
+    page: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(1)
+      .optional()
+      .openapi({ description: "페이지 번호", example: 1 }),
+    limit: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(20)
+      .optional()
+      .openapi({ description: "페이지당 항목 수", example: 20 }),
+  });
+
+  const UserSearchQuerySchema = z.object({
+    search: z.string().optional().openapi({ description: "검색어 (이름 또는 이메일)", example: "홍길동" }),
+  });
+
+  const UserIdParamSchema = z.object({
+    userId: z.coerce.number().int().positive().openapi({ description: "사용자 ID", example: 1 }),
+  });
+
+  const DateRangeQuerySchema = z.object({
+    startDate: z.string().optional().openapi({ description: "조회 시작일 (YYYY-MM-DD)", example: "2023-01-01" }),
+    endDate: z.string().optional().openapi({ description: "조회 종료일 (YYYY-MM-DD)", example: "2023-01-31" }),
+  });
+
+  const AiUsageSortQuerySchema = z.object({
+    sort: z.string().default("total_tokens").optional().openapi({ description: "정렬 필드", example: "total_tokens" }),
+    order: z
+      .enum(["asc", "desc"])
+      .default("desc")
+      .optional()
+      .openapi({ description: "정렬 순서", example: "desc" }),
+  });
+
+  // --- 라우트 정의 ---
+
+  const getUsersRoute = createRoute({
+    method: "get",
+    path: "/users",
     summary: "가입한 유저 목록 조회",
     description:
       "가입한 모든 유저의 목록을 조회합니다. 페이지네이션과 검색 기능을 지원합니다.",
-    tags: ["관리자"],
+    tags: ["Admin"],
     security: [{ BearerAuth: [] }],
-    parameters: [
-      {
-        name: "page",
-        in: "query",
-        required: false,
-        description: "페이지 번호 (기본값: 1)",
-        schema: { type: "integer", default: 1, minimum: 1 },
-      },
-      {
-        name: "limit",
-        in: "query",
-        required: false,
-        description: "페이지당 항목 수 (기본값: 20)",
-        schema: { type: "integer", default: 20, minimum: 1, maximum: 100 },
-      },
-      {
-        name: "search",
-        in: "query",
-        required: false,
-        description: "검색어 (이름 또는 이메일)",
-        schema: { type: "string" },
-      },
-    ],
+    request: {
+      query: PaginationQuerySchema.merge(UserSearchQuerySchema),
+    },
     responses: {
-      "200": {
+      200: {
         description: "성공적인 응답",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                data: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "integer" },
-                      email: { type: "string" },
-                      name: { type: "string" },
-                      picture: { type: "string" },
-                      role: { type: "string" },
-                      createdAt: { type: "string", format: "date-time" },
-                      updatedAt: { type: "string", format: "date-time" },
-                      profileCount: { type: "integer" },
-                    },
-                  },
-                },
-                pagination: {
-                  type: "object",
-                  properties: {
-                    totalItems: { type: "integer" },
-                    totalPages: { type: "integer" },
-                    currentPage: { type: "integer" },
-                    pageSize: { type: "integer" },
-                  },
-                },
-              },
-            },
+            schema: z.object({
+              success: z.boolean().openapi({ example: true }),
+              users: z.array(
+                z.object({
+                  id: z.number().openapi({ example: 1 }),
+                  email: z.string().openapi({ example: "user@example.com" }),
+                  name: z.string().openapi({ example: "홍길동" }),
+                  picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
+                  role: z.string().openapi({ example: "user" }),
+                  createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                  updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                  profileCount: z.number().int().openapi({ example: 2 }),
+                })
+              ),
+              pagination: z.object({
+                totalItems: z.number().int().openapi({ example: 100 }),
+                totalPages: z.number().int().openapi({ example: 5 }),
+                currentPage: z.number().int().openapi({ example: 1 }),
+                pageSize: z.number().int().openapi({ example: 20 }),
+              }),
+            }),
           },
         },
       },
     },
-  };
+  });
 
-  const getUserProfilesHandler = (c: Context) => getUserProfiles(c);
-  app.get("/users/:userId/profiles", getUserProfilesHandler);
-  getUserProfilesHandler.swagger = {
+  const getUserProfilesRoute = createRoute({
+    method: "get",
+    path: "/users/{userId}/profiles",
     summary: "특정 유저의 프로필 조회",
     description: "특정 유저가 보유한 모든 사주 프로필을 조회합니다.",
-    tags: ["관리자"],
+    tags: ["Admin"],
     security: [{ BearerAuth: [] }],
-    parameters: [
-      {
-        name: "userId",
-        in: "path",
-        required: true,
-        description: "사용자 ID",
-        schema: { type: "integer" },
-      },
-    ],
+    request: {
+      params: UserIdParamSchema,
+    },
     responses: {
-      "200": {
+      200: {
         description: "성공",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                user: {
-                  type: "object",
-                  properties: {
-                    id: { type: "integer" },
-                    email: { type: "string" },
-                    name: { type: "string" },
-                    picture: { type: "string" },
-                    role: { type: "string" },
-                    createdAt: { type: "string", format: "date-time" },
-                  },
-                },
-                profiles: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "integer" },
-                      이름: { type: "string" },
-                      년: { type: "string" },
-                      월: { type: "string" },
-                      일: { type: "string" },
-                      시간: { type: "string" },
-                      분: { type: "string" },
-                      달력: { type: "string" },
-                      성별: { type: "string" },
-                      createdAt: { type: "string", format: "date-time" },
-                      updatedAt: { type: "string", format: "date-time" },
-                    },
-                  },
-                },
-                count: { type: "integer" },
-              },
-            },
+            schema: z.object({
+              success: z.boolean().openapi({ example: true }),
+              user: z.object({
+                id: z.number().openapi({ example: 1 }),
+                email: z.string().openapi({ example: "user@example.com" }),
+                name: z.string().openapi({ example: "홍길동" }),
+                picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
+                role: z.string().openapi({ example: "user" }),
+                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+              }),
+              profiles: z.array(z.any()).openapi({ example: [] }), // toKoreanFields 스키마가 복잡하므로 any로 처리
+              count: z.number().int().openapi({ example: 2 }),
+            }),
           },
         },
       },
-      "400": { description: "잘못된 사용자 ID" },
-      "403": { description: "관리자 권한이 필요합니다." },
-      "404": { description: "사용자를 찾을 수 없습니다." },
+      400: { description: "잘못된 사용자 ID" },
+      403: { description: "관리자 권한이 필요합니다." },
+      404: { description: "사용자를 찾을 수 없습니다." },
     },
-  };
+  });
 
-  const getAdminStatsHandler = (c: Context) => getAdminStats(c);
-  app.get("/stats", getAdminStatsHandler);
-  getAdminStatsHandler.swagger = {
+  const getAdminStatsRoute = createRoute({
+    method: "get",
+    path: "/stats",
     summary: "전체 통계 정보 조회",
     description:
       "전체 사용자 수, 프로필 수 등 관리자용 통계 정보를 조회합니다.",
-    tags: ["관리자"],
+    tags: ["Admin"],
     security: [{ BearerAuth: [] }],
     responses: {
-      "200": {
+      200: {
         description: "성공",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                stats: {
-                  type: "object",
-                  properties: {
-                    totalUsers: { type: "integer" },
-                    totalProfiles: { type: "integer" },
-                    adminUsers: { type: "integer" },
-                    averageProfilesPerUser: { type: "number" },
-                  },
-                },
-              },
-            },
+            schema: z.object({
+              success: z.boolean(),
+              stats: z.object({
+                totalUsers: z.number().int(),
+                totalProfiles: z.number().int(),
+                adminUsers: z.number().int(),
+                averageProfilesPerUser: z.number().nullable(),
+              }),
+            }),
           },
         },
       },
-      "403": { description: "관리자 권한이 필요합니다." },
+      403: { description: "관리자 권한이 필요합니다." },
     },
-  };
+  });
 
-  const getLoginHistoryHandler = (c: Context) => getLoginHistory(c);
-  app.get("/history/login", getLoginHistoryHandler);
-  getLoginHistoryHandler.swagger = {
+  const getLoginHistoryRoute = createRoute({
+    method: "get",
+    path: "/history/login",
     summary: "로그인/로그아웃 기록 조회",
     description:
       "전체 사용자의 로그인/로그아웃 기록을 페이지네이션으로 조회합니다.",
-    tags: ["관리자"],
-    security: [{ BearerAuth: [] }], // `isAdmin` check is inside the handler
-    parameters: [
-      {
-        name: "page",
-        in: "query",
-        schema: { type: "integer", default: 1 },
-        description: "페이지 번호",
-      },
-      {
-        name: "limit",
-        in: "query",
-        schema: { type: "integer", default: 20 },
-        description: "페이지 당 항목 수",
-      },
-      {
-        name: "search",
-        in: "query",
-        schema: { type: "string" },
-        description: "사용자 이름 또는 이메일로 검색",
-      },
-      {
-        name: "action",
-        in: "query",
-        schema: { type: "string", enum: ["login", "logout"] },
-        description: "활동 종류 필터링",
-      },
-    ],
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      query: PaginationQuerySchema.merge(UserSearchQuerySchema).extend({
+        action: z
+          .enum(["login", "logout"])
+          .optional()
+          .describe("활동 종류 필터링"),
+      }),
+    },
     responses: {
-      "200": {
+      200: {
         description: "성공",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                history: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "integer" },
-                      action: { type: "string", enum: ["login", "logout"] },
-                      createdAt: { type: "string", format: "date-time" },
-                      user: {
-                        type: "object",
-                        properties: {
-                          id: { type: "integer" },
-                          email: { type: "string" },
-                          name: { type: "string" },
-                          picture: { type: "string" },
-                        },
-                      },
-                    },
-                  },
-                },
-                pagination: {
-                  type: "object",
-                  properties: {
-                    totalItems: { type: "integer" },
-                    totalPages: { type: "integer" },
-                    currentPage: { type: "integer" },
-                    pageSize: { type: "integer" },
-                  },
-                },
-              },
-            },
+            schema: z.object({
+              success: z.boolean(),
+              history: z.array(
+                z.object({
+                  id: z.number(),
+                  action: z.string(),
+                  ip: z.string().nullable(),
+                  userAgent: z.string().nullable(),
+                  createdAt: z.string().datetime(),
+                  user: z
+                    .object({
+                      id: z.number(),
+                      email: z.string(),
+                      name: z.string(),
+                      picture: z.string().url().nullable(),
+                    })
+                    .nullable(),
+                })
+              ),
+              pagination: z.object({
+                totalItems: z.number().int(),
+                totalPages: z.number().int(),
+                currentPage: z.number().int(),
+                pageSize: z.number().int(),
+              }),
+            }),
           },
         },
       },
-      "403": { description: "관리자 권한이 필요합니다." },
+      403: { description: "관리자 권한이 필요합니다." },
     },
-  };
+  });
 
-  // 모델별 AI 사용량 통계 조회
-  const getAiUsageStatsByModelHandler = (c: Context) =>
-    getAiUsageStatsByModel(c);
-  app.get("/stats/ai-usage-by-model", getAiUsageStatsByModelHandler);
-  getAiUsageStatsByModelHandler.swagger = {
+  const getAiUsageStatsByModelRoute = createRoute({
+    method: "get",
+    path: "/stats/ai-usage-by-model",
     summary: "[Admin] 모델별 AI 사용량 통계",
     description:
       "기간별로 각 AI 모델의 총 토큰 사용량, 호출 수, 순수 사용자 수를 페이지네이션하여 조회합니다.",
     tags: ["Admin"],
     security: [{ BearerAuth: [] }],
-    parameters: [
-      {
-        name: "page",
-        in: "query",
-        description: "페이지 번호",
-        schema: { type: "integer", default: 1 },
-      },
-      {
-        name: "limit",
-        in: "query",
-        description: "페이지당 항목 수",
-        schema: { type: "integer", default: 20 },
-      },
-      {
-        name: "startDate",
-        in: "query",
-        description: "조회 시작일 (YYYY-MM-DD)",
-        schema: { type: "string", format: "date" },
-      },
-      {
-        name: "endDate",
-        in: "query",
-        description: "조회 종료일 (YYYY-MM-DD)",
-        schema: { type: "string", format: "date" },
-      },
-      {
-        name: "sort",
-        in: "query",
-        description:
-          "정렬 필드 (model, total_tokens, total_calls, unique_users)",
-        schema: { type: "string", default: "total_tokens" },
-      },
-      {
-        name: "order",
-        in: "query",
-        description: "정렬 순서",
-        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
-      },
-    ],
+    request: {
+      query: PaginationQuerySchema.merge(DateRangeQuerySchema).merge(
+        AiUsageSortQuerySchema
+      ),
+    },
     responses: {
-      "200": {
+      200: {
         description: "모델별 통계 조회 성공",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                stats: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      model: {
-                        type: "string",
-                        description: "AI 모델 이름",
-                      },
-                      total_tokens: {
-                        type: "integer",
-                      },
-                      total_calls: {
-                        type: "integer",
-                      },
-                      unique_users: {
-                        type: "integer",
-                      },
-                    },
-                  },
-                },
-              },
-            },
+            schema: z.object({
+              success: z.boolean(),
+              stats: z.array(
+                z.object({
+                  model: z.string(),
+                  totalTokens: z.number().int(),
+                  callCount: z.number().int(),
+                  userCount: z.number().int(),
+                })
+              ),
+              pagination: z.object({
+                totalItems: z.number().int(),
+                totalPages: z.number().int(),
+                currentPage: z.number().int(),
+                pageSize: z.number().int(),
+              }),
+            }),
           },
         },
       },
     },
-  };
+  });
 
-  // 특정 모델의 사용자별 AI 사용량 통계 조회
-  const getAiUsageStatsForModelHandler = (c: Context) =>
-    getAiUsageStatsForModel(c);
-  app.get("/stats/ai-usage-by-model/:model+", getAiUsageStatsForModelHandler);
-  getAiUsageStatsForModelHandler.swagger = {
+  const getAiUsageStatsForModelRoute = createRoute({
+    method: "get",
+    path: "/stats/ai-usage-by-model/{model}",
     summary: "[Admin] 특정 모델의 사용자별 AI 사용량 통계",
     description:
-      "특정 AI 모델을 사용한 유저 목록과 각 유저의 토큰 사용량을 페이지네이션하여 조회합니다. 모델 이름에 '/'가 포함될 수 있으므로 인코딩된 상태로 요청해야 합니다.",
+      "특정 AI 모델을 사용한 유저 목록과 각 유저의 토큰 사용량을 페이지네이션하여 조회합니다.",
     tags: ["Admin"],
     security: [{ BearerAuth: [] }],
-    parameters: [
-      {
-        name: "model",
-        in: "path",
-        required: true,
-        description: "AI 모델 이름 (URL-encoded)",
-        schema: { type: "string" },
-      },
-      {
-        name: "page",
-        in: "query",
-        schema: { type: "integer", default: 1 },
-        description: "페이지 번호",
-      },
-      {
-        name: "limit",
-        in: "query",
-        schema: { type: "integer", default: 20 },
-        description: "페이지당 항목 수",
-      },
-      {
-        name: "startDate",
-        in: "query",
-        description: "조회 시작일 (YYYY-MM-DD)",
-        schema: { type: "string", format: "date" },
-      },
-      {
-        name: "endDate",
-        in: "query",
-        description: "조회 종료일 (YYYY-MM-DD)",
-        schema: { type: "string", format: "date" },
-      },
-      {
-        name: "sort",
-        in: "query",
-        description:
-          "정렬 필드 (total_tokens, total_prompt_tokens, total_completion_tokens, total_calls)",
-        schema: { type: "string", default: "total_tokens" },
-      },
-      {
-        name: "order",
-        in: "query",
-        description: "정렬 순서",
-        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
-      },
-    ],
-    responses: {
-      "200": { description: "성공" },
-      "400": { description: "모델 이름이 필요합니다." },
-      "403": { description: "관리자 권한이 필요합니다." },
+    request: {
+      params: z.object({ model: z.string().describe("AI 모델 이름") }),
+      query: PaginationQuerySchema.merge(DateRangeQuerySchema).merge(
+        AiUsageSortQuerySchema
+      ),
     },
-  };
+    responses: {
+      200: {
+        description: "성공",
+        content: {
+          "application/json": {
+            schema: z.object({
+              success: z.boolean(),
+              users: z.array(
+                z.object({
+                  userId: z.number(),
+                  userName: z.string(),
+                  totalTokens: z.number().int(),
+                  callCount: z.number().int(),
+                })
+              ),
+              pagination: z.object({
+                totalItems: z.number().int(),
+                totalPages: z.number().int(),
+                currentPage: z.number().int(),
+                pageSize: z.number().int(),
+              }),
+            }),
+          },
+        },
+      },
+      400: { description: "모델 이름이 필요합니다." },
+      403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
 
-  // 사용자별 AI 사용량 통계 조회
-  const getAiUsageStatsByUserHandler = (c: Context) => getAiUsageStatsByUser(c);
-  app.get("/stats/ai-usage-by-user", getAiUsageStatsByUserHandler);
-  getAiUsageStatsByUserHandler.swagger = {
+  const getAiUsageStatsByUserRoute = createRoute({
+    method: "get",
+    path: "/stats/ai-usage-by-user",
     summary: "[Admin] 사용자별 AI 사용량 통계",
     description:
       "기간별로 각 사용자의 AI 사용량을 모델별로 상세히 페이지네이션하여 조회합니다.",
     tags: ["Admin"],
     security: [{ BearerAuth: [] }],
-    parameters: [
-      {
-        name: "page",
-        in: "query",
-        description: "페이지 번호",
-        schema: { type: "integer", default: 1 },
-      },
-      {
-        name: "limit",
-        in: "query",
-        description: "페이지당 항목 수",
-        schema: { type: "integer", default: 20 },
-      },
-      {
-        name: "startDate",
-        in: "query",
-        description: "조회 시작일 (YYYY-MM-DD)",
-        schema: { type: "string", format: "date" },
-      },
-      {
-        name: "endDate",
-        in: "query",
-        description: "조회 종료일 (YYYY-MM-DD)",
-        schema: { type: "string", format: "date" },
-      },
-      {
-        name: "sort",
-        in: "query",
-        description: "정렬 필드 (total_tokens, total_calls)",
-        schema: { type: "string", default: "total_tokens" },
-      },
-      {
-        name: "order",
-        in: "query",
-        description: "정렬 순서",
-        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
-      },
-    ],
+    request: {
+      query: PaginationQuerySchema.merge(DateRangeQuerySchema).merge(
+        AiUsageSortQuerySchema
+      ),
+    },
     responses: {
-      "200": {
+      200: {
         description: "사용자별 통계 조회 성공",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                stats: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      user: {
-                        type: "object",
-                        properties: {
-                          id: { type: "integer" },
-                          name: { type: "string" },
-                          email: { type: "string" },
-                        },
-                      },
-                      totalUsage: {
-                        type: "object",
-                        properties: {
-                          tokens: { type: "integer" },
-                          calls: { type: "integer" },
-                        },
-                      },
-                      modelUsage: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            model: { type: "string" },
-                            total_tokens: { type: "integer" },
-                            total_calls: { type: "integer" },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
+            schema: z.object({
+              success: z.boolean(),
+              stats: z.array(
+                z.object({
+                  userId: z.number(),
+                  userName: z.string(),
+                  modelUsage: z.any(), // toKoreanFields 스키마가 복잡하므로 any로 처리
+                })
+              ),
+              pagination: z.object({
+                totalItems: z.number().int(),
+                totalPages: z.number().int(),
+                currentPage: z.number().int(),
+                pageSize: z.number().int(),
+              }),
+            }),
           },
         },
       },
     },
-  };
+  });
 
-  // 특정 사용자의 AI 사용 기록 조회
-  const getAiUsageLogsForUserHandler = (c: Context) => getAiUsageLogsForUser(c);
-  app.get("/users/:userId/ai-usage", getAiUsageLogsForUserHandler);
-  getAiUsageLogsForUserHandler.swagger = {
+  const getAiUsageLogsForUserRoute = createRoute({
+    method: "get",
+    path: "/users/{userId}/ai-usage",
     summary: "[Admin] 특정 사용자 AI 사용 기록 조회",
     description:
-      "특정 사용자의 모든 AI API 호출 기록을 페이지네이션하여 조회합니다. 기간 및 정렬 필터링을 지원합니다.",
+      "특정 사용자의 모든 AI API 호출 기록을 페이지네이션하여 조회합니다.",
     tags: ["Admin"],
     security: [{ BearerAuth: [] }],
-    parameters: [
-      {
-        name: "userId",
-        in: "path",
-        required: true,
-        schema: { type: "integer" },
-        description: "사용자 ID",
-      },
-      {
-        name: "page",
-        in: "query",
-        schema: { type: "integer", default: 1 },
-        description: "페이지 번호",
-      },
-      {
-        name: "limit",
-        in: "query",
-        schema: { type: "integer", default: 20 },
-        description: "페이지당 항목 수",
-      },
-      {
-        name: "startDate",
-        in: "query",
-        schema: { type: "string", format: "date" },
-        description: "조회 시작일 (YYYY-MM-DD)",
-      },
-      {
-        name: "endDate",
-        in: "query",
-        schema: { type: "string", format: "date" },
-        description: "조회 종료일 (YYYY-MM-DD)",
-      },
-      {
-        name: "sort",
-        in: "query",
-        description: "정렬 필드 (e.g., total_tokens, created_at)",
-        schema: { type: "string", default: "created_at" },
-      },
-      {
-        name: "order",
-        in: "query",
-        description: "정렬 순서",
-        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
-      },
-    ],
-    responses: {
-      "200": {
-        description: "성공",
-      },
-      "403": { description: "관리자 권한이 필요합니다." },
-      "400": { description: "잘못된 사용자 ID입니다." },
+    request: {
+      params: UserIdParamSchema,
+      query: PaginationQuerySchema.merge(DateRangeQuerySchema).merge(
+        AiUsageSortQuerySchema
+      ),
     },
-  };
+    responses: {
+      200: {
+        description: "성공",
+        content: {
+          "application/json": {
+            schema: z.object({
+              success: z.boolean(),
+              logs: z.array(
+                z.object({
+                  id: z.number(),
+                  model: z.string(),
+                  promptTokens: z.number().int(),
+                  completionTokens: z.number().int(),
+                  totalTokens: z.number().int(),
+                  createdAt: z.string().datetime(),
+                })
+              ),
+              pagination: z.object({
+                totalItems: z.number().int(),
+                totalPages: z.number().int(),
+                currentPage: z.number().int(),
+                pageSize: z.number().int(),
+              }),
+            }),
+          },
+        },
+      },
+      400: { description: "잘못된 사용자 ID입니다." },
+      403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
+  // 라우트 등록
+  app.openapi(getUsersRoute, async (c) => c.json(await (await getUsers(c)).json()));
+  app.openapi(getUserProfilesRoute, (c) => getUserProfiles(c));
+  app.openapi(getAdminStatsRoute, (c) => getAdminStats(c));
+  app.openapi(getLoginHistoryRoute, (c) => getLoginHistory(c));
+  app.openapi(getAiUsageStatsByModelRoute, async (c) => c.json(await (await getAiUsageStatsByModel(c)).json()));
+  // app.openapi(getAiUsageStatsByModelRoute, async (c) => getAiUsageStatsByModel(c));
+  app.openapi(getAiUsageStatsForModelRoute, (c) => getAiUsageStatsForModel(c));
+  app.openapi(getAiUsageStatsByUserRoute, async (c) => c.json(await (await getAiUsageStatsByUser(c)).json()));
+  app.openapi(getAiUsageLogsForUserRoute, (c) => getAiUsageLogsForUser(c));
 
   return app;
 }

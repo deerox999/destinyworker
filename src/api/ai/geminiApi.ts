@@ -4,6 +4,7 @@
 */
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 import { Context } from "hono";
+import { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   createEmbedding,
   findSimilarVectors,
@@ -11,7 +12,6 @@ import {
   RagEnv
 } from "../../common/ragUtils";
 import { getUserFromToken } from "../../common/utils";
-import { ContentfulStatusCode } from "hono/utils/http-status";
 
 // Gemini API와 통신하기 위한 환경 변수 확장
 export interface Env extends RagEnv {

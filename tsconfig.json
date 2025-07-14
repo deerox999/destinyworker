@@ -9,7 +9,8 @@
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
     "types": [
-      "./worker-configuration.d.ts"
+      "./worker-configuration.d.ts",
+      "@hono/swagger-ui"
     ],
     "noEmit": true,
     "isolatedModules": true,

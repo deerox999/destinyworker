@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
-import { getUserFromToken } from "../../common/utils";
 import { Context } from "hono";
+import { getUserFromToken } from "../../common/utils";
 
 // 중첩된 댓글에서 모든 댓글 ID 추출
 const getAllCommentIds = (comments: any[]): number[] => {

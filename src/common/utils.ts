@@ -1,26 +1,4 @@
-import { createAppRouter } from "../api/routes";
-import { generateOpenApiFromRouter } from "./swagger/autoOpenApi";
 import { Context } from "hono";
-
-// OpenAPI 스펙 생성 함수
-export function generateOpenApiSpec(c: Context) {
-  const url = new URL(c.req.url);
-  const tagsQuery = url.searchParams.get("tags");
-  const filterTags = tagsQuery ? tagsQuery.split(",") : [];
-
-  // 라우터 기반으로 OpenAPI 스펙 자동 생성
-  const appRouter = createAppRouter();
-  return generateOpenApiFromRouter(
-    appRouter,
-    {
-      title: "Destiny API",
-      version: "1.0.0",
-      description: "사주 서비스를 위한 백엔드 API",
-    },
-    filterTags,
-    c.env.ENVIRONMENT
-  );
-}
 
 // JWT 토큰에서 사용자 정보 추출
 export const getUserFromToken = async (

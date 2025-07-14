@@ -1,23 +1,21 @@
-import { Hono } from "hono";
+import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { createAppRouter } from "./api/routes";
 
-const app = new Hono();
-
-const allowedOrigins = [
-  "http://localhost:9999",
-  "http://127.0.0.1:9999",
-  "http://localhost:9393",
-  "http://127.0.0.1:9393",
-  "https://youram.me",
-  "https://destiny-91f.pages.dev",
-];
+const app = new OpenAPIHono();
 
 // CORS 미들웨어 적용
 app.use(
   "*",
   cors({
-    origin: allowedOrigins, // 실제 프로덕션에서는 특정 도메인으로 제한하세요.
+    origin: [
+      "http://localhost:9999",
+      "http://127.0.0.1:9999",
+      "http://localhost:9393",
+      "http://127.0.0.1:9393",
+      "https://youram.me",
+      "https://destiny-91f.pages.dev",
+    ],
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     maxAge: 86400,
@@ -26,12 +24,16 @@ app.use(
 
 // 에러 핸들링
 app.onError((err, c) => {
-  console.error(`Global Error: ${err}`);
+  console.error(`Global Error:`, err);
+  if (err.cause) {
+    console.error(`Error Cause:`, err.cause);
+  }
   return c.json(
     {
       error: "서버 내부 오류가 발생했습니다.",
       message: err instanceof Error ? err.message : "Unknown error",
       stack: err instanceof Error ? err.stack : undefined,
+      cause: err.cause,
     },
     500
   );

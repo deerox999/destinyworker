@@ -6,6 +6,7 @@ declare namespace Cloudflare {
 		GOOGLE_CLIENT_ID: "337392205026-edu53b4l8cb843u6vq1s2aniljfhq0e4.apps.googleusercontent.com";
 		DB: D1Database;
 		AI: Ai;
+		ENVIRONMENT?: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

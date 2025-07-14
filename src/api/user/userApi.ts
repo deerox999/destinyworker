@@ -1,7 +1,7 @@
+import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
 import { deleteR2Object } from "./r2Api";
-import { Context } from "hono";
 
 // 프로필 이름 유효성 검사
 const validateUserName = (userName: string): boolean => {

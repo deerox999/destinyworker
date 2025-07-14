@@ -1,13 +1,7 @@
-import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import { D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import { Context } from "hono";
 import { paginate } from "../../common/paginationUtils";
 import { createEmbedding, createEmbeddings } from "../../common/ragUtils";
-import { Context } from "hono";
-
-export interface Env {
-  AI: Ai;
-  DB: D1Database;
-  VECTORIZE_INDEX: VectorizeIndex;
-}
 
 /**
  * RAG 문서에 대한 사주 프로젝트용 표준 메타데이터 스키마.
@@ -268,8 +262,7 @@ export async function RagDelete(c: Context): Promise<Response> {
 // =================================================================
 
 export async function RagUpdate(
-  c: Context,
-  env: Env
+  c: Context
 ): Promise<Response> {
   const docId = parseInt(c.req.param("id"), 10);
 
@@ -292,17 +285,10 @@ export async function RagUpdate(
     }
 
     // 기존 문서를 가져와서 텍스트 변경 여부 확인
-      const oldDoc = await env.DB.prepare(
-      "SELECT text FROM documents WHERE id = ?"
-    )
-      .bind(docId)
-      .first<{ text: string }>();
+    const oldDoc = await c.env.DB.prepare("SELECT text FROM documents WHERE id = ?");
 
     if (!oldDoc) {
-      return c.json(
-        { error: `Document with ID ${docId} not found.` },
-        404
-      );
+      return c.json({ error: `Document with ID ${docId} not found.` }, 404);
     }
 
     // D1에 문서 업데이트
@@ -314,8 +300,8 @@ export async function RagUpdate(
 
     // 텍스트가 변경된 경우에만 임베딩을 다시 생성하고 벡터를 업데이트
     if (oldDoc.text !== text) {
-      const embedding = await createEmbedding(env.AI, text);
-      await env.VECTORIZE_INDEX.upsert([
+      const embedding = await createEmbedding(c.env.AI, text);
+      await c.env.VECTORIZE_INDEX.upsert([
         { id: docId.toString(), values: embedding },
       ]);
     }
