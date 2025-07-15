@@ -86,13 +86,13 @@ export const CelebritySchema = z
     birthYear: z.number().int().openapi({ example: 1993 }),
     birthMonth: z.number().int().openapi({ example: 5 }),
     birthDay: z.number().int().openapi({ example: 16 }),
-    birthHour: z.number().int().optional().openapi({ example: 10 }),
-    birthMinute: z.number().int().optional().openapi({ example: 30 }),
+    birthHour: z.number().int().nullable().optional().openapi({ example: 10 }),
+    birthMinute: z.number().int().nullable().optional().openapi({ example: 30 }),
     calendar: z.enum(["SOLAR", "LUNAR"]).openapi({ example: "SOLAR" }),
     gender: z.enum(["MALE", "FEMALE"]).openapi({ example: "FEMALE" }),
     imageUrl: z
       .string()
-      .url()
+      .nullable()
       .optional()
       .openapi({ example: "https://example.com/iu.jpg" }),
     translations: z.array(TranslationSchema).openapi({ type: "array" }),
