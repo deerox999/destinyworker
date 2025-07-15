@@ -11,29 +11,12 @@ import {
 } from "./adminApi";
 
 import { MiddlewareHandler } from "hono";
+import { PaginationQuerySchema } from "../../common/schemas";
 
 export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
 
   app.use(authMiddleware);
-
-  // --- 스키마 정의 ---
-  const PaginationQuerySchema = z.object({
-    page: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(1)
-      .optional()
-      .openapi({ description: "페이지 번호", example: 1 }),
-    limit: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(20)
-      .optional()
-      .openapi({ description: "페이지당 항목 수", example: 20 }),
-  });
 
   const UserSearchQuerySchema = z.object({
     search: z.string().optional().openapi({ description: "검색어 (이름 또는 이메일)", example: "홍길동" }),

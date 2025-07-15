@@ -16,6 +16,7 @@ import {
 } from "./SajuKnowledgeApi";
 
 import { MiddlewareHandler } from "hono";
+import { RagIdParamSchema, ConversationIdParamSchema } from "../../common/schemas";
 
 export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -80,34 +81,12 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
     text: z.string().openapi({ description: "저장할 텍스트 내용", example: "정관은..." }),
     metadata: RagMetadataSchema,
   }).openapi({ type: 'object' });
-
-  const RagIdParamSchema = z.object({
-    id: z.coerce.number().int().positive().openapi({
-      param: {
-        name: "id",
-        in: "path",
-      },
-      description: "문서 ID",
-      example: 123,
-    }),
-  }).openapi({ type: "object" });
   
   // 대화형 RAG 스키마
   const SajuChatRequestSchema = z.object({
       message: z.string().openapi({ description: "사용자 메시지", example: "안녕하세요, 제 사주에 대해 알려주세요." }),
       i18n: z.enum(["ko", "en", "ja", "zh", "vi"]).default("ko").optional().openapi({ description: "언어 코드", example: "ko" })
   }).openapi({ type: 'object' });
-  
-  const ConversationIdParamSchema = z.object({
-      id: z.string().uuid().openapi({
-        param: {
-          name: "id",
-          in: "path",
-        },
-        description: "대화 ID",
-        example: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-      }),
-  }).openapi({ type: "object" });
 
 
   // --- 라우트 정의 ---

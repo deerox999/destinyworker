@@ -1,7 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
-  createCelebrity,
   createCelebritiesBatch,
+  createCelebrity,
   deleteCelebrity,
   getCelebrities,
   getCelebrityRequests,
@@ -9,53 +9,12 @@ import {
 } from "./celebrity";
 
 import { MiddlewareHandler } from "hono";
+import { CelebrityIdParamSchema, CelebritySchema, PaginationQuerySchema, SortQuerySchema } from "../../../common/schemas";
 
 export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
   app.use(authMiddleware);
-
-  // 스키마 정의
-  const PaginationQuerySchema = z.object({
-    page: z.coerce.number().int().positive().default(1).optional().openapi({ description: "페이지 번호", example: 1 }),
-    limit: z.coerce.number().int().positive().default(10).optional().openapi({ description: "페이지당 항목 수", example: 10 }),
-  }).openapi({ type: 'object' });
-
-  const SortQuerySchema = z.object({
-    sort: z.string().default("createdAt").optional().openapi({ description: "정렬 필드", example: "createdAt" }),
-    order: z.enum(["asc", "desc"]).default("desc").optional().openapi({ description: "정렬 순서", example: "desc" }),
-  }).openapi({ type: 'object' });
   
-  const CelebrityIdParamSchema = z.object({
-    id: z.string().openapi({
-      param: {
-        name: "id",
-        in: "path",
-      },
-      description: "유명인물 ID",
-      example: "iu",
-    }),
-  }).openapi({ type: "object" });
-
-  const TranslationSchema = z.object({
-    languageCode: z.string().openapi({ description: "언어 코드", example: "ko" }),
-    name: z.string().openapi({ description: "이름", example: "아이유" }),
-    occupation: z.string().optional().openapi({ description: "직업", example: "가수" }),
-    description: z.string().optional().openapi({ description: "설명", example: "대한민국의 가수 겸 배우" }),
-  }).openapi({ type: 'object' });
-
-  const CelebritySchema = z.object({
-    id: z.string().openapi({ example: "iu" }),
-    birthYear: z.number().int().openapi({ example: 1993 }),
-    birthMonth: z.number().int().openapi({ example: 5 }),
-    birthDay: z.number().int().openapi({ example: 16 }),
-    birthHour: z.number().int().optional().openapi({ example: 10 }),
-    birthMinute: z.number().int().optional().openapi({ example: 30 }),
-    calendar: z.enum(["SOLAR", "LUNAR"]).openapi({ example: "SOLAR" }),
-    gender: z.enum(["MALE", "FEMALE"]).openapi({ example: "FEMALE" }),
-    imageUrl: z.string().url().optional().openapi({ example: "https://example.com/iu.jpg" }),
-    translations: z.array(TranslationSchema).openapi({ type: 'array' }),
-  }).openapi({ type: 'object' });
-
   // 라우트 정의
   const getCelebritiesRoute = createRoute({
     method: "get",

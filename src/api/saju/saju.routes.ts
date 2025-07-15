@@ -8,6 +8,7 @@ import {
 } from "./sajuProfileApi";
 
 import { MiddlewareHandler } from "hono";
+import { SajuProfileIdParamSchema } from "../../common/schemas";
 
 export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -122,20 +123,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
     tags: ["사주 프로필"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: z.object({
-        id: z
-          .string()
-          .regex(/^\d+$/)
-          .pipe(z.coerce.number())
-          .openapi({
-            param: {
-              name: "id",
-              in: "path",
-            },
-            description: "사주 프로필 ID",
-            example: "123",
-          }),
-      }).openapi({ type: "object" }),
+      params: SajuProfileIdParamSchema,
     },
     responses: {
       200: {
@@ -165,20 +153,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
     tags: ["사주 프로필"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: z.object({
-        id: z
-          .string()
-          .regex(/^\d+$/)
-          .pipe(z.coerce.number())
-          .openapi({
-            param: {
-              name: "id",
-              in: "path",
-            },
-            description: "사주 프로필 ID",
-            example: "123",
-          }),
-      }).openapi({ type: "object" }),
+      params: SajuProfileIdParamSchema,
       body: {
         content: {
           "application/json": {
@@ -215,20 +190,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
     tags: ["사주 프로필"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: z.object({
-        id: z
-          .string()
-          .regex(/^\d+$/)
-          .pipe(z.coerce.number())
-          .openapi({
-            param: {
-              name: "id",
-              in: "path",
-            },
-            description: "사주 프로필 ID",
-            example: "123",
-          }),
-      }).openapi({ type: "object" }),
+      params: SajuProfileIdParamSchema,
     },
     responses: {
       200: {
