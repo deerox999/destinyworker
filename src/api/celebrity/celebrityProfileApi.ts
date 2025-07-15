@@ -55,20 +55,19 @@ const incrementViewCount = async (
   celebrityId: string,
   c: Context,
   env: any
-): Promise<Response> => {
+): Promise<number> => {
   try {
     // KV 바인딩이 없으면, 중복 체크 없이 단순 증가 처리 (개발 환경 등)
     if (!env.VIEW_CACHE_KV) {
-      console.warn("VIEW_CACHE_KV is not bound. View count will be incremented without duplication check.");
+      console.warn(
+        "VIEW_CACHE_KV is not bound. View count will be incremented without duplication check."
+      );
       const viewCount = await prisma.celebrityViewCount.upsert({
         where: { celebrityId },
         update: { viewCount: { increment: 1 } },
         create: { celebrityId, viewCount: 1 },
       });
-      return c.json({
-        success: true,
-        viewCount: viewCount.viewCount,
-      });
+      return viewCount.viewCount;
     }
 
     const fingerprint = getClientFingerprint(c);
@@ -78,59 +77,41 @@ const incrementViewCount = async (
     const alreadyViewed = await env.VIEW_CACHE_KV.get(cacheKey);
     if (alreadyViewed) {
       // 30분 이내 동일 사용자의 조회는 조회수 증가 안함
-      return c.json({
-        success: true,
-        viewCount: await getViewCount(c, prisma, celebrityId),
-      });
+      return await getViewCount(prisma, celebrityId);
     }
-    
+
     // 조회수 증가
     const updatedView = await prisma.celebrityViewCount.upsert({
       where: { celebrityId },
       update: { viewCount: { increment: 1 } },
       create: { celebrityId, viewCount: 1 },
     });
-    
+
     // KV에 조회 기록 저장 (TTL: 1일)
     await env.VIEW_CACHE_KV.put(cacheKey, "1", { expirationTtl: 60 * 60 * 24 });
 
-    return c.json({
-      success: true,
-      viewCount: updatedView.viewCount,
-    });
-    
+    return updatedView.viewCount;
   } catch (error) {
     console.error("Failed to increment view count with KV:", error);
     // 오류 발생 시, 기능 장애를 막기 위해 현재 조회수라도 반환
-    return c.json({
-      success: true,
-      viewCount: await getViewCount(c, prisma, celebrityId),
-    });
+    return await getViewCount(prisma, celebrityId);
   }
 };
 
-
 // 조회수 조회 함수
 const getViewCount = async (
-  c: Context,
   prisma: PrismaClient,
   celebrityId: string
-  ): Promise<Response> => {
+): Promise<number> => {
   try {
     const viewCount = await prisma.celebrityViewCount.findUnique({
       where: { celebrityId },
       select: { viewCount: true },
     });
-    return c.json({
-      success: true,
-      viewCount: viewCount?.viewCount || 0,
-    });
+    return viewCount?.viewCount || 0;
   } catch (error) {
     console.error("Failed to get view count:", error);
-    return c.json({
-      success: true,
-      viewCount: 0,
-    });
+    return 0;
   }
 };
 

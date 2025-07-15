@@ -2,13 +2,18 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
-import { cache } from "hono/cache";
 
-const app = new OpenAPIHono();
+type Env = {
+  Bindings: {
+    KV: KVNamespace
+  }
+}
 
-// CORS 미들웨어 적용
+const app = new OpenAPIHono<Env>();
+// app.use(compress()) // 현재 압축 설정하면, 프론트에서 데이터 파싱이 안됨.
+
 app.use(
-  "*",
+  "*", // CORS 미들웨어 적용
   cors({
     origin: [
       "http://localhost:9999",
