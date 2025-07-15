@@ -3,7 +3,7 @@
  사용하려면, GEMINI API키 추가 필요함.
 */
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
-import { Context } from "hono";
+import { Context, MiddlewareHandler } from "hono";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   createEmbedding,
@@ -11,7 +11,6 @@ import {
   getDocumentsFromD1,
   RagEnv
 } from "../../common/ragUtils";
-import { getUserFromToken } from "../../common/utils";
 
 // Gemini API와 통신하기 위한 환경 변수 확장
 export interface Env extends RagEnv {
@@ -223,7 +222,7 @@ export async function SajuAnalysisWithGemini(
   c: Context
 ): Promise<Response> {
   // 1. 사용자 인증 (기존 로직 재사용)
-  const user = await getUserFromToken(c);
+  const user = c.get("user");
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }

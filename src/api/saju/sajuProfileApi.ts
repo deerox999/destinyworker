@@ -1,6 +1,5 @@
 import { createPrismaClient } from "../../common/prismaUtils";
-import { getUserFromToken } from "../../common/utils";
-import { Context } from "hono";
+import { Context, MiddlewareHandler } from "hono";
 
 // 한글 -> 영어 필드 변환
 const toDbFields = (data: any) => ({
@@ -59,7 +58,7 @@ export async function getSajuProfiles(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(c);
+    const userInfo = c.get("user");
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const prisma = createPrismaClient(c.env.DB);
@@ -91,7 +90,7 @@ export async function createSajuProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(c);
+    const userInfo = c.get("user");
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const body = await c.req.json();
@@ -130,7 +129,7 @@ export async function updateSajuProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(c);
+    const userInfo = c.get("user");
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(c.req.param("id"));
@@ -183,7 +182,7 @@ export async function deleteSajuProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(c);
+    const userInfo = c.get("user");
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(c.req.param("id"));
@@ -228,7 +227,7 @@ export async function getSajuProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(c);
+    const userInfo = c.get("user");
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(c.req.param("id"));

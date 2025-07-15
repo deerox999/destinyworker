@@ -1,7 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
-import { Context } from "hono";
-import { getUserFromToken } from "../../common/utils";
+import { Context, MiddlewareHandler } from "hono";
 
 // 중첩된 댓글에서 모든 댓글 ID 추출
 const getAllCommentIds = (comments: any[]): number[] => {
@@ -293,7 +292,7 @@ export async function getCelebrityComments(
     const skip = (page - 1) * limit;
 
     // 현재 사용자 정보 (로그인 여부 확인, 필수 아님)
-    const currentUser = await getUserFromToken(c);
+    const currentUser = c.get("user");
 
     // 정렬 옵션 설정
     let orderBy: any;
@@ -393,7 +392,7 @@ export async function createCelebrityComment(
   c: Context
 ): Promise<Response> {
   try {
-    const user = await getUserFromToken(c);
+    const user = c.get("user");
     if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
 
     const celebrityId = c.req.param("id");
@@ -467,7 +466,7 @@ export async function updateCelebrityComment(
   c: Context
 ): Promise<Response> {
   try {
-    const user = await getUserFromToken(c);
+    const user = c.get("user");
     if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
 
     const commentId = parseInt(c.req.param("commentId") || "0");
@@ -520,7 +519,7 @@ export async function deleteCelebrityComment(
   c: Context
 ): Promise<Response> {
   try {
-    const user = await getUserFromToken(c);
+    const user = c.get("user");
     if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
 
     const commentId = parseInt(c.req.param("commentId") || "0");
@@ -569,7 +568,7 @@ export async function toggleCelebrityCommentLike(
   c: Context
 ): Promise<Response> {
   try {
-    const user = await getUserFromToken(c);
+    const user = c.get("user");
     if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
 
     const commentId = parseInt(c.req.param("commentId") || "0");

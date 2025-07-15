@@ -1,6 +1,5 @@
-import { Context } from "hono";
+import { Context, MiddlewareHandler } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
-import { getUserFromToken } from "../../common/utils";
 import { deleteR2Object } from "./r2Api";
 
 // 프로필 이름 유효성 검사
@@ -25,7 +24,7 @@ export async function getUserProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(c);
+    const userInfo = c.get("user");
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const prisma = createPrismaClient(c.env.DB);
@@ -76,7 +75,7 @@ export async function updateUserProfile(
   c: Context
 ): Promise<Response> {
   try {
-      const userInfo = await getUserFromToken(c);
+      const userInfo = c.get("user");
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const body = (await c.req.json()) as {

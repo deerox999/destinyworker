@@ -1,7 +1,9 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { getVapidPublicKey, subscribe, unsubscribe } from "./pushApi";
 
-export function createPushRouter(): OpenAPIHono {
+import { MiddlewareHandler } from "hono";
+
+export function createPushRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
 
   // --- 스키마 정의 ---
@@ -110,6 +112,8 @@ export function createPushRouter(): OpenAPIHono {
 
   // 라우트 등록
   app.openapi(getVapidPublicKeyRoute, (c) => getVapidPublicKey(c));
+  app.use("/subscribe", authMiddleware);
+  app.use("/unsubscribe", authMiddleware);
   app.openapi(subscribeRoute, (c) => subscribe(c));
   app.openapi(unsubscribeRoute, (c) => unsubscribe(c));
 

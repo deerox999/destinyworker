@@ -1,35 +1,7 @@
-import { Context } from "hono";
-
-// JWT 토큰에서 사용자 정보 추출
-export const getUserFromToken = async (
-  c: Context
-): Promise<{ id: number; email: string; role: string } | null> => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  try {
-    const token = authHeader.substring(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-    );
-    if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
-
-    return {
-      id: payload.userId,
-      email: payload.email,
-      role: payload.role || "user",
-    };
-  } catch {
-    return null;
-  }
-};
-
 interface JWTPayload {
   userId: number;
   email: string;
+  role?: string; // Add role property
   exp: number;
   iat: number;
 }

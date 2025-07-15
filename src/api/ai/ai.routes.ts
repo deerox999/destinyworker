@@ -15,8 +15,11 @@ import {
     SajuChatList,
 } from "./SajuKnowledgeApi";
 
-export function createAiRouter(): OpenAPIHono {
+import { MiddlewareHandler } from "hono";
+
+export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
+  app.use(authMiddleware);
 
   // --- 스키마 정의 ---
 

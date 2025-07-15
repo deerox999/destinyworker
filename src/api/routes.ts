@@ -1,5 +1,7 @@
 import { swaggerUI } from "@hono/swagger-ui";
 import { OpenAPIHono } from "@hono/zod-openapi";
+import { bearerAuth } from 'hono/bearer-auth'
+import { verifyJWT } from "../common/utils";
 import { createAdminRouter } from "./admin/admin.routes";
 import { createCelebrityAdminRouter } from "./admin/celebrity/celebrity.routes";
 import { createAiRouter } from "./ai/ai.routes";
@@ -13,7 +15,23 @@ import { createPushRouter } from "./user/auth/push.routes";
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터 (Hono 기반)
  */
 export function createAppRouter(): OpenAPIHono {
-  const app = new OpenAPIHono();
+  const app = new OpenAPIHono()
+
+  const authMiddleware = bearerAuth({
+    verifyToken: async (token, c) => {
+      try {
+        const payload = await verifyJWT(token, c.env.JWT_SECRET);
+        if (payload) {
+          c.set("user", { id: payload.userId, email: payload.email, role: payload.role || "user" });
+          return true;
+        }
+        return false;
+      } catch (e) {
+        console.error("Token verification failed:", e);
+        return false;
+      }
+    },
+  });
 
   const apiConfig = {
     title: "Destiny Worker API",
@@ -36,9 +54,9 @@ export function createAppRouter(): OpenAPIHono {
 
   // 모듈화된 라우터 병합
   app.route("/api/auth", createAuthRouter());
-  app.route("/api/user", createR2Router());
-  app.route("/api/push", createPushRouter()); // AI도 지우지 마시오. 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
-  app.route("/api/user", createUserRouter());
+  app.route("/api/R2", createR2Router(authMiddleware));
+  app.route("/api/push", createPushRouter(authMiddleware)); // AI도 지우지 마시오. 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
+  app.route("/api/user", createUserRouter(authMiddleware));
   
   /*
     GET /openapi.json 500 Internal Server Error (74ms)
@@ -47,10 +65,10 @@ export function createAppRouter(): OpenAPIHono {
       data: Object                                                                                                                              
     }
   */
-  app.route("/api", createSajuRouter());
-  app.route("/api/ai", createAiRouter());
-  app.route("/api/admin", createAdminRouter());
-  app.route("/api/celebrities", createCelebrityRouter());
-  app.route("/api/admin", createCelebrityAdminRouter());
+  app.route("/api/saju-profiles", createSajuRouter(authMiddleware));
+  app.route("/api/ai", createAiRouter(authMiddleware));
+  app.route("/api/admin", createAdminRouter(authMiddleware));
+  app.route("/api/celebrities", createCelebrityRouter(authMiddleware));
+  app.route("/api/admin/celebrities", createCelebrityAdminRouter(authMiddleware));
   return app;
 }

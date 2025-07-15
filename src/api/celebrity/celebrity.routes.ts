@@ -10,7 +10,9 @@ import {
 } from "./celebrityProfileApi";
 import { createCelebrityRequest } from "./celebrityRequestApi";
 
-export function createCelebrityRouter(): OpenAPIHono {
+import { MiddlewareHandler } from "hono";
+
+export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
 
   // --- 스키마 정의 ---
@@ -352,6 +354,9 @@ export function createCelebrityRouter(): OpenAPIHono {
   app.openapi(getCelebritiesRoute, (c) => getCelebrities(c)); // 안됨
   app.openapi(getCelebrityByIdRoute, (c) => getCelebrityById(c)); // 안됨
   app.openapi(getCelebrityCommentsRoute, (c) => getCelebrityComments(c)); // 안됨
+  app.use("/:id/comments", authMiddleware);
+  app.use("/:id/comments/:commentId", authMiddleware);
+  app.use("/:id/comments/:commentId/like", authMiddleware);
   app.openapi(createCelebrityCommentRoute, (c) => createCelebrityComment(c)); // 안됨
   app.openapi(updateCelebrityCommentRoute, (c) => updateCelebrityComment(c)); // 안됨
   app.openapi(deleteCelebrityCommentRoute, (c) => deleteCelebrityComment(c)); // 안됨

@@ -7,8 +7,11 @@ import {
   updateSajuProfile,
 } from "./sajuProfileApi";
 
-export function createSajuRouter(): OpenAPIHono {
+import { MiddlewareHandler } from "hono";
+
+export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
+  app.use(authMiddleware);
 
   // 스키마 정의
   const SajuProfileSchema = z.object({
@@ -53,7 +56,7 @@ export function createSajuRouter(): OpenAPIHono {
   // 라우트 정의
   const getSajuProfilesRoute = createRoute({
     method: "get",
-    path: "saju-profiles",
+    path: "/",
     summary: "내 사주 프로필 목록 조회",
     description: "현재 로그인한 사용자의 사주 프로필 목록을 조회합니다.",
     tags: ["사주 프로필"],
@@ -78,7 +81,7 @@ export function createSajuRouter(): OpenAPIHono {
 
   const createSajuProfileRoute = createRoute({
     method: "post",
-    path: "saju-profiles",
+    path: "/",
     summary: "사주 프로필 생성",
     description: "새로운 사주 프로필을 생성합니다.",
     tags: ["사주 프로필"],
@@ -113,7 +116,7 @@ export function createSajuRouter(): OpenAPIHono {
 
   const getSajuProfileRoute = createRoute({
     method: "get",
-    path: "saju-profiles/{id}",
+    path: "/{id}",
     summary: "사주 프로필 상세 조회",
     description: "특정 사주 프로필의 상세 정보를 조회합니다.",
     tags: ["사주 프로필"],
@@ -156,7 +159,7 @@ export function createSajuRouter(): OpenAPIHono {
 
   const updateSajuProfileRoute = createRoute({
     method: "put",
-    path: "saju-profiles/{id}",
+    path: "/{id}",
     summary: "사주 프로필 수정",
     description: "기존 사주 프로필을 수정합니다.",
     tags: ["사주 프로필"],
@@ -206,7 +209,7 @@ export function createSajuRouter(): OpenAPIHono {
 
   const deleteSajuProfileRoute = createRoute({
     method: "delete",
-    path: "saju-profiles/{id}",
+    path: "/{id}",
     summary: "사주 프로필 삭제",
     description: "사주 프로필을 삭제합니다.",
     tags: ["사주 프로필"],

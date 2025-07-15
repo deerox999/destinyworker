@@ -1,8 +1,11 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { getUserProfile, updateUserProfile } from "./userApi";
 
-export function createUserRouter(): OpenAPIHono {
+import { MiddlewareHandler } from "hono";
+
+export function createUserRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
+  app.use(authMiddleware);
 
   const getUserProfileRoute = createRoute({
     method: "get",

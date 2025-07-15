@@ -624,9 +624,9 @@ export async function getAiUsageStatsForModel(
     return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const model = c.req.param("model+");
+  const model = c.req.query("model");
   if (!model) {
-    console.error("Model name is required", c.req.param());
+    console.error("Model name is required", c.req.query());
     return c.json({ error: "모델 이름이 필요합니다." }, 400);
   }
 
@@ -650,7 +650,7 @@ export async function getAiUsageStatsForModel(
 
   try {
     const whereClauses: string[] = ["l.model = ?"];
-    const bindings: any[] = [decodeURIComponent(model)];
+    const bindings: any[] = [model];
 
     if (startDate) {
       whereClauses.push("l.created_at >= ?");

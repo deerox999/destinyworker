@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { Context } from "hono";
+import { Context, MiddlewareHandler } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
 import {
   createEmbedding,
@@ -7,7 +7,6 @@ import {
   getDocumentsFromD1,
   logAiUsage
 } from "../../common/ragUtils";
-import { getUserFromToken } from "../../common/utils";
 import {
   getPersonaPrompt,
   getRejectionMessage,
@@ -159,7 +158,7 @@ export async function SajuChatList(
   const prisma = createPrismaClient(c.env.DB);
 
   try {
-    const user = await getUserFromToken(c);
+    const user = c.get("user");
     if (!user) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -265,7 +264,7 @@ export async function SajuChat(
     );
   }
 
-  const user = await getUserFromToken(c);
+  const user = c.get("user");
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
@@ -398,7 +397,7 @@ export async function SajuChatFull(
   const conversationId = c.req.param("id");
 
   try {
-    const user = await getUserFromToken(c);
+    const user = c.get("user");
     if (!user) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -446,7 +445,7 @@ export async function SajuChatDelete(
   const conversationId = c.req.param("id");
 
   try {
-    const user = await getUserFromToken(c);
+    const user = c.get("user");
     if (!user) {
       return c.json({ error: "Unauthorized" }, 401);
     }

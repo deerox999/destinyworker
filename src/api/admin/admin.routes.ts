@@ -10,8 +10,12 @@ import {
   getUsers,
 } from "./adminApi";
 
-export function createAdminRouter(): OpenAPIHono {
+import { MiddlewareHandler } from "hono";
+
+export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
+
+  app.use(authMiddleware);
 
   // --- 스키마 정의 ---
   const PaginationQuerySchema = z.object({
@@ -64,7 +68,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getUsersRoute = createRoute({
     method: "get",
-    path: "users",
+    path: "/users",
     summary: "가입한 유저 목록 조회",
     description:
       "가입한 모든 유저의 목록을 조회합니다. 페이지네이션과 검색 기능을 지원합니다.",
@@ -107,7 +111,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getUserProfilesRoute = createRoute({
     method: "get",
-    path: "users/{userId}/profiles",
+    path: "/users/{userId}/profiles",
     summary: "특정 유저의 프로필 조회",
     description: "특정 유저가 보유한 모든 사주 프로필을 조회합니다.",
     tags: ["Admin"],
@@ -144,7 +148,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAdminStatsRoute = createRoute({
     method: "get",
-    path: "stats",
+    path: "/stats",
     summary: "전체 통계 정보 조회",
     description:
       "전체 사용자 수, 프로필 수 등 관리자용 통계 정보를 조회합니다.",
@@ -227,7 +231,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAiUsageStatsByModelRoute = createRoute({
     method: "get",
-    path: "stats/ai-usage-by-model",
+    path: "/stats/ai-usage-by-model",
     summary: "[Admin] 모델별 AI 사용량 통계",
     description:
       "기간별로 각 AI 모델의 총 토큰 사용량, 호출 수, 순수 사용자 수를 페이지네이션하여 조회합니다.",
@@ -268,26 +272,21 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAiUsageStatsForModelRoute = createRoute({
     method: "get",
-    path: "stats/ai-usage-by-model/{model}",
+    path: "/stats/ai-usage-for-model",
     summary: "[Admin] 특정 모델의 사용자별 AI 사용량 통계",
     description:
       "특정 AI 모델을 사용한 유저 목록과 각 유저의 토큰 사용량을 페이지네이션하여 조회합니다.",
     tags: ["Admin"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: z.object({
-        model: z.string().openapi({
-          param: {
-            name: "model",
-            in: "path",
-          },
-          description: "AI 모델 이름",
-          example: "gemini-pro",
+      query: PaginationQuerySchema.merge(DateRangeQuerySchema)
+        .merge(AiUsageSortQuerySchema)
+        .extend({
+          model: z.string().openapi({
+            description: "AI 모델 이름",
+            example: "gemini-pro",
+          }),
         }),
-      }).openapi({ type: "object" }),
-      query: PaginationQuerySchema.merge(DateRangeQuerySchema).merge(
-        AiUsageSortQuerySchema
-      ),
     },
     responses: {
       200: {
@@ -321,7 +320,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAiUsageStatsByUserRoute = createRoute({
     method: "get",
-    path: "stats/ai-usage-by-user",
+    path: "/stats/ai-usage-by-user",
     summary: "[Admin] 사용자별 AI 사용량 통계",
     description:
       "기간별로 각 사용자의 AI 사용량을 모델별로 상세히 페이지네이션하여 조회합니다.",
@@ -361,7 +360,7 @@ export function createAdminRouter(): OpenAPIHono {
 
   const getAiUsageLogsForUserRoute = createRoute({
     method: "get",
-    path: "users/{userId}/ai-logs",
+    path: "/users/{userId}/ai-logs",
     summary: "[Admin] 특정 사용자 AI 사용 기록 조회",
     description:
       "특정 사용자의 모든 AI API 호출 기록을 페이지네이션하여 조회합니다.",

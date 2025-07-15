@@ -8,8 +8,11 @@ import {
   updateCelebrity,
 } from "./celebrity";
 
-export function createCelebrityAdminRouter(): OpenAPIHono {
+import { MiddlewareHandler } from "hono";
+
+export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
+  app.use(authMiddleware);
 
   // 스키마 정의
   const PaginationQuerySchema = z.object({
@@ -56,7 +59,7 @@ export function createCelebrityAdminRouter(): OpenAPIHono {
   // 라우트 정의
   const getCelebritiesRoute = createRoute({
     method: "get",
-    path: "celebrities",
+    path: "/",
     summary: "유명인물 목록 조회",
     description: "페이지네이션을 지원하는 유명인물 목록을 조회합니다.",
     tags: ["Admin-유명인물"],
@@ -75,7 +78,7 @@ export function createCelebrityAdminRouter(): OpenAPIHono {
 
   const createCelebrityRoute = createRoute({
     method: "post",
-    path: "celebrities",
+    path: "/",
     summary: "[Admin] 유명인물 생성",
     description: "새로운 유명인물과 관련 다국어 정보를 생성합니다. (관리자용)",
     tags: ["Admin-유명인물"],
@@ -95,7 +98,7 @@ export function createCelebrityAdminRouter(): OpenAPIHono {
 
   const createCelebritiesBatchRoute = createRoute({
     method: "post",
-    path: "celebrities/batch",
+    path: "/batch",
     summary: "[Admin] 유명인물 대량 생성",
     description: "여러 유명인물을 한 번에 생성합니다. (관리자용)",
     tags: ["Admin-유명인물"],
@@ -119,7 +122,7 @@ export function createCelebrityAdminRouter(): OpenAPIHono {
 
   const updateCelebrityRoute = createRoute({
     method: "put",
-    path: "celebrities/{id}",
+    path: "/{id}",
     summary: "[Admin] 유명인물 수정",
     description: "기존 유명인물의 정보를 수정합니다. (관리자용)",
     tags: ["Admin-유명인물"],
@@ -143,7 +146,7 @@ export function createCelebrityAdminRouter(): OpenAPIHono {
 
   const deleteCelebrityRoute = createRoute({
     method: "delete",
-    path: "celebrities/{id}",
+    path: "/{id}",
     summary: "[Admin] 유명인물 삭제",
     description: "특정 유명인물을 삭제합니다. (관리자용)",
     tags: ["Admin-유명인물"],
@@ -161,7 +164,7 @@ export function createCelebrityAdminRouter(): OpenAPIHono {
 
   const getCelebrityRequestsRoute = createRoute({
     method: "get",
-    path: "celebrities/requests",
+    path: "/requests",
     summary: "유명인물 요청 목록 조회",
     description: "페이지네이션을 지원하는 유명인물 추가 요청 목록을 조회합니다. (관리자용)",
     tags: ["Admin-유명인물"],

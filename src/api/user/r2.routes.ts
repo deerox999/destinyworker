@@ -1,8 +1,11 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { getUploadUrl } from "./r2Api";
 
-export function createR2Router(): OpenAPIHono {
+import { MiddlewareHandler } from "hono";
+
+export function createR2Router(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
+  app.use(authMiddleware);
 
   const getUploadUrlRoute = createRoute({
     method: "post",

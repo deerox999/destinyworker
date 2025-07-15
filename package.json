@@ -19,6 +19,7 @@
     "publish": true
   },
   "devDependencies": {
+    "@types/node": "^24.0.13",
     "@types/uuid": "^10.0.0",
     "lunar-javascript": "^1.7.3",
     "swagger-typescript-api": "^13.2.7",
