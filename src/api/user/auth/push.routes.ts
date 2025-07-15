@@ -2,6 +2,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { getVapidPublicKey, subscribe, unsubscribe } from "./pushApi";
 
 import { MiddlewareHandler } from "hono";
+import { SuccessSchema } from "../../../common/schemas";
 
 export function createPushRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -58,7 +59,7 @@ export function createPushRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "구독 정보 저장 성공",
         content: {
           "application/json": {
-            schema: z.object({ success: z.boolean().openapi({ example: true }) }).openapi({ type: 'object' }),
+            schema: SuccessSchema,
           },
         },
       },
@@ -66,7 +67,7 @@ export function createPushRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "이미 구독중",
         content: {
           "application/json": {
-            schema: z.object({ success: z.boolean().openapi({ example: true }), message: z.string().openapi({ example: "이미 구독중입니다." }) }).openapi({ type: 'object' }),
+            schema: SuccessSchema.extend({ message: z.string().openapi({ example: "이미 구독중입니다." }) }).openapi({ type: 'object' }),
           },
         },
       },
@@ -99,7 +100,7 @@ export function createPushRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "구독 정보 삭제 성공",
         content: {
           "application/json": {
-            schema: z.object({ success: z.boolean().openapi({ example: true }) }).openapi({ type: 'object' }),
+            schema: SuccessSchema,
           },
         },
       },

@@ -9,7 +9,7 @@ import {
 } from "./celebrity";
 
 import { MiddlewareHandler } from "hono";
-import { CelebrityIdParamSchema, CelebritySchema, PaginationQuerySchema, SortQuerySchema } from "../../../common/schemas";
+import { CelebrityIdParamSchema, CelebritySchema, PaginationQuerySchema, SortQuerySchema, SuccessSchema, PaginationResponseSchema } from "../../../common/schemas";
 
 export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -30,7 +30,7 @@ export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): O
       }).openapi({ type: 'object' }),
     },
     responses: {
-      200: { description: "조회 성공", content: { "application/json": { schema: z.object({ success: z.boolean().openapi({ example: true }), celebrities: z.array(CelebritySchema).openapi({ type: 'array' }), pagination: PaginationQuerySchema.openapi({ type: 'object' }) }).openapi({ type: 'object' }) } } },
+      200: { description: "조회 성공", content: { "application/json": { schema: SuccessSchema.extend({ celebrities: z.array(CelebritySchema).openapi({ type: 'array' }), pagination: PaginationResponseSchema }).openapi({ type: 'object' }) } } },
       500: { description: "서버 오류" },
     },
   });
@@ -48,7 +48,7 @@ export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): O
       },
     },
     responses: {
-      201: { description: "생성 성공", content: { "application/json": { schema: z.object({ success: z.boolean().openapi({ example: true }), celebrity: CelebritySchema }).openapi({ type: 'object' }) } } },
+      201: { description: "생성 성공", content: { "application/json": { schema: SuccessSchema.extend({ celebrity: CelebritySchema }).openapi({ type: 'object' }) } } },
       400: { description: "잘못된 요청 데이터" },
       401: { description: "인증 실패" },
       403: { description: "권한 없음" },
@@ -72,7 +72,7 @@ export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): O
       },
     },
     responses: {
-      201: { description: "대량 생성 성공", content: { "application/json": { schema: z.object({ success: z.boolean().openapi({ example: true }), count: z.number().int().openapi({ example: 5 }) }).openapi({ type: 'object' }) } } },
+      201: { description: "대량 생성 성공", content: { "application/json": { schema: SuccessSchema.extend({ count: z.number().int().openapi({ example: 5 }) }).openapi({ type: 'object' }) } } },
       400: { description: "잘못된 요청 데이터" },
       401: { description: "인증 실패" },
       403: { description: "권한 없음" },
@@ -95,7 +95,7 @@ export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): O
       },
     },
     responses: {
-      200: { description: "수정 성공", content: { "application/json": { schema: z.object({ success: z.boolean().openapi({ example: true }), celebrity: CelebritySchema }).openapi({ type: 'object' }) } } },
+      200: { description: "수정 성공", content: { "application/json": { schema: SuccessSchema.extend({ celebrity: CelebritySchema }).openapi({ type: 'object' }) } } },
       400: { description: "잘못된 요청 데이터" },
       401: { description: "인증 실패" },
       403: { description: "권한 없음" },
@@ -114,7 +114,7 @@ export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): O
       params: CelebrityIdParamSchema,
     },
     responses: {
-      200: { description: "삭제 성공", content: { "application/json": { schema: z.object({ success: z.boolean().openapi({ example: true }), message: z.string().openapi({ example: "유명인물이 성공적으로 삭제되었습니다." }) }).openapi({ type: 'object' }) } } },
+      200: { description: "삭제 성공", content: { "application/json": { schema: SuccessSchema.extend({ message: z.string().openapi({ example: "유명인물이 성공적으로 삭제되었습니다." }) }).openapi({ type: 'object' }) } } },
       401: { description: "인증 실패" },
       403: { description: "권한 없음" },
       404: { description: "유명인물을 찾을 수 없음" },
@@ -134,7 +134,7 @@ export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): O
       }).openapi({ type: 'object' }),
     },
     responses: {
-      200: { description: "조회 성공", content: { "application/json": { schema: z.object({ success: z.boolean().openapi({ example: true }), requests: z.array(z.object({ id: z.number().int().openapi({ example: 1 }), name: z.string().openapi({ example: "아이유" }), description: z.string().openapi({ example: "가수" }), birthDate: z.string().openapi({ example: "1993-05-16" }), occupation: z.string().openapi({ example: "가수" }), isProcessed: z.boolean().openapi({ example: false }), createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }), updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }) }).openapi({ type: 'object' })).openapi({ type: 'array' }), pagination: PaginationQuerySchema.openapi({ type: 'object' }) }).openapi({ type: 'object' }) } } },
+      200: { description: "조회 성공", content: { "application/json": { schema: SuccessSchema.extend({ requests: z.array(z.object({ id: z.number().int().openapi({ example: 1 }), name: z.string().openapi({ example: "아이유" }), description: z.string().openapi({ example: "가수" }), birthDate: z.string().openapi({ example: "1993-05-16" }), occupation: z.string().openapi({ example: "가수" }), isProcessed: z.boolean().openapi({ example: false }), createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }), updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }) }).openapi({ type: 'object' })).openapi({ type: 'array' }), pagination: PaginationResponseSchema }).openapi({ type: 'object' }) } } },
       401: { description: "인증 실패 (관리자 권한 필요)" },
       500: { description: "서버 오류" },
     },

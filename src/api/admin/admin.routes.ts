@@ -11,7 +11,7 @@ import {
 } from "./adminApi";
 
 import { MiddlewareHandler } from "hono";
-import { PaginationQuerySchema } from "../../common/schemas";
+import { PaginationQuerySchema, SuccessSchema, PaginationResponseSchema } from "../../common/schemas";
 
 export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -65,8 +65,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         description: "성공적인 응답",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               users: z.array(
                 z.object({
                   id: z.number().openapi({ example: 1 }),
@@ -79,12 +78,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                   profileCount: z.number().int().openapi({ example: 2 }),
                 }).openapi({ type: 'object' })
               ),
-              pagination: z.object({
-                totalItems: z.number().int().openapi({ example: 100 }),
-                totalPages: z.number().int().openapi({ example: 5 }),
-                currentPage: z.number().int().openapi({ example: 1 }),
-                pageSize: z.number().int().openapi({ example: 20 }),
-              }).openapi({ type: 'object' }),
+              pagination: PaginationResponseSchema,
             }).openapi({ type: 'object' }),
           },
         },
@@ -107,8 +101,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               user: z.object({
                 id: z.number().openapi({ example: 1 }),
                 email: z.string().openapi({ example: "user@example.com" }),
@@ -142,8 +135,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean(),
+            schema: SuccessSchema.extend({
               stats: z.object({
                 totalUsers: z.number().int(),
                 totalProfiles: z.number().int(),
@@ -179,8 +171,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               history: z.array(
                 z.object({
                   id: z.number().openapi({ example: 1 }),
@@ -198,12 +189,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                     .nullable().openapi({ type: 'object' }),
                 }).openapi({ type: 'object' })
               ).openapi({ type: 'array' }),
-              pagination: z.object({
-                totalItems: z.number().int().openapi({ example: 100 }),
-                totalPages: z.number().int().openapi({ example: 5 }),
-                currentPage: z.number().int().openapi({ example: 1 }),
-                pageSize: z.number().int().openapi({ example: 20 }),
-              }).openapi({ type: 'object' }),
+              pagination: PaginationResponseSchema,
             }).openapi({ type: 'object' }),
           },
         },
@@ -230,8 +216,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         description: "모델별 통계 조회 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean(),
+            schema: SuccessSchema.extend({
               stats: z.array(
                 z.object({
                   model: z.string(),
@@ -240,12 +225,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                   userCount: z.number().int().openapi({ example: 10 }),
                 }).openapi({ type: 'object' })
               ),
-              pagination: z.object({
-                totalItems: z.number().int().openapi({ example: 3 }),
-                totalPages: z.number().int().openapi({ example: 1 }),
-                currentPage: z.number().int().openapi({ example: 1 }),
-                pageSize: z.number().int().openapi({ example: 20 }),
-              }).openapi({ type: 'object' }),
+              pagination: PaginationResponseSchema,
             }).openapi({ type: 'object' }),
           },
         },
@@ -276,8 +256,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               users: z.array(
                 z.object({
                   userId: z.number().openapi({ example: 1 }),
@@ -286,12 +265,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                   callCount: z.number().int().openapi({ example: 10 }),
                 }).openapi({ type: 'object' })
               ).openapi({ type: 'array' }),
-              pagination: z.object({
-                totalItems: z.number().int().openapi({ example: 100 }),
-                totalPages: z.number().int().openapi({ example: 5 }),
-                currentPage: z.number().int().openapi({ example: 1 }),
-                pageSize: z.number().int().openapi({ example: 20 }),
-              }).openapi({ type: 'object' }),
+              pagination: PaginationResponseSchema,
             }).openapi({ type: 'object' }),
           },
         },
@@ -319,8 +293,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         description: "사용자별 통계 조회 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean(),
+            schema: SuccessSchema.extend({
               stats: z.array(
                 z.object({
                   userId: z.number(),
@@ -328,12 +301,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                   modelUsage: z.any().openapi({ type: 'object', example: { "gemini-pro": { totalTokens: 500, callCount: 5 } } }), // toKoreanFields 스키마가 복잡하므로 any로 처리
                 }).openapi({ type: 'object' })
               ),
-              pagination: z.object({
-                totalItems: z.number().int().openapi({ example: 100 }),
-                totalPages: z.number().int().openapi({ example: 5 }),
-                currentPage: z.number().int().openapi({ example: 1 }),
-                pageSize: z.number().int().openapi({ example: 20 }),
-              }).openapi({ type: 'object' }),
+              pagination: PaginationResponseSchema,
             }).openapi({ type: 'object' }),
           },
         },
@@ -360,8 +328,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean(),
+            schema: SuccessSchema.extend({
               logs: z.array(
                 z.object({
                   id: z.number(),
@@ -372,12 +339,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                   createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
                 }).openapi({ type: 'object' })
               ),
-              pagination: z.object({
-                totalItems: z.number().int().openapi({ example: 100 }),
-                totalPages: z.number().int().openapi({ example: 5 }),
-                currentPage: z.number().int().openapi({ example: 1 }),
-                pageSize: z.number().int().openapi({ example: 20 }),
-              }).openapi({ type: 'object' }),
+              pagination: PaginationResponseSchema,
             }).openapi({ type: 'object' }),
           },
         },

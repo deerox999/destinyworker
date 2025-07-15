@@ -2,6 +2,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { getUserProfile, updateUserProfile } from "./userApi";
 
 import { MiddlewareHandler } from "hono";
+import { SuccessSchema } from "../../common/schemas";
 
 export function createUserRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -19,11 +20,7 @@ export function createUserRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "프로필 조회 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({
-                description: "성공 여부",
-                example: true,
-              }),
+            schema: SuccessSchema.extend({
               user: z.object({
                 id: z.number().openapi({
                   description: "사용자 ID",
@@ -95,11 +92,7 @@ export function createUserRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "프로필 수정 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({
-                description: "성공 여부",
-                example: true,
-              }),
+            schema: SuccessSchema.extend({
               message: z.string().openapi({
                 description: "성공 메시지",
                 example: "프로필이 성공적으로 수정되었습니다.",

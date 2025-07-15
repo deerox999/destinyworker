@@ -16,7 +16,7 @@ import {
 } from "./SajuKnowledgeApi";
 
 import { MiddlewareHandler } from "hono";
-import { RagIdParamSchema, ConversationIdParamSchema } from "../../common/schemas";
+import { RagIdParamSchema, ConversationIdParamSchema, SuccessSchema, PaginationResponseSchema } from "../../common/schemas";
 
 export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -171,8 +171,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
             description: "문서 추가 및 인덱싱 성공",
             content: {
               "application/json": {
-                schema: z.object({
-                  success: z.boolean().openapi({ example: true }),
+                schema: SuccessSchema.extend({
                   count: z.number().int().openapi({ example: 5 }),
                 }).openapi({ type: 'object' })
               }
@@ -243,12 +242,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
                                 metadata: { source: "자평진전", category: "격국론", author: "심효첨" }
                             }]
                         }),
-                        pagination: z.object({
-                            totalItems: z.number().int().openapi({ example: 100 }),
-                            totalPages: z.number().int().openapi({ example: 10 }),
-                            currentPage: z.number().int().openapi({ example: 1 }),
-                            pageSize: z.number().int().openapi({ example: 10 }),
-                        }).openapi({ type: 'object' })
+                        pagination: PaginationResponseSchema
                     }).openapi({ type: 'object' })
                 }
             }
@@ -272,8 +266,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
             description: "삭제 성공",
             content: {
                 "application/json": {
-                    schema: z.object({
-                        success: z.boolean().openapi({ example: true }),
+                    schema: SuccessSchema.extend({
                         deletedCount: z.number().int().openapi({ example: 3 })
                     }).openapi({ type: 'object' })
                 }
@@ -321,7 +314,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
             description: "새 대화 시작 성공",
             content: {
                 "application/json": {
-                    schema: z.object({
+                    schema: SuccessSchema.extend({
                         conversationId: z.string().uuid().openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
                         response: z.string().openapi({ example: "안녕하세요! 무엇을 도와드릴까요?" }),
                     }).openapi({ type: 'object' })
@@ -349,7 +342,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
             description: "대화 이어가기 성공",
             content: {
                 "application/json": {
-                    schema: z.object({
+                    schema: SuccessSchema.extend({
                         conversationId: z.string().uuid().openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
                         response: z.string().openapi({ example: "네, 계속 말씀하세요." }),
                     }).openapi({ type: 'object' })

@@ -195,3 +195,14 @@ export const ConversationIdParamSchema = z
       }),
   })
   .openapi({ type: "object" });
+
+export const SuccessSchema = z.object({
+  success: z.boolean().openapi({ example: true }),
+}).openapi({ type: 'object' });
+
+export const PaginationResponseSchema = z.object({
+  totalItems: z.number().int().openapi({ example: 100 }),
+  totalPages: z.number().int().openapi({ example: 5 }),
+  currentPage: z.number().int().openapi({ example: 1 }),
+  pageSize: z.number().int().openapi({ example: 10 }),
+}).openapi({ type: 'object' });

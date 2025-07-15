@@ -2,6 +2,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { getUploadUrl } from "./r2Api";
 
 import { MiddlewareHandler } from "hono";
+import { SuccessSchema } from "../../common/schemas";
 
 export function createR2Router(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -38,8 +39,7 @@ export function createR2Router(authMiddleware: MiddlewareHandler): OpenAPIHono {
         description: "Pre-signed URL 생성 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               uploadUrl: z
                 .string()
                 .url()

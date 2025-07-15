@@ -2,6 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
+import { cache } from "hono/cache";
 
 const app = new OpenAPIHono();
 
@@ -19,7 +20,7 @@ app.use(
     ],
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    maxAge: 86400,
+    maxAge: 86400, // Access-Control-Max-Age
   })
 );
 

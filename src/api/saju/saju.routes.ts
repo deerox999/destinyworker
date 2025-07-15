@@ -8,7 +8,7 @@ import {
 } from "./sajuProfileApi";
 
 import { MiddlewareHandler } from "hono";
-import { SajuProfileIdParamSchema } from "../../common/schemas";
+import { SajuProfileIdParamSchema, SuccessSchema } from "../../common/schemas";
 
 export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -67,8 +67,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               profiles: z.array(SajuProfileResponseSchema).openapi({ type: 'array' }),
               count: z.number().int().openapi({ example: 1 }),
             }).openapi({ type: 'object' }),
@@ -101,8 +100,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "생성 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               id: z.number().int().openapi({ example: 1 }),
               message: z.string().openapi({ example: "사주 프로필이 성공적으로 생성되었습니다." }),
             }).openapi({ type: 'object' }),
@@ -130,8 +128,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               profile: SajuProfileResponseSchema,
             }).openapi({ type: 'object' }),
           },
@@ -167,8 +164,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "수정 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               message: z.string().openapi({ example: "프로필이 성공적으로 수정되었습니다." }),
             }).openapi({ type: 'object' }),
           },
@@ -197,8 +193,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         description: "삭제 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               message: z.string().openapi({ example: "프로필이 성공적으로 삭제되었습니다." }),
             }).openapi({ type: 'object' }),
           },

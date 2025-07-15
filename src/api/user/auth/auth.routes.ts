@@ -1,10 +1,6 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import {
-  googleLogin,
-  getUserInfo,
-  logout,
-  refreshToken,
-} from "./googleAuthApi";
+import { googleLogin, getUserInfo, logout, refreshToken } from "./googleAuthApi";
+import { SuccessSchema } from "../../../common/schemas";
 
 export function createAuthRouter(): OpenAPIHono {
   const app = new OpenAPIHono(); 
@@ -34,8 +30,7 @@ export function createAuthRouter(): OpenAPIHono {
         description: "로그인 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               token: z.string().openapi({ description: "JWT", example: "your_jwt_token" }),
               user: z.object({
                 id: z.number().openapi({ example: 1 }),
@@ -71,8 +66,7 @@ export function createAuthRouter(): OpenAPIHono {
         description: "로그아웃 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               message: z.string().openapi({ example: "로그아웃 성공" }),
             }).openapi({ type: 'object' }),
           },
@@ -97,7 +91,7 @@ export function createAuthRouter(): OpenAPIHono {
         description: "사용자 정보 조회 성공",
         content: {
           "application/json": {
-            schema: z.object({
+            schema: SuccessSchema.extend({
               user: z.object({
                 id: z.number().openapi({ example: 1 }),
                 email: z.string().email().openapi({ example: "user@example.com" }),
@@ -129,8 +123,7 @@ export function createAuthRouter(): OpenAPIHono {
         description: "토큰 갱신 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               token: z.string().openapi({ description: "새로운 JWT", example: "your_new_jwt_token" }),
             }).openapi({ type: 'object' }),
           },

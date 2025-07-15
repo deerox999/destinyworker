@@ -12,7 +12,7 @@ import { getCelebrities } from "../admin/celebrity/celebrity";
 import { createCelebrityRequest } from "./celebrityRequestApi";
 
 import { MiddlewareHandler } from "hono";
-import { CelebrityBaseSchema, CelebrityIdParamSchema, CelebritySchema, CommentFieldsSchema, CommentIdParamSchema, LangQuerySchema, PaginationQuerySchema, RecursiveCommentSchema, SortQuerySchema } from "../../common/schemas";
+import { CelebrityBaseSchema, CelebrityIdParamSchema, CelebritySchema, CommentFieldsSchema, CommentIdParamSchema, LangQuerySchema, PaginationQuerySchema, RecursiveCommentSchema, SortQuerySchema, SuccessSchema, PaginationResponseSchema } from "../../common/schemas";
 
 export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -30,7 +30,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
       }).openapi({ type: 'object' }),
     },
     responses: {
-      200: { description: "조회 성공", content: { "application/json": { schema: z.object({ success: z.boolean().openapi({ example: true }), celebrities: z.array(CelebritySchema).openapi({ type: 'array' }), pagination: PaginationQuerySchema.openapi({ type: 'object' }) }).openapi({ type: 'object' }) } } },
+      200: { description: "조회 성공", content: { "application/json": { schema: SuccessSchema.extend({ celebrities: z.array(CelebritySchema).openapi({ type: 'array' }), pagination: PaginationResponseSchema }).openapi({ type: 'object' }) } } },
       500: { description: "서버 오류" },
     },
   });
@@ -50,8 +50,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               celebrity: CelebrityBaseSchema
             }).openapi({ type: 'object' })
           }
@@ -78,15 +77,9 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
         description: "성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               comments: z.array(RecursiveCommentSchema).openapi({ type: 'array' }),
-              pagination: z.object({
-                totalItems: z.number().int().openapi({ example: 50 }),
-                totalPages: z.number().int().openapi({ example: 5 }),
-                currentPage: z.number().int().openapi({ example: 1 }),
-                pageSize: z.number().int().openapi({ example: 10 })
-              }).openapi({ type: 'object' })
+              pagination: PaginationResponseSchema
             }).openapi({ type: 'object' })
           }
         }
@@ -120,8 +113,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
         description: "생성 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
+            schema: SuccessSchema.extend({
               comment: CommentFieldsSchema,
               message: z.string().openapi({ example: "댓글이 성공적으로 작성되었습니다." })
             }).openapi({ type: 'object' })
@@ -159,8 +151,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
           description: "수정 성공",
           content: {
             "application/json": {
-              schema: z.object({
-                success: z.boolean().openapi({ example: true }),
+              schema: SuccessSchema.extend({
                 message: z.string().openapi({ example: "댓글이 성공적으로 수정되었습니다." })
               }).openapi({ type: 'object' })
             }
@@ -188,8 +179,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
           description: "삭제 성공",
           content: {
             "application/json": {
-              schema: z.object({
-                success: z.boolean().openapi({ example: true }),
+              schema: SuccessSchema.extend({
                 message: z.string().openapi({ example: "댓글이 성공적으로 삭제되었습니다." })
               }).openapi({ type: 'object' })
             }
@@ -216,8 +206,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
               description: "추천/추천 취소 성공",
               content: {
                   "application/json": {
-                      schema: z.object({
-                          success: z.boolean().openapi({ example: true }),
+                      schema: SuccessSchema.extend({
                           action: z.enum(["liked", "unliked"]).openapi({ example: "liked" }),
                           likeCount: z.number().int().openapi({ example: 10 })
                       }).openapi({ type: 'object' })
@@ -254,8 +243,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
             description: "요청 성공",
             content: {
               "application/json": {
-                schema: z.object({
-                  success: z.boolean().openapi({ example: true }),
+                schema: SuccessSchema.extend({
                   data: z.object({
                       id: z.number().int().openapi({ example: 1 }),
                       name: z.string().openapi({ example: "새로운 연예인" }),
