@@ -113,35 +113,6 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
     },
   });
 
-  const getSajuProfileRoute = createRoute({
-    method: "get",
-    path: "/{id}",
-    summary: "사주 프로필 상세 조회",
-    description: "특정 사주 프로필의 상세 정보를 조회합니다.",
-    tags: ["사주 프로필"],
-    security: [{ BearerAuth: [] }],
-    request: {
-      params: SajuProfileIdParamSchema,
-    },
-    responses: {
-      200: {
-        description: "성공",
-        content: {
-          "application/json": {
-            schema: SuccessSchema.extend({
-              profile: SajuProfileResponseSchema,
-            }).openapi({ type: 'object' }),
-          },
-        },
-      },
-      400: { description: "잘못된 ID" },
-      401: { description: "인증 실패" },
-      403: { description: "권한 없음" },
-      404: { description: "프로필을 찾을 수 없음" },
-      500: { description: "서버 오류" },
-    },
-  });
-
   const updateSajuProfileRoute = createRoute({
     method: "put",
     path: "/{id}",
@@ -150,7 +121,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
     tags: ["사주 프로필"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: SajuProfileIdParamSchema,
+      // params: SajuProfileIdParamSchema,
       body: {
         content: {
           "application/json": {
@@ -186,7 +157,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
     tags: ["사주 프로필"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: SajuProfileIdParamSchema,
+      // params: SajuProfileIdParamSchema,
     },
     responses: {
       200: {
@@ -210,7 +181,6 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
   // 라우트 등록
   app.openapi(getSajuProfilesRoute, (c) => getSajuProfiles(c));
   app.openapi(createSajuProfileRoute, (c) => createSajuProfile(c));
-  app.openapi(getSajuProfileRoute, (c) => getSajuProfile(c)); // 안됨
   app.openapi(updateSajuProfileRoute, (c) => updateSajuProfile(c)); // 안됨
   app.openapi(deleteSajuProfileRoute, (c) => deleteSajuProfile(c)); // 안됨
   return app;

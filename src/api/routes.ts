@@ -45,8 +45,9 @@ export function createAppRouter(): OpenAPIHono {
       return c.json(
         app.getOpenAPIDocument({ openapi: "3.0.0", info: apiConfig })
       );
-    } catch (error) {
-      console.error(`Error:`, error);
+    } catch (error:any) {
+      console.error(`Error:`, error.message);
+      console.error(`Error:`, error.data);
       return c.json({ error: "서버 내부 오류가 발생했습니다." }, 500);
     }
   });

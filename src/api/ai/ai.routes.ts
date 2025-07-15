@@ -191,7 +191,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
       tags: ["AI - RAG"],
       security: [{ BearerAuth: [] }],
       request: {
-          params: RagIdParamSchema,
+          // params: RagIdParamSchema,
           body: {
               content: {
                   "application/json": { schema: RagMetadataSchema }
@@ -220,13 +220,13 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
       description: "RAG 시스템에 저장된 모든 문서를 페이지네이션 및 검색 기능과 함께 조회합니다.",
       tags: ["AI - RAG"],
       security: [{ BearerAuth: [] }],
-      request: {
-          query: z.object({
-              page: z.coerce.number().int().positive().default(1).optional(),
-              limit: z.coerce.number().int().positive().default(10).optional(),
-              search: z.string().optional(),
-          }).openapi({ type: 'object' })
-      },
+      // request: {
+      //     query: z.object({
+      //         page: z.coerce.number().int().positive().default(1).optional(),
+      //         limit: z.coerce.number().int().positive().default(10).optional(),
+      //         search: z.string().optional(),
+      //     }).openapi({ type: 'object' })
+      // },
       responses: {
         200: {
             description: "성공적인 응답",
@@ -259,7 +259,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
       tags: ["AI - RAG"],
       security: [{ BearerAuth: [] }],
       request: {
-          params: RagIdParamSchema
+          // params: RagIdParamSchema
       },
       responses: {
         200: {

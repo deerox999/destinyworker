@@ -8,14 +8,22 @@ export const PaginationQuerySchema = z
       .positive()
       .default(1)
       .optional()
-      .openapi({ description: "페이지 번호", example: 1 }),
+      .openapi({
+        param: { name: "page", in: "query" },
+        description: "페이지 번호",
+        example: 1,
+      }),
     limit: z.coerce
       .number()
       .int()
       .positive()
       .default(10)
       .optional()
-      .openapi({ description: "페이지당 항목 수", example: 10 }),
+      .openapi({
+        param: { name: "limit", in: "query" },
+        description: "페이지당 항목 수",
+        example: 10,
+      }),
   })
   .openapi({ type: "object" });
 
@@ -25,12 +33,20 @@ export const SortQuerySchema = z
       .string()
       .default("createdAt")
       .optional()
-      .openapi({ description: "정렬 필드", example: "createdAt" }),
+      .openapi({
+        param: { name: "sort", in: "query" },
+        description: "정렬 필드",
+        example: "createdAt",
+      }),
     order: z
       .enum(["asc", "desc"])
       .default("desc")
       .optional()
-      .openapi({ description: "정렬 순서", example: "desc" }),
+      .openapi({
+        param: { name: "order", in: "query" },
+        description: "정렬 순서",
+        example: "desc",
+      }),
   })
   .openapi({ type: "object" });
 
@@ -87,7 +103,11 @@ export const LangQuerySchema = z.object({
   lang: z
     .string()
     .default("ko")
-    .openapi({ description: "언어 코드 (e.g., 'ko', 'en')", example: "ko" }),
+    .openapi({
+      param: { name: "lang", in: "query" },
+      description: "언어 코드 (e.g., 'ko', 'en')",
+      example: "ko",
+    }),
 });
 
 export const CommentIdParamSchema = z.object({
@@ -146,22 +166,20 @@ export const CelebrityBaseSchema = z
   })
   .openapi({ type: "object" });
 
-export const SajuProfileIdParamSchema = z
-  .object({
-    id: z
-      .string()
-      .regex(/^\d+$/)
-      .pipe(z.coerce.number())
+export const SajuProfileIdParamSchema = z.object({
+    id: z.coerce
+      .number()
+      .int()
+      .positive()
       .openapi({
         param: {
           name: "id",
           in: "path",
         },
         description: "사주 프로필 ID",
-        example: "123",
+        example: 1,
       }),
-  })
-  .openapi({ type: "object" });
+  });
 
 export const RagIdParamSchema = z
   .object({

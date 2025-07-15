@@ -19,7 +19,11 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   app.use(authMiddleware);
 
   const UserSearchQuerySchema = z.object({
-    search: z.string().optional().openapi({ description: "검색어 (이름 또는 이메일)", example: "홍길동" }),
+    search: z.string().optional().openapi({
+      param: { name: "search", in: "query" },
+      description: "검색어 (이름 또는 이메일)",
+      example: "홍길동",
+    }),
   });
 
   const UserIdParamSchema = z.object({
@@ -34,17 +38,33 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   }).openapi({ type: 'object' });
 
   const DateRangeQuerySchema = z.object({
-    startDate: z.string().optional().openapi({ description: "조회 시작일 (YYYY-MM-DD)", example: "2023-01-01" }),
-    endDate: z.string().optional().openapi({ description: "조회 종료일 (YYYY-MM-DD)", example: "2023-01-31" }),
+    startDate: z.string().optional().openapi({
+      param: { name: "startDate", in: "query" },
+      description: "조회 시작일 (YYYY-MM-DD)",
+      example: "2023-01-01",
+    }),
+    endDate: z.string().optional().openapi({
+      param: { name: "endDate", in: "query" },
+      description: "조회 종료일 (YYYY-MM-DD)",
+      example: "2023-01-31",
+    }),
   });
 
   const AiUsageSortQuerySchema = z.object({
-    sort: z.string().default("total_tokens").optional().openapi({ description: "정렬 필드", example: "total_tokens" }),
+    sort: z.string().default("total_tokens").optional().openapi({
+      param: { name: "sort", in: "query" },
+      description: "정렬 필드",
+      example: "total_tokens",
+    }),
     order: z
       .enum(["asc", "desc"])
       .default("desc")
       .optional()
-      .openapi({ description: "정렬 순서", example: "desc" }),
+      .openapi({
+        param: { name: "order", in: "query" },
+        description: "정렬 순서",
+        example: "desc",
+      }),
   });
 
   // --- 라우트 정의 ---
@@ -246,6 +266,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
         .merge(AiUsageSortQuerySchema)
         .extend({
           model: z.string().openapi({
+            param: { name: "model", in: "query" },
             description: "AI 모델 이름",
             example: "gemini-pro",
           }),
