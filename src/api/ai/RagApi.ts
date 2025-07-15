@@ -271,25 +271,37 @@ export async function RagUpdate(
   }
 
   try {
-    const { text, metadata } = (await c.req.json()) as Document;
+    const body = await c.req.json();
+    const text = body.text;
+    const metadata = body.metadata;
 
-    // 필수 필드 유효성 검사
-    if (!text || !metadata || !metadata.source || !metadata.category) {
-      return c.json(
-        {
-          error:
-            "Invalid request body: 'text' and 'metadata' (with 'source' and 'category') are required fields.",
-        },
-        400
-      );
+    // 기본적인 유효성 검사
+    if (!text || typeof text !== 'string') {
+      return c.json({ error: "텍스트는 필수이며 문자열이어야 합니다." }, 400);
+    }
+
+    if (!metadata || typeof metadata !== 'object') {
+      return c.json({ error: "메타데이터는 필수이며 객체여야 합니다." }, 400);
+    }
+
+    if (!metadata.source || typeof metadata.source !== 'string') {
+      return c.json({ error: "메타데이터의 source는 필수이며 문자열이어야 합니다." }, 400);
+    }
+
+    if (!metadata.category || typeof metadata.category !== 'string') {
+      return c.json({ error: "메타데이터의 category는 필수이며 문자열이어야 합니다." }, 400);
     }
 
     // 기존 문서를 가져와서 텍스트 변경 여부 확인
-    const oldDoc = await c.env.DB.prepare("SELECT text FROM documents WHERE id = ?");
+    const { results } = await c.env.DB.prepare("SELECT text FROM documents WHERE id = ?")
+      .bind(docId)
+      .run();
 
-    if (!oldDoc) {
+    if (!results || results.length === 0) {
       return c.json({ error: `Document with ID ${docId} not found.` }, 404);
     }
+
+    const oldDoc = results[0];
 
     // D1에 문서 업데이트
     await c.env.DB.prepare(
@@ -307,7 +319,12 @@ export async function RagUpdate(
     }
 
     return c.json(
-      { message: `Document ${docId} updated successfully.`, id: docId },
+      { 
+        message: `Document ${docId} updated successfully.`, 
+        id: docId,
+        text,
+        metadata
+      },
       200
     );
   } catch (error) {

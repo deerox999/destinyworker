@@ -64,18 +64,15 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   // RAG 문서 스키마
   const RagMetadataSchema = z.object({
-    source: z.string().openapi({ description: "지식 출처 (예: '자평진전')", example: "자평진전" }),
-    category: z
-      .enum(["십신론", "격국론", "용신론", "물상론", "기타"])
-      .openapi({ description: "사주 명리학 대분류", example: "격국론" }),
-    author: z.string().optional().nullable().openapi({ description: "원본 저자", example: "심효첨" }),
-    relatedConcepts: z
-      .array(z.string())
-      .optional()
-      .nullable()
-      .openapi({ description: "관련 핵심 개념어", example: ["정관격", "상관패인"] }),
-    url: z.string().optional().nullable().openapi({ description: "웹 출처 URL", example: "https://example.com/saju-book" }),
-  }).openapi({ type: 'object' });
+    text: z.string().min(1),
+    metadata: z.object({
+        source: z.string().min(1),
+        category: z.string().min(1),
+        author: z.string().optional(),
+        relatedConcepts: z.array(z.string()).optional(),
+        url: z.string().optional()
+    })
+});
 
   const RagDocumentSchema = z.object({
     text: z.string().openapi({ description: "저장할 텍스트 내용", example: "정관은..." }),
@@ -191,7 +188,6 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
       tags: ["AI - RAG"],
       security: [{ BearerAuth: [] }],
       request: {
-          // params: RagIdParamSchema,
           body: {
               content: {
                   "application/json": { schema: RagMetadataSchema }
@@ -235,13 +231,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
                     schema: z.object({
                         documents: z.array(
                             RagDocumentSchema.extend({ id: z.number().int() }).openapi({ type: 'object' })
-                        ).openapi({ 
-                            example: [{
-                                id: 1,
-                                text: "...", 
-                                metadata: { source: "자평진전", category: "격국론", author: "심효첨" }
-                            }]
-                        }),
+                        ),
                         pagination: PaginationResponseSchema
                     }).openapi({ type: 'object' })
                 }
