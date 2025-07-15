@@ -2,12 +2,13 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
   createCelebrityComment,
   deleteCelebrityComment,
-  getCelebrities,
   getCelebrityById,
   getCelebrityComments,
   toggleCelebrityCommentLike,
   updateCelebrityComment,
 } from "./celebrityProfileApi";
+
+import { getCelebrities } from "../admin/celebrity/celebrity";
 import { createCelebrityRequest } from "./celebrityRequestApi";
 
 import { MiddlewareHandler } from "hono";
@@ -74,39 +75,51 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
       수정일: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
   });
   
+  const TranslationSchema = z.object({
+    languageCode: z.string().openapi({ description: "언어 코드", example: "ko" }),
+    name: z.string().openapi({ description: "이름", example: "아이유" }),
+    occupation: z.string().optional().openapi({ description: "직업", example: "가수" }),
+    description: z.string().optional().openapi({ description: "설명", example: "대한민국의 가수 겸 배우" }),
+  }).openapi({ type: 'object' });
+  
+  const CelebritySchema = z.object({
+    id: z.string().openapi({ example: "iu" }),
+    birthYear: z.number().int().openapi({ example: 1993 }),
+    birthMonth: z.number().int().openapi({ example: 5 }),
+    birthDay: z.number().int().openapi({ example: 16 }),
+    birthHour: z.number().int().optional().openapi({ example: 10 }),
+    birthMinute: z.number().int().optional().openapi({ example: 30 }),
+    calendar: z.enum(["SOLAR", "LUNAR"]).openapi({ example: "SOLAR" }),
+    gender: z.enum(["MALE", "FEMALE"]).openapi({ example: "FEMALE" }),
+    imageUrl: z.string().url().optional().openapi({ example: "https://example.com/iu.jpg" }),
+    translations: z.array(TranslationSchema).openapi({ type: 'array' }),
+  }).openapi({ type: 'object' });
+
   const RecursiveCommentSchema: z.ZodType<any> = CommentFieldsSchema.extend({
       답글: z.array(CommentFieldsSchema).openapi({ type: 'array' }),
   });
 
   // --- 라우트 정의 ---
+  const SortQuerySchema = z.object({
+    sort: z.string().default("createdAt").optional().openapi({ description: "정렬 필드", example: "createdAt" }),
+    order: z.enum(["asc", "desc"]).default("desc").optional().openapi({ description: "정렬 순서", example: "desc" }),
+  }).openapi({ type: 'object' });
+
   const getCelebritiesRoute = createRoute({
     method: "get",
     path: "/",
     summary: "유명인물 목록 조회",
-    description: "페이지네이션, 다국어 지원과 함께 유명인물 목록을 조회합니다.",
-    tags: ["유명인물"],
-    security: [{ BearerAuth: [] }],
+    description: "페이지네이션을 지원하는 유명인물 목록을 조회합니다.",
+    tags: ["Admin-유명인물"],
     request: {
-      query: PaginationQuerySchema.merge(LangQuerySchema).openapi({ type: 'object' }),
+      query: PaginationQuerySchema.merge(SortQuerySchema).extend({
+        id: z.string().optional().describe("ID로 검색 (정확한 ID 매칭)"),
+        search: z.string().optional().openapi({ description: "통합 검색 (ID, 이름, 직업, 설명)", example: "아이유" }),
+      }).openapi({ type: 'object' }),
     },
     responses: {
-      200: { 
-        description: "성공",
-        content: {
-          "application/json": {
-            schema: z.object({
-              success: z.boolean().openapi({ example: true }),
-              celebrities: z.array(CelebrityBaseSchema).openapi({ type: 'array' }),
-              pagination: z.object({
-                  page: z.number().int().openapi({ example: 1 }),
-                  limit: z.number().int().openapi({ example: 10 }),
-                  total: z.number().int().openapi({ example: 100 }),
-                  totalPages: z.number().int().openapi({ example: 10 })
-              }).openapi({ type: 'object' })
-            }).openapi({ type: 'object' })
-          }
-        }
-      },
+      200: { description: "조회 성공", content: { "application/json": { schema: z.object({ success: z.boolean().openapi({ example: true }), celebrities: z.array(CelebritySchema).openapi({ type: 'array' }), pagination: PaginationQuerySchema.openapi({ type: 'object' }) }).openapi({ type: 'object' }) } } },
+      500: { description: "서버 오류" },
     },
   });
 
@@ -354,9 +367,6 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
   app.openapi(getCelebritiesRoute, (c) => getCelebrities(c)); // 안됨
   app.openapi(getCelebrityByIdRoute, (c) => getCelebrityById(c)); // 안됨
   app.openapi(getCelebrityCommentsRoute, (c) => getCelebrityComments(c)); // 안됨
-  app.use("/:id/comments", authMiddleware);
-  app.use("/:id/comments/:commentId", authMiddleware);
-  app.use("/:id/comments/:commentId/like", authMiddleware);
   app.openapi(createCelebrityCommentRoute, (c) => createCelebrityComment(c)); // 안됨
   app.openapi(updateCelebrityCommentRoute, (c) => updateCelebrityComment(c)); // 안됨
   app.openapi(deleteCelebrityCommentRoute, (c) => deleteCelebrityComment(c)); // 안됨

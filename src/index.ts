@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
 
 const app = new OpenAPIHono();
@@ -24,19 +25,13 @@ app.use(
 
 // 에러 핸들링
 app.onError((err, c) => {
-  console.error(`Global Error:`, err);
-  if (err.cause) {
-    console.error(`Error Cause:`, err.cause);
+  if (err instanceof HTTPException) {
+    // HTTPException의 경우, 예외에 포함된 상태 코드와 메시지를 사용하여 응답합니다.
+    return c.json({ success: false, error: err.message }, err.status as any);
   }
-  return c.json(
-    {
-      error: "서버 내부 오류가 발생했습니다.",
-      message: err instanceof Error ? err.message : "Unknown error",
-      stack: err instanceof Error ? err.stack : undefined,
-      cause: err.cause,
-    },
-    500
-  );
+  // 그 외의 모든 오류는 500 내부 서버 오류로 처리합니다.
+  console.error("Internal Server Error:", err);
+  return c.json({ success: false, error: "Internal Server Error" }, 500);
 });
 
 // 404 핸들링
@@ -44,10 +39,9 @@ app.notFound((c) => {
   return c.json({ error: "엔드포인트를 찾을 수 없습니다." }, 404);
 });
 
-// 라우트 등록
-// Hono v4부터는 .route()를 사용하여 여러 라우트를 한 번에 연결할 수 있습니다.
-// createAppRouter가 Hono 인스턴스를 반환하도록 수정해야 합니다.
+// API 라우트 등록
 const routes = createAppRouter();
 app.route("/", routes);
+
 
 export default app;
