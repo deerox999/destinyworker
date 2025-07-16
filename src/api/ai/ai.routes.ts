@@ -16,7 +16,7 @@ import {
 } from "./SajuKnowledgeApi";
 
 import { MiddlewareHandler } from "hono";
-import { RagIdParamSchema, ConversationIdParamSchema, SuccessSchema, PaginationResponseSchema } from "../../common/schemas";
+import { ConversationIdParamSchema, PaginationResponseSchema, SuccessSchema } from "../../common/schemas";
 
 export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -90,7 +90,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const FortuneTellingRoute = createRoute({
     method: "post",
-    path: "detailed-fortune-telling",
+    path: "/detailed-fortune-telling",
     summary: "상세 사주 풀이 (RAG 결합)",
     description: "사용자 프롬프트와 사주 지식 베이스(RAG)를 결합하여 AI가 상세한 운세 풀이를 제공합니다.",
     tags: ["AI"],
@@ -119,7 +119,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const SajuAnalysisWithGeminiRoute = createRoute({
       method: 'post',
-      path: 'gemini-saju-analysis',
+      path: '/gemini-saju-analysis',
       summary: "Gemini AI 기반 사주 분석",
       description: "Google의 Gemini AI 모델과 RAG를 결합하여 심층적인 사주 분석을 제공합니다.",
       tags: ["AI"],
@@ -149,7 +149,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const RagAddDocumentsRoute = createRoute({
       method: "post",
-      path: "rag/documents",
+      path: "/rag/documents",
       summary: "[RAG] 문서 일괄 추가",
       description: "RAG 시스템에 여러 지식 문서를 한 번에 추가하고 벡터 인덱싱을 수행합니다.",
       tags: ["AI - RAG"],
@@ -182,7 +182,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   
   const RagUpdateRoute = createRoute({
       method: "put",
-      path: "rag/documents/{id}",
+      path: "/rag/documents/{id}",
       summary: "[RAG] 문서 메타데이터 수정",
       description: "ID로 특정 문서의 메타데이터 전체를 수정합니다.",
       tags: ["AI - RAG"],
@@ -211,7 +211,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const RagGetDocumentsRoute = createRoute({
       method: 'get',
-      path: 'rag/documents',
+      path: '/rag/documents',
       summary: "[RAG] 문서 목록 조회",
       description: "RAG 시스템에 저장된 모든 문서를 페이지네이션 및 검색 기능과 함께 조회합니다.",
       tags: ["AI - RAG"],
@@ -243,7 +243,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const RagDeleteRoute = createRoute({
       method: 'delete',
-      path: 'rag/documents/{id}',
+      path: '/rag/documents/{id}',
       summary: "[RAG] 문서 삭제",
       description: "ID로 특정 문서를 RAG 시스템에서 삭제합니다.",
       tags: ["AI - RAG"],
@@ -269,7 +269,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   
   const RagGetMetadataSchemaRoute = createRoute({
       method: 'get',
-      path: 'rag/metadata-schema',
+      path: '/rag/metadata-schema',
       summary: "[RAG] 메타데이터 스키마 조회",
       description: "RAG 문서에 사용되는 메타데이터의 구조(enum 등)를 조회합니다.",
       tags: ["AI - RAG"],
@@ -291,7 +291,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   
   const SajuChatRoute = createRoute({
       method: 'post',
-      path: 'saju-chat',
+      path: '/saju-chat',
       summary: "사주 지식 기반 채팅",
       description: "특정 사주에 대한 지식 기반으로 대화를 시작하거나 이어갑니다. 대화 ID가 없으면 새로운 대화를 시작합니다.",
       tags: ["AI - 대화형 RAG"],
@@ -347,7 +347,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const SajuChatListRoute = createRoute({
       method: 'get',
-      path: 'saju-chat',
+      path: '/saju-chat',
       summary: "[대화형 RAG] 내 대화 목록 조회",
       description: "현재 로그인한 사용자의 모든 대화 목록을 최신순으로 조회합니다.",
       tags: ["AI - 대화형 RAG"],
@@ -374,7 +374,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const SajuChatFullRoute = createRoute({
       method: 'get',
-      path: 'saju-chat/{id}',
+      path: '/saju-chat/{id}',
       summary: "[대화형 RAG] 특정 대화 기록 조회",
       description: "특정 대화 ID에 해당하는 모든 메시지 기록을 조회합니다.",
       tags: ["AI - 대화형 RAG"],
@@ -407,7 +407,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const SajuChatDeleteRoute = createRoute({
       method: 'delete',
-      path: 'saju-chat/{id}',
+      path: '/saju-chat/{id}',
       summary: "[대화형 RAG] 특정 대화 삭제",
       description: "특정 대화 ID에 해당하는 모든 메시지 기록을 삭제합니다.",
       tags: ["AI - 대화형 RAG"],

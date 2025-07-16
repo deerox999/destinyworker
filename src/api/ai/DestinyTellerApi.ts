@@ -173,7 +173,7 @@ export async function FortuneTelling(
   try {
     const body: DetailedFortuneTellingRequest = await c.req.json();
 
-    const model = body.model || "@cf/qwen/qwen2.5-coder-32b-instruct";
+    const model = body.model || "@cf/google/gemma-3-12b-it";
 
     // RAG 파이프라인 실행
     // 1. 사용자의 프롬프트를 기반으로 관련 문서 검색
