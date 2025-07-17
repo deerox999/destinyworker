@@ -1,4 +1,5 @@
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import { Context, MiddlewareHandler } from "hono";
 import {
   createEmbedding,
   findSimilarVectors,
@@ -6,7 +7,6 @@ import {
   logAiUsage,
   RagEnv,
 } from "../../common/ragUtils";
-import { corsHeaders, getUserFromToken, jsonResponse } from "../../common/utils";
 
 export interface Env extends RagEnv {
   AI: Ai;
@@ -112,7 +112,7 @@ function createApiResponse(
   aiResult: any,
   requestBody: DetailedFortuneTellingRequest,
   model: string,
-  request: Request
+  c: Context
 ): Response {
   const { useGateway = false, stream = false } = requestBody;
 
@@ -125,9 +125,7 @@ function createApiResponse(
       aiResult instanceof ReadableStream ? new Response(aiResult) : aiResult;
 
     const headers = new Headers(responseStream.headers);
-    Object.entries(corsHeaders(request)).forEach(([key, value]) => {
-      headers.set(key, value);
-    });
+    // Hono의 c.res.headers를 직접 사용하거나, c.header()를 사용하여 헤더 설정
     headers.set("Content-Type", "text/event-stream; charset=utf-8");
     headers.set("X-AI-Model", model);
     headers.set("X-Gateway-Enabled", useGateway.toString());
@@ -157,37 +155,35 @@ function createApiResponse(
       response_type: typeof aiResult,
     },
   };
-  return jsonResponse(enhancedResponse, 200, request);
+  return c.json(enhancedResponse, 200);
 }
 
 /**
  * 상세 사주 풀이 요청을 처리합니다.
  */
 export async function FortuneTelling(
-  request: Request,
-  env: Env,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   // 1. 사용자 인증
-  const user = await getUserFromToken(request);
+  const user = c.get("user");
   if (!user) {
-    return jsonResponse({ error: "Unauthorized: Invalid token" }, 401, request);
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
 
   try {
-    const body: DetailedFortuneTellingRequest = await request.json();
+    const body: DetailedFortuneTellingRequest = await c.req.json();
 
-    const model = body.model || "@cf/qwen/qwen2.5-coder-32b-instruct";
+    const model = body.model || "@cf/google/gemma-3-12b-it";
 
     // RAG 파이프라인 실행
     // 1. 사용자의 프롬프트를 기반으로 관련 문서 검색
-    const queryVector = await createEmbedding(env.AI, body.userPrompt || "");
+    const queryVector = await createEmbedding(c.env.AI, body.userPrompt || "");
     const similarDocIds = await findSimilarVectors(
-      env.VECTORIZE_INDEX,
+      c.env.VECTORIZE_INDEX,
       queryVector
     );
     const contextDocs = await getDocumentsFromD1(
-      env.DB,
+      c.env.DB,
       similarDocIds.map((id) => id.toString())
     );
 
@@ -217,7 +213,7 @@ export async function FortuneTelling(
       systemPrompt: finalSystemPrompt,
     });
 
-    const result = await env.AI.run(
+    const result = await c.env.AI.run(
       model as any,
       aiParams,
       buildGatewayConfig(body)
@@ -226,19 +222,19 @@ export async function FortuneTelling(
     // 4. AI 사용량 로깅 (스트리밍이 아닌 경우)
     // Cloudflare AI 응답에 'usage' 객체가 포함되어 있는지 확인합니다.
     if (!body.stream && result && result.usage) {
-      await logAiUsage(env.DB, user.id, model, result.usage);
+      await logAiUsage(c.env.DB, user.id, model, result.usage);
     }
 
-    return createApiResponse(result, body, model, request);
+    return createApiResponse(result, body, model, c);
   } catch (error) {
     console.error("상세 사주 풀이 API 오류:", error);
-    return jsonResponse(
+    return c.json(
       {
         error: "AI 모델 실행 중 오류가 발생했습니다.",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       500,
-      request
+      c.req.header()
     );
   }
 }

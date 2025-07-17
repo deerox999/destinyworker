@@ -1,294 +1,152 @@
-import { Router } from "../../../common/class/router";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
-  createCelebrity,
   createCelebritiesBatch,
+  createCelebrity,
   deleteCelebrity,
-  updateCelebrity,
-  getCelebrityRequests,
   getCelebrities,
+  getCelebrityRequests,
+  updateCelebrity,
 } from "./celebrity";
 
-export function createCelebrityAdminRouter(): Router {
-  const router = new Router();
+import { MiddlewareHandler } from "hono";
+import { CelebrityIdParamSchema, CelebritySchema, PaginationQuerySchema, SortQuerySchema, SuccessSchema, PaginationResponseSchema } from "../../../common/schemas";
 
-  // 유명인물 목록 조회
-  router.get("/api/admin/celebrities", getCelebrities, {
+export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
+  const app = new OpenAPIHono();
+  app.use(authMiddleware);
+  
+  // 라우트 정의
+  const getCelebritiesRoute = createRoute({
+    method: "get",
+    path: "/",
     summary: "유명인물 목록 조회",
     description: "페이지네이션을 지원하는 유명인물 목록을 조회합니다.",
-    tags: ["유명인물"],
-    parameters: [
-      {
-        name: "page",
-        in: "query",
-        description: "페이지 번호",
-        required: false,
-        schema: { type: "integer", default: 1 },
-      },
-      {
-        name: "limit",
-        in: "query",
-        description: "페이지당 항목 수",
-        required: false,
-        schema: { type: "integer", default: 10 },
-      },
-      {
-        name: "sort",
-        in: "query",
-        description: "정렬 필드",
-        required: false,
-        schema: { type: "string", default: "createdAt" },
-      },
-      {
-        name: "order",
-        in: "query",
-        description: "정렬 순서",
-        required: false,
-        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
-      },
-      {
-        name: "id",
-        in: "query",
-        description: "ID로 검색 (정확한 ID 매칭)",
-        required: false,
-        schema: { type: "string" },
-      },
-      {
-        name: "search",
-        in: "query",
-        description: "통합 검색 (ID, 이름, 직업, 설명에서 검색, 모든 언어 지원)",
-        required: false,
-        schema: { type: "string" },
-      },
-    ],
+    tags: ["Admin-유명인물"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      query: PaginationQuerySchema.merge(SortQuerySchema).extend({
+        id: z.string().optional().describe("ID로 검색 (정확한 ID 매칭)"),
+        search: z.string().optional().openapi({ description: "통합 검색 (ID, 이름, 직업, 설명)", example: "아이유" }),
+      }).openapi({ type: 'object' }),
+    },
     responses: {
-      "200": { description: "조회 성공" },
-      "500": { description: "서버 오류" },
+      200: { description: "조회 성공", content: { "application/json": { schema: SuccessSchema.extend({ celebrities: z.array(CelebritySchema).openapi({ type: 'array' }), pagination: PaginationResponseSchema }).openapi({ type: 'object' }) } } },
+      500: { description: "서버 오류" },
     },
   });
 
-  // [Admin] 유명인물 생성
-  router.post("/api/admin/celebrities", createCelebrity, {
+  const createCelebrityRoute = createRoute({
+    method: "post",
+    path: "/",
     summary: "[Admin] 유명인물 생성",
     description: "새로운 유명인물과 관련 다국어 정보를 생성합니다. (관리자용)",
-    tags: ["유명인물", "Admin"],
-    auth: true,
-    requestBody: {
-      required: true,
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              birthYear: { type: "number" },
-              birthMonth: { type: "number" },
-              birthDay: { type: "number" },
-              calendar: { type: "string" },
-              gender: { type: "string" },
-              translations: { type: "array", items: { type: "object" } },
-            },
-            required: [
-              "id",
-              "birthYear",
-              "birthMonth",
-              "birthDay",
-              "calendar",
-              "gender",
-              "translations",
-            ],
-          },
-        },
+    tags: ["Admin-유명인물"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      body: {
+        content: { "application/json": { schema: CelebritySchema } },
       },
     },
     responses: {
-      "201": { description: "생성 성공" },
-      "400": { description: "잘못된 요청 데이터" },
-      "401": { description: "인증 실패" },
-      "403": { description: "권한 없음" },
+      201: { description: "생성 성공", content: { "application/json": { schema: SuccessSchema.extend({ celebrity: CelebritySchema }).openapi({ type: 'object' }) } } },
+      400: { description: "잘못된 요청 데이터" },
+      401: { description: "인증 실패" },
+      403: { description: "권한 없음" },
     },
   });
 
-  // [Admin] 유명인물 대량 생성
-  router.post("/api/admin/celebrities/batch", createCelebritiesBatch, {
+  const createCelebritiesBatchRoute = createRoute({
+    method: "post",
+    path: "/batch",
     summary: "[Admin] 유명인물 대량 생성",
     description: "여러 유명인물을 한 번에 생성합니다. (관리자용)",
-    tags: ["유명인물", "Admin"],
-    auth: true,
-    requestBody: {
-      required: true,
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              celebrities: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    id: { type: "string" },
-                    birthYear: { type: "number" },
-                    birthMonth: { type: "number" },
-                    birthDay: { type: "number" },
-                    birthHour: { type: "number" },
-                    birthMinute: { type: "number" },
-                    calendar: { type: "string", enum: ["SOLAR", "LUNAR"] },
-                    gender: { type: "string", enum: ["MALE", "FEMALE"] },
-                    imageUrl: { type: "string" },
-                    translations: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          languageCode: { type: "string" },
-                          name: { type: "string" },
-                          occupation: { type: "string" },
-                          description: { type: "string" },
-                        },
-                        required: ["languageCode", "name"],
-                      },
-                    },
-                  },
-                  required: [
-                    "id",
-                    "birthYear",
-                    "birthMonth",
-                    "birthDay",
-                    "calendar",
-                    "gender",
-                    "translations",
-                  ],
-                },
-              },
-            },
-            required: ["celebrities"],
+    tags: ["Admin-유명인물"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({ celebrities: z.array(CelebritySchema).openapi({ type: 'array' }) }).openapi({ type: 'object' }),
           },
         },
       },
     },
     responses: {
-      "201": { description: "대량 생성 성공" },
-      "400": { description: "잘못된 요청 데이터" },
-      "401": { description: "인증 실패" },
-      "403": { description: "권한 없음" },
+      201: { description: "대량 생성 성공", content: { "application/json": { schema: SuccessSchema.extend({ count: z.number().int().openapi({ example: 5 }) }).openapi({ type: 'object' }) } } },
+      400: { description: "잘못된 요청 데이터" },
+      401: { description: "인증 실패" },
+      403: { description: "권한 없음" },
     },
   });
 
-  // [Admin] 유명인물 수정
-  router.put("/api/admin/celebrities/:id", updateCelebrity, {
+  const updateCelebrityRoute = createRoute({
+    method: "put",
+    path: "/{id}",
     summary: "[Admin] 유명인물 수정",
     description: "기존 유명인물의 정보를 수정합니다. (관리자용)",
-    tags: ["유명인물", "Admin"],
-    auth: true,
-    parameters: [
-      {
-        name: "id",
-        in: "path",
-        required: true,
-        description: "수정할 유명인물 ID",
-        schema: { type: "string" },
-      },
-    ],
-    requestBody: {
-      required: true,
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              birthYear: { type: "number" },
-              birthMonth: { type: "number" },
-              birthDay: { type: "number" },
-              calendar: { type: "string" },
-              gender: { type: "string" },
-              translations: { type: "array", items: { type: "object" } },
-            },
-          },
+    tags: ["Admin-유명인물"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: CelebrityIdParamSchema,
+      body: {
+        content: {
+          "application/json": { schema: CelebritySchema.partial() },
         },
       },
     },
     responses: {
-      "200": { description: "수정 성공" },
-      "400": { description: "잘못된 요청 데이터" },
-      "401": { description: "인증 실패" },
-      "403": { description: "권한 없음" },
-      "404": { description: "유명인물을 찾을 수 없음" },
+      200: { description: "수정 성공", content: { "application/json": { schema: SuccessSchema.extend({ celebrity: CelebritySchema }).openapi({ type: 'object' }) } } },
+      400: { description: "잘못된 요청 데이터" },
+      401: { description: "인증 실패" },
+      403: { description: "권한 없음" },
+      404: { description: "유명인물을 찾을 수 없음" },
     },
   });
 
-  // [Admin] 유명인물 삭제
-  router.delete("/api/admin/celebrities/:id", deleteCelebrity, {
+  const deleteCelebrityRoute = createRoute({
+    method: "delete",
+    path: "/{id}",
     summary: "[Admin] 유명인물 삭제",
     description: "특정 유명인물을 삭제합니다. (관리자용)",
-    tags: ["유명인물", "Admin"],
-    auth: true,
-    parameters: [
-      {
-        name: "id",
-        in: "path",
-        required: true,
-        description: "삭제할 유명인물 ID",
-        schema: { type: "string" },
-      },
-    ],
+    tags: ["Admin-유명인물"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: CelebrityIdParamSchema,
+    },
     responses: {
-      "200": { description: "삭제 성공" },
-      "401": { description: "인증 실패" },
-      "403": { description: "권한 없음" },
-      "404": { description: "유명인물을 찾을 수 없음" },
+      200: { description: "삭제 성공", content: { "application/json": { schema: SuccessSchema.extend({ message: z.string().openapi({ example: "유명인물이 성공적으로 삭제되었습니다." }) }).openapi({ type: 'object' }) } } },
+      401: { description: "인증 실패" },
+      403: { description: "권한 없음" },
+      404: { description: "유명인물을 찾을 수 없음" },
     },
   });
 
-  router.get("/api/admin/celebrities/requests", getCelebrityRequests, {
+  const getCelebrityRequestsRoute = createRoute({
+    method: "get",
+    path: "/requests",
     summary: "유명인물 요청 목록 조회",
-    description:
-      "페이지네이션을 지원하는 유명인물 추가 요청 목록을 조회합니다. (관리자용)",
-    tags: ["유명인물"],
-    auth: true,
-    parameters: [
-      {
-        name: "page",
-        in: "query",
-        description: "페이지 번호",
-        required: false,
-        schema: { type: "integer", default: 1 },
-      },
-      {
-        name: "limit",
-        in: "query",
-        description: "페이지당 항목 수",
-        required: false,
-        schema: { type: "integer", default: 10 },
-      },
-      {
-        name: "search",
-        in: "query",
-        description: "검색어 (요청된 이름으로 검색)",
-        required: false,
-        schema: { type: "string" },
-      },
-      {
-        name: "sort",
-        in: "query",
-        description: "정렬 필드",
-        required: false,
-        schema: { type: "string", default: "created_at" },
-      },
-      {
-        name: "order",
-        in: "query",
-        description: "정렬 순서",
-        required: false,
-        schema: { type: "string", enum: ["asc", "desc"], default: "desc" },
-      },
-    ],
+    description: "페이지네이션을 지원하는 유명인물 추가 요청 목록을 조회합니다. (관리자용)",
+    tags: ["Admin-유명인물"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      query: PaginationQuerySchema.merge(SortQuerySchema).extend({
+        search: z.string().optional().openapi({ description: "검색어 (요청된 이름으로 검색)", example: "아이유" }),
+      }).openapi({ type: 'object' }),
+    },
     responses: {
-      "200": { description: "조회 성공" },
-      "401": { description: "인증 실패 (관리자 권한 필요)" },
-      "500": { description: "서버 오류" },
+      200: { description: "조회 성공", content: { "application/json": { schema: SuccessSchema.extend({ requests: z.array(z.object({ id: z.number().int().openapi({ example: 1 }), name: z.string().openapi({ example: "아이유" }), description: z.string().openapi({ example: "가수" }), birthDate: z.string().openapi({ example: "1993-05-16" }), occupation: z.string().openapi({ example: "가수" }), isProcessed: z.boolean().openapi({ example: false }), createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }), updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }) }).openapi({ type: 'object' })).openapi({ type: 'array' }), pagination: PaginationResponseSchema }).openapi({ type: 'object' }) } } },
+      401: { description: "인증 실패 (관리자 권한 필요)" },
+      500: { description: "서버 오류" },
     },
   });
 
-  return router;
+
+  // 라우트 등록
+  app.openapi(createCelebritiesBatchRoute, (c) => createCelebritiesBatch(c)); 
+  app.openapi(createCelebrityRoute, (c) => createCelebrity(c));
+  app.openapi(getCelebritiesRoute, (c) => getCelebrities(c)); // 안됨
+  app.openapi(updateCelebrityRoute, (c) => updateCelebrity(c)); // 안됨
+  app.openapi(deleteCelebrityRoute, (c) => deleteCelebrity(c)); // 안됨
+  app.openapi(getCelebrityRequestsRoute, (c) => getCelebrityRequests(c)); // 안됨
+  return app;
 }

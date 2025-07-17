@@ -1,7 +1,7 @@
 import { D1Database } from "@cloudflare/workers-types";
 import { PrismaD1 } from "@prisma/adapter-d1";
 import { PrismaClient } from "@prisma/client";
-import { getUserFromToken } from "./utils";
+import { Context, MiddlewareHandler } from "hono";
 
 export const createPrismaClient = (db: D1Database) => {
   const adapter = new PrismaD1(db);
@@ -12,8 +12,8 @@ export const createPrismaClient = (db: D1Database) => {
 };
 
 // 관리자 권한 체크
-export const isAdmin = async (request: Request, env: any): Promise<boolean> => {
-  const user = await getUserFromToken(request);
+export const isAdmin = async (c: Context): Promise<boolean> => {
+  const user = c.get("user");
   if (!user) return false;
 
   // 토큰에서 role 확인하거나, DB에서 재확인
@@ -21,7 +21,7 @@ export const isAdmin = async (request: Request, env: any): Promise<boolean> => {
 
   // DB에서 재확인 (토큰이 오래된 경우 대비)
   try {
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
       select: { role: true },

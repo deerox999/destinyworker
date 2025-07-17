@@ -3,17 +3,14 @@
  사용하려면, GEMINI API키 추가 필요함.
 */
 import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import { Context, MiddlewareHandler } from "hono";
+import { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   createEmbedding,
   findSimilarVectors,
   getDocumentsFromD1,
   RagEnv
 } from "../../common/ragUtils";
-import {
-  corsHeaders,
-  getUserFromToken,
-  jsonResponse
-} from "../../common/utils";
 
 // Gemini API와 통신하기 위한 환경 변수 확장
 export interface Env extends RagEnv {
@@ -222,28 +219,26 @@ function buildGeminiPayload(
  * Gemini AI를 활용한 상세 사주 풀이 API
  */
 export async function SajuAnalysisWithGemini(
-  request: Request,
-  env: Env,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   // 1. 사용자 인증 (기존 로직 재사용)
-  const user = await getUserFromToken(request);
+  const user = c.get("user");
   if (!user) {
-    return jsonResponse({ error: "Unauthorized: Invalid token" }, 401, request);
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
 
   try {
-    const body: SajuAnalysisRequest = await request.json();
+    const body: SajuAnalysisRequest = await c.req.json();
     const model = body.model || "gemini-1.5-pro-latest";
 
     // 2. RAG 파이프라인 실행 (기존 로직 재사용)
-    const queryVector = await createEmbedding(env.AI, body.userPrompt);
+    const queryVector = await createEmbedding(c.env.AI, body.userPrompt);
     const similarDocIds = await findSimilarVectors(
-      env.VECTORIZE_INDEX,
+      c.env.VECTORIZE_INDEX,
       queryVector
     );
     const contextDocs = await getDocumentsFromD1(
-      env.DB,
+      c.env.DB,
       similarDocIds.map((id) => id.toString())
     );
     const ragContext =
@@ -259,7 +254,7 @@ export async function SajuAnalysisWithGemini(
     // 4. Gemini API 호출
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${
       body.stream ? "streamGenerateContent" : "generateContent"
-    }?key=${env.GEMINI_API_KEY}`;
+    }?key=${c.env.GEMINI_API_KEY}`;
 
     const geminiResponse = await fetch(geminiUrl, {
       method: "POST",
@@ -272,13 +267,13 @@ export async function SajuAnalysisWithGemini(
     if (!geminiResponse.ok) {
       const errorBody = await geminiResponse.json();
       console.error("Gemini API Error:", errorBody);
-      return jsonResponse(
+      return c.json(
         {
           error: "Gemini API request failed",
           details: errorBody,
         },
-        geminiResponse.status,
-        request
+        geminiResponse.status as ContentfulStatusCode,
+        c.req.header()
       );
     }
 
@@ -286,8 +281,8 @@ export async function SajuAnalysisWithGemini(
     if (body.stream) {
       // 스트리밍 응답인 경우, ReadableStream을 그대로 반환
       const headers = new Headers(geminiResponse.headers);
-      Object.entries(corsHeaders(request)).forEach(([key, value]) => {
-        headers.set(key, value);
+      Object.entries(c.req.header()).forEach(([key, value]) => {
+        headers.set(key, value as string);
       });
       // SSE(Server-Sent Events) 형식임을 명시
       headers.set("Content-Type", "text/event-stream; charset=utf-8");
@@ -311,17 +306,17 @@ export async function SajuAnalysisWithGemini(
       //   await logAiUsage(env.DB, user.id, model, result.usage);
       // }
 
-      return jsonResponse(result, 200, request);
+      return c.json(result as any);
     }
   } catch (error) {
     console.error("Gemini 사주 분석 API 오류:", error);
-    return jsonResponse(
+    return c.json(
       {
         error: "An error occurred while processing your request.",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       500,
-      request
+      c.req.header()
     );
   }
 } 

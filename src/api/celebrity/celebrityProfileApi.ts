@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
-import { getUserFromToken, jsonResponse } from "../../common/utils";
+import { Context, MiddlewareHandler } from "hono";
 
 // 중첩된 댓글에서 모든 댓글 ID 추출
 const getAllCommentIds = (comments: any[]): number[] => {
@@ -37,13 +37,13 @@ const validateCommentData = (data: any): boolean => {
 };
 
 // 클라이언트 식별자 생성
-const getClientFingerprint = (request: Request): string => {
+const getClientFingerprint = (c: Context): string => {
   const ip =
-    request.headers.get("CF-Connecting-IP") ||
-    request.headers.get("X-Forwarded-For") ||
-    request.headers.get("X-Real-IP") ||
+    c.req.header("CF-Connecting-IP") ||
+    c.req.header("X-Forwarded-For") ||
+    c.req.header("X-Real-IP") ||
     "unknown";
-  const userAgent = request.headers.get("User-Agent") || "unknown";
+  const userAgent = c.req.header("User-Agent") || "unknown";
   return `${ip}:${userAgent.substring(0, 50)}`;
 };
 
@@ -53,13 +53,15 @@ const getClientFingerprint = (request: Request): string => {
 const incrementViewCount = async (
   prisma: PrismaClient,
   celebrityId: string,
-  request: Request,
+  c: Context,
   env: any
 ): Promise<number> => {
   try {
     // KV 바인딩이 없으면, 중복 체크 없이 단순 증가 처리 (개발 환경 등)
     if (!env.VIEW_CACHE_KV) {
-      console.warn("VIEW_CACHE_KV is not bound. View count will be incremented without duplication check.");
+      console.warn(
+        "VIEW_CACHE_KV is not bound. View count will be incremented without duplication check."
+      );
       const viewCount = await prisma.celebrityViewCount.upsert({
         where: { celebrityId },
         update: { viewCount: { increment: 1 } },
@@ -68,7 +70,7 @@ const incrementViewCount = async (
       return viewCount.viewCount;
     }
 
-    const fingerprint = getClientFingerprint(request);
+    const fingerprint = getClientFingerprint(c);
     const cacheKey = `view:${celebrityId}:${fingerprint}`;
 
     // KV에서 최근 조회 기록 확인
@@ -77,26 +79,24 @@ const incrementViewCount = async (
       // 30분 이내 동일 사용자의 조회는 조회수 증가 안함
       return await getViewCount(prisma, celebrityId);
     }
-    
+
     // 조회수 증가
     const updatedView = await prisma.celebrityViewCount.upsert({
       where: { celebrityId },
       update: { viewCount: { increment: 1 } },
       create: { celebrityId, viewCount: 1 },
     });
-    
+
     // KV에 조회 기록 저장 (TTL: 1일)
     await env.VIEW_CACHE_KV.put(cacheKey, "1", { expirationTtl: 60 * 60 * 24 });
 
     return updatedView.viewCount;
-    
   } catch (error) {
     console.error("Failed to increment view count with KV:", error);
     // 오류 발생 시, 기능 장애를 막기 위해 현재 조회수라도 반환
     return await getViewCount(prisma, celebrityId);
   }
 };
-
 
 // 조회수 조회 함수
 const getViewCount = async (
@@ -117,20 +117,18 @@ const getViewCount = async (
 
 // 유명인물 목록 조회 (페이지네이션, 다국어 지원)
 export async function getCelebrities(
-  request: Request,
-  env: any
-): Promise<Response> {
+  c: Context
+): Promise<any> {
   try {
-    const url = new URL(request.url);
-    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
+    const page = Math.max(1, parseInt(c.req.query("page") || "1"));
     const limit = Math.min(
       100,
-      Math.max(1, parseInt(url.searchParams.get("limit") || "10"))
+      Math.max(1, parseInt(c.req.query("limit") || "10"))
     );
-    const lang = url.searchParams.get("lang") || "ko";
+    const lang = c.req.query("lang") || "ko";
     const skip = (page - 1) * limit;
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     const [total, celebrities] = await Promise.all([
       prisma.celebrity.count(),
@@ -148,23 +146,23 @@ export async function getCelebrities(
 
     await prisma.$disconnect();
 
-    const result = celebrities.map((c: any) => {
-      const t = c.translations[0];
+    const result = celebrities.map((celeb: any) => {
+      const t = celeb.translations[0];
       return {
-        id: c.id,
+        id: celeb.id,
         이름: t?.name || "",
-        성별: c.gender === "MALE" ? "남자" : "여자",
+        성별: celeb.gender === "MALE" ? "남자" : "여자",
         직업: t?.occupation || "",
         설명: t?.description || "",
-        이미지: c.imageUrl,
-        년: c.birthYear,
-        월: c.birthMonth,
-        일: c.birthDay,
-        달력: c.calendar === "SOLAR" ? "양력" : "음력",
+        이미지: celeb.imageUrl,
+        년: celeb.birthYear,
+        월: celeb.birthMonth,
+        일: celeb.birthDay,
+        달력: celeb.calendar === "SOLAR" ? "양력" : "음력",
       };
     });
 
-    return jsonResponse({
+    return c.json({
       success: true,
       celebrities: result,
       pagination: {
@@ -175,7 +173,8 @@ export async function getCelebrities(
       },
     });
   } catch (error) {
-    return jsonResponse(
+    console.error("유명인물 목록 조회 실패:", error);
+    return c.json(
       {
         error: "유명인물 목록 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -187,20 +186,17 @@ export async function getCelebrities(
 
 // 특정 유명인물 상세 조회 (다국어 지원)
 export async function getCelebrityById(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const celebrityId = params?.id;
+    const celebrityId = c.req.param("id");
     if (!celebrityId) {
-      return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
+      return c.json({ error: "유명인물 ID가 필요합니다." }, 400);
     }
 
-    const url = new URL(request.url);
-    const lang = url.searchParams.get("lang") || "ko";
+    const lang = c.req.query("lang") || "ko";
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     const celebrity = await prisma.celebrity.findUnique({
       where: { id: celebrityId },
@@ -214,7 +210,7 @@ export async function getCelebrityById(
     await prisma.$disconnect();
 
     if (!celebrity) {
-      return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "유명인물을 찾을 수 없습니다." }, 404);
     }
 
     const t = celebrity.translations[0];
@@ -231,12 +227,13 @@ export async function getCelebrityById(
       달력: celebrity.calendar === "SOLAR" ? "양력" : "음력",
     };
 
-    return jsonResponse({
+    return c.json({
       success: true,
       celebrity: result,
     });
   } catch (error) {
-    return jsonResponse(
+    console.error("유명인물 조회 실패:", error);
+    return c.json(
       {
         error: "유명인물 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -249,16 +246,14 @@ export async function getCelebrityById(
 
 // 유명인물 댓글 목록 조회 (페이징 지원, 계층 구조, 조회수 증가, 정렬 기능, 추천 여부 포함)
 export async function getCelebrityComments(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
-): Promise<Response> {
+  c: Context
+  ): Promise<Response> {
   try {
-    const celebrityId = params?.id;
+    const celebrityId = c.req.param("id");
     if (!celebrityId)
-      return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
+      return c.json({ error: "유명인물 ID가 필요합니다." }, 400);
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // celebrity 존재 여부 확인
     const celebrity = await prisma.celebrity.findUnique({
@@ -266,20 +261,19 @@ export async function getCelebrityComments(
     });
     if (!celebrity) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "유명인물을 찾을 수 없습니다." }, 404);
     }
 
-    const url = new URL(request.url);
-    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
+    const page = Math.max(1, parseInt(c.req.query("page") || "1"));
     const limit = Math.min(
       50,
-      Math.max(1, parseInt(url.searchParams.get("limit") || "20"))
+      Math.max(1, parseInt(c.req.query("limit") || "20"))
     );
-    const sort = url.searchParams.get("sort") || "latest"; // latest, likes
+    const sort = c.req.query("sort") || "latest"; // latest, likes
     const skip = (page - 1) * limit;
 
     // 현재 사용자 정보 (로그인 여부 확인, 필수 아님)
-    const currentUser = await getUserFromToken(request);
+    const currentUser = c.get("user");
 
     // 정렬 옵션 설정
     let orderBy: any;
@@ -294,7 +288,7 @@ export async function getCelebrityComments(
     }
 
     // 조회수 증가
-    const viewCount = await incrementViewCount(prisma, celebrityId, request, env);
+    const viewCount = await incrementViewCount(prisma, celebrityId, c, c.env);
 
     // 최상위 댓글만 조회 (대댓글은 중첩으로 포함)
     const [total, comments] = await Promise.all([
@@ -346,7 +340,7 @@ export async function getCelebrityComments(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       celebrityId,
       조회수: viewCount,
@@ -363,7 +357,8 @@ export async function getCelebrityComments(
       },
     });
   } catch (error) {
-    return jsonResponse(
+    console.error("댓글 조회 실패:", error);
+    return c.json(
       {
         error: "댓글 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -375,24 +370,22 @@ export async function getCelebrityComments(
 
 // 유명인물 댓글 작성 (로그인 필요)
 export async function createCelebrityComment(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const user = await getUserFromToken(request);
-    if (!user) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+    const user = c.get("user");
+    if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
 
-    const celebrityId = params?.id;
+    const celebrityId = c.req.param("id");
     if (!celebrityId)
-      return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
+      return c.json({ error: "유명인물 ID가 필요합니다." }, 400);
 
-    const body = (await request.json()) as any;
+    const body = (await c.req.json()) as any;
     if (!validateCommentData(body)) {
-      return jsonResponse({ error: "댓글 내용이 필요합니다." }, 400);
+      return c.json({ error: "댓글 내용이 필요합니다." }, 400);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // celebrity 존재 여부 확인
     const celebrity = await prisma.celebrity.findUnique({
@@ -400,7 +393,7 @@ export async function createCelebrityComment(
     });
     if (!celebrity) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "유명인물을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "유명인물을 찾을 수 없습니다." }, 404);
     }
 
     // 부모 댓글 존재 확인 (대댓글인 경우)
@@ -411,7 +404,7 @@ export async function createCelebrityComment(
       });
       if (!parentComment || parentComment.celebrityId !== celebrityId) {
         await prisma.$disconnect();
-        return jsonResponse({ error: "부모 댓글을 찾을 수 없습니다." }, 404);
+        return c.json({ error: "부모 댓글을 찾을 수 없습니다." }, 404);
       }
     }
 
@@ -429,7 +422,7 @@ export async function createCelebrityComment(
 
     await prisma.$disconnect();
 
-    return jsonResponse(
+    return c.json(
       {
         success: true,
         comment: toCommentFields(comment, new Set()), // 새로 작성한 댓글은 추천하지 않은 상태
@@ -438,7 +431,8 @@ export async function createCelebrityComment(
       201
     );
   } catch (error) {
-    return jsonResponse(
+    console.error("댓글 작성 실패:", error);
+    return c.json(
       {
         error: "댓글 작성 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -450,24 +444,22 @@ export async function createCelebrityComment(
 
 // 유명인물 댓글 수정 (본인만)
 export async function updateCelebrityComment(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const user = await getUserFromToken(request);
-    if (!user) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+    const user = c.get("user");
+    if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
 
-    const commentId = parseInt(params?.commentId || "0");
+    const commentId = parseInt(c.req.param("commentId") || "0");
     if (!commentId)
-      return jsonResponse({ error: "댓글 ID가 필요합니다." }, 400);
+      return c.json({ error: "댓글 ID가 필요합니다." }, 400);
 
-    const body = (await request.json()) as any;
+    const body = (await c.req.json()) as any;
     if (!validateCommentData(body)) {
-      return jsonResponse({ error: "댓글 내용이 필요합니다." }, 400);
+      return c.json({ error: "댓글 내용이 필요합니다." }, 400);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // 댓글 존재 및 소유권 확인
     const comment = await prisma.celebrityComment.findUnique({
@@ -476,11 +468,11 @@ export async function updateCelebrityComment(
     });
     if (!comment) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "댓글을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "댓글을 찾을 수 없습니다." }, 404);
     }
     if (comment.userId !== user.id) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "본인의 댓글만 수정할 수 있습니다." }, 403);
+      return c.json({ error: "본인의 댓글만 수정할 수 있습니다." }, 403);
     }
 
     await prisma.celebrityComment.update({
@@ -490,9 +482,10 @@ export async function updateCelebrityComment(
 
     await prisma.$disconnect();
 
-    return jsonResponse({ success: true, message: "댓글이 수정되었습니다." });
+    return c.json({ success: true, message: "댓글이 수정되었습니다." });
   } catch (error) {
-    return jsonResponse(
+    console.error("댓글 수정 실패:", error);
+    return c.json(
       {
         error: "댓글 수정 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -504,19 +497,17 @@ export async function updateCelebrityComment(
 
 // 유명인물 댓글 삭제 (본인 또는 관리자)
 export async function deleteCelebrityComment(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const user = await getUserFromToken(request);
-    if (!user) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+    const user = c.get("user");
+    if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
 
-    const commentId = parseInt(params?.commentId || "0");
+    const commentId = parseInt(c.req.param("commentId") || "0");
     if (!commentId)
-      return jsonResponse({ error: "댓글 ID가 필요합니다." }, 400);
+      return c.json({ error: "댓글 ID가 필요합니다." }, 400);
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // 댓글 존재 확인
     const comment = await prisma.celebrityComment.findUnique({
@@ -525,24 +516,25 @@ export async function deleteCelebrityComment(
     });
     if (!comment) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "댓글을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "댓글을 찾을 수 없습니다." }, 404);
     }
 
     // 본인 또는 관리자인지 확인
     const isOwner = comment.userId === user.id;
-    const isUserAdmin = await isAdmin(request, env);
+    const isUserAdmin = await isAdmin(c);
 
     if (!isOwner && !isUserAdmin) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "댓글을 삭제할 권한이 없습니다." }, 403);
+      return c.json({ error: "댓글을 삭제할 권한이 없습니다." }, 403);
     }
 
     await prisma.celebrityComment.delete({ where: { id: commentId } });
     await prisma.$disconnect();
 
-    return jsonResponse({ success: true, message: "댓글이 삭제되었습니다." });
+    return c.json({ success: true, message: "댓글이 삭제되었습니다." });
   } catch (error) {
-    return jsonResponse(
+    console.error("댓글 삭제 실패:", error);
+    return c.json(
       {
         error: "댓글 삭제 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -554,19 +546,17 @@ export async function deleteCelebrityComment(
 
 // 댓글 추천 토글 (추천 <-> 추천 취소)
 export async function toggleCelebrityCommentLike(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const user = await getUserFromToken(request);
-    if (!user) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+    const user = c.get("user");
+    if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
 
-    const commentId = parseInt(params?.commentId || "0");
+    const commentId = parseInt(c.req.param("commentId") || "0");
     if (!commentId)
-      return jsonResponse({ error: "댓글 ID가 필요합니다." }, 400);
+      return c.json({ error: "댓글 ID가 필요합니다." }, 400);
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // 댓글 존재 확인
     const comment = await prisma.celebrityComment.findUnique({
@@ -575,7 +565,7 @@ export async function toggleCelebrityCommentLike(
     });
     if (!comment) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "댓글을 찾을 수 없습니다." }, 404);
+      return c.json({ error: "댓글을 찾을 수 없습니다." }, 404);
     }
 
     // 사용자가 이미 추천했는지 확인
@@ -633,14 +623,15 @@ export async function toggleCelebrityCommentLike(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       message: isLiked ? "댓글을 추천했습니다." : "댓글 추천을 취소했습니다.",
       추천수: newLikeCount,
       내가추천함: isLiked,
     });
   } catch (error) {
-    return jsonResponse(
+    console.error("댓글 추천 처리 실패:", error);
+    return c.json(
       {
         error: "댓글 추천 처리 실패",
         message: error instanceof Error ? error.message : "Unknown error",

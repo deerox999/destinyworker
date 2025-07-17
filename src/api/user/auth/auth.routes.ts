@@ -1,149 +1,139 @@
-import { Router } from "../../../common/class/router";
-import {
-  googleLogin,
-  logout,
-  getUserInfo,
-  refreshToken,
-} from "./googleAuthApi";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
+import { googleLogin, getUserInfo, logout, refreshToken } from "./googleAuthApi";
+import { SuccessSchema } from "../../../common/schemas";
 
-export function createAuthRouter(): Router {
-  const router = new Router();
+export function createAuthRouter(): OpenAPIHono {
+  const app = new OpenAPIHono(); 
 
-  router.post("/api/auth/google/login", googleLogin, {
+  // Google 로그인 라우트
+  const googleLoginRoute = createRoute({
+    method: "post",
+    path: "/google/login",
     summary: "Google OAuth 로그인",
     description: "Google OAuth를 통해 로그인하고 JWT 토큰을 발급받습니다.",
     tags: ["인증"],
-    auth: false,
-    requestBody: {
-      required: true,
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              token: {
-                type: "string",
-                description: "Google OAuth 토큰(id_token or access_token)",
-              },
-            },
-            required: ["token"],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              token: z
+                .string()
+                .openapi({ description: "Google OAuth 토큰(id_token or access_token)", example: "your_google_id_token" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
-      responses: {
-        "200": {
-          description: "로그인 성공",
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  success: { type: "boolean" },
-                  token: { type: "string", description: "JWT" },
-                  user: {
-                    type: "object",
-                    properties: {
-                      id: { type: "integer" },
-                      google_id: { type: "string" },
-                      email: { type: "string" },
-                      name: { type: "string" },
-                      picture: { type: "string" },
-                      created_at: { type: "string", format: "date-time" },
-                      updated_at: { type: "string", format: "date-time" },
-                    },
-                  },
-                },
-              },
-            },
+    },
+    responses: {
+      200: {
+        description: "로그인 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              token: z.string().openapi({ description: "JWT", example: "your_jwt_token" }),
+              user: z.object({
+                id: z.number().openapi({ example: 1 }),
+                google_id: z.string().openapi({ example: "1234567890" }),
+                email: z.string().email().openapi({ example: "user@example.com" }),
+                name: z.string().openapi({ example: "홍길동" }),
+                picture: z.string().url().openapi({ example: "https://example.com/profile.jpg" }),
+                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
-        "400": { description: "Google 토큰 누락" },
-        "401": { description: "유효하지 않은 Google 토큰" },
-        "500": { description: "서버 오류" },
       },
+      400: { description: "Google 토큰 누락" },
+      401: { description: "유효하지 않은 Google 토큰" },
+      500: { description: "서버 오류" },
     },
   });
 
-  router.post("/api/auth/logout", logout, {
+  app.openapi(googleLoginRoute, (c) => googleLogin(c));
+
+  // 로그아웃 라우트
+  const logoutRoute = createRoute({
+    method: "post",
+    path: "/logout",
     summary: "로그아웃",
     description: "현재 세션을 종료하고 토큰을 무효화합니다.",
     tags: ["인증"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
-      "200": {
+      200: {
         description: "로그아웃 성공",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                message: { type: "string" },
-              },
-            },
+            schema: SuccessSchema.extend({
+              message: z.string().openapi({ example: "로그아웃 성공" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
-      "401": { description: "인증 토큰이 없거나 세션이 유효하지 않음" },
+      401: { description: "인증 토큰이 없거나 세션이 유효하지 않음" },
     },
   });
 
-  router.get("/api/auth/me", getUserInfo, {
+  app.openapi(logoutRoute, (c) => logout(c));
+
+  // 사용자 정보 조회 라우트
+  const getUserInfoRoute = createRoute({
+    method: "get",
+    path: "/me",
     summary: "사용자 정보 조회",
     description: "현재 로그인한 사용자의 정보를 조회합니다.",
     tags: ["인증"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
-      "200": {
+      200: {
         description: "사용자 정보 조회 성공",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                user: {
-                  type: "object",
-                  properties: {
-                    id: { type: "integer" },
-                    email: { type: "string" },
-                    name: { type: "string" },
-                    picture: { type: "string" },
-                    created_at: { type: "string", format: "date-time" },
-                  },
-                },
-              },
-            },
+            schema: SuccessSchema.extend({
+              user: z.object({
+                id: z.number().openapi({ example: 1 }),
+                email: z.string().email().openapi({ example: "user@example.com" }),
+                name: z.string().openapi({ example: "홍길동" }),
+                picture: z.string().url().openapi({ example: "https://example.com/profile.jpg" }),
+                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
-      "401": { description: "유효하지 않은 토큰 또는 만료된 세션" },
-      "404": { description: "사용자를 찾을 수 없음" },
+      401: { description: "유효하지 않은 토큰 또는 만료된 세션" },
+      404: { description: "사용자를 찾을 수 없음" },
     },
   });
 
-  router.post("/api/auth/refresh", refreshToken, {
+  app.openapi(getUserInfoRoute, (c) => getUserInfo(c));
+
+  // 토큰 갱신 라우트
+  const refreshTokenRoute = createRoute({
+    method: "post",
+    path: "/refresh",
     summary: "토큰 갱신",
     description: "JWT 토큰을 갱신합니다.",
     tags: ["인증"],
-    auth: true,
+    security: [{ BearerAuth: [] }],
     responses: {
-      "200": {
+      200: {
         description: "토큰 갱신 성공",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                token: { type: "string", description: "새로운 JWT" },
-              },
-            },
+            schema: SuccessSchema.extend({
+              token: z.string().openapi({ description: "새로운 JWT", example: "your_new_jwt_token" }),
+            }).openapi({ type: 'object' }),
           },
         },
       },
-      "401": { description: "유효하지 않은 토큰" },
+      401: { description: "유효하지 않은 토큰" },
     },
   });
 
-  return router;
+  app.openapi(refreshTokenRoute, (c) => refreshToken(c));
+
+  return app;
 }

@@ -1,5 +1,5 @@
+import { Context, MiddlewareHandler } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
-import { getUserFromToken, jsonResponse } from "../../common/utils";
 import { deleteR2Object } from "./r2Api";
 
 // 프로필 이름 유효성 검사
@@ -21,14 +21,13 @@ const getObjectKeyFromUrl = (url: string, R2_PUBLIC_URL: string): string => {
 
 // 사용자 정보 조회
 export async function getUserProfile(
-  request: Request,
-  env: any
+  c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(request);
-    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+    const userInfo = c.get("user");
+    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
     const user = await prisma.user.findUnique({
       where: { id: userInfo.id },
       select: {
@@ -44,10 +43,10 @@ export async function getUserProfile(
     await prisma.$disconnect();
 
     if (!user) {
-      return jsonResponse({ error: "사용자를 찾을 수 없습니다." }, 404);
+      return c.json({ error: "사용자를 찾을 수 없습니다." }, 404);
     }
 
-    return jsonResponse({
+    return c.json({
       success: true,
       user: {
         id: user.id,
@@ -60,7 +59,8 @@ export async function getUserProfile(
       },
     });
   } catch (error) {
-    return jsonResponse(
+    console.error("사용자 정보 조회 실패:", error);
+    return c.json(
       {
         error: "사용자 정보 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -72,14 +72,13 @@ export async function getUserProfile(
 
 // 프로필 수정
 export async function updateUserProfile(
-  request: Request,
-  env: any
+  c: Context
 ): Promise<Response> {
   try {
-    const userInfo = await getUserFromToken(request);
-    if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+      const userInfo = c.get("user");
+    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const body = (await request.json()) as {
+    const body = (await c.req.json()) as {
       userName?: string;
       picture?: string;
     };
@@ -88,7 +87,7 @@ export async function updateUserProfile(
 
     if (body.userName !== undefined) {
       if (!validateUserName(body.userName)) {
-        return jsonResponse(
+        return c.json(
           {
             error: "프로필 이름은 1-50자 사이여야 합니다.",
           },
@@ -98,7 +97,7 @@ export async function updateUserProfile(
       dataToUpdate.userName = body.userName.trim();
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // 사용자 존재 확인 및 현재 프로필 정보 가져오기
     const existingUser = await prisma.user.findUnique({
@@ -108,22 +107,22 @@ export async function updateUserProfile(
 
     if (!existingUser) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "사용자를 찾을 수 없습니다." }, 404);
+      return c.json({ error: "사용자를 찾을 수 없습니다." }, 404);
     }
 
     if (body.picture !== undefined) {
       if (typeof body.picture !== "string") {
         await prisma.$disconnect();
-        return jsonResponse(
+        return c.json(
           { error: "잘못된 프로필 사진 형식입니다." },
           400
         );
       }
 
       // 기존 이미지가 R2에 저장된 이미지인 경우 삭제
-      if (existingUser.picture && isR2ImageUrl(existingUser.picture, env.R2_PUBLIC_URL)) {
-        const objectKey = getObjectKeyFromUrl(existingUser.picture, env.R2_PUBLIC_URL);
-        const deleteResult = await deleteR2Object(objectKey, env);
+      if (existingUser.picture && isR2ImageUrl(existingUser.picture, c.env.R2_PUBLIC_URL)) {
+        const objectKey = getObjectKeyFromUrl(existingUser.picture, c.env.R2_PUBLIC_URL);
+        const deleteResult = await deleteR2Object(objectKey, c.env);
         if (!deleteResult) {
           console.error(`Failed to delete old profile image: ${objectKey}`);
         }
@@ -134,7 +133,7 @@ export async function updateUserProfile(
 
     if (Object.keys(dataToUpdate).length === 0) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "수정할 정보가 없습니다." }, 400);
+      return c.json({ error: "수정할 정보가 없습니다." }, 400);
     }
 
     // 프로필 정보 업데이트
@@ -145,7 +144,7 @@ export async function updateUserProfile(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       message: "프로필이 성공적으로 수정되었습니다.",
       user: {
@@ -154,7 +153,8 @@ export async function updateUserProfile(
       },
     });
   } catch (error) {
-    return jsonResponse(
+    console.error("프로필 수정 실패:", error);
+    return c.json(
       {
         error: "프로필 수정 실패",
         message: error instanceof Error ? error.message : "Unknown error",

@@ -1,7 +1,7 @@
+import { Context } from "hono";
 import { D1Database } from "@cloudflare/workers-types";
 import { paginate } from "../../common/paginationUtils";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
-import { jsonResponse } from "../../common/utils";
 
 // 영어 -> 한글 필드 변환 (사주 프로필용)
 const toKoreanFields = (profile: any) => ({
@@ -19,20 +19,19 @@ const toKoreanFields = (profile: any) => ({
 });
 
 // 가입한 유저 목록 조회
-export async function getUsers(request: Request, env: any): Promise<Response> {
+export async function getUsers(c: Context): Promise<any> {
   try {
     // 관리자 권한 체크
-    if (!(await isAdmin(request, env))) {
-      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // URL 파라미터에서 페이지네이션 정보 추출
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get("page") || "1");
-    const limit = parseInt(url.searchParams.get("limit") || "20");
-    const search = url.searchParams.get("search") || "";
+    const page = parseInt(c.req.query("page") || "1");
+    const limit = parseInt(c.req.query("limit") || "20");
+    const search = c.req.query("search") || "";
 
     const skip = (page - 1) * limit;
 
@@ -70,7 +69,7 @@ export async function getUsers(request: Request, env: any): Promise<Response> {
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       users: users.map((user: any) => ({
         id: user.id,
@@ -90,7 +89,7 @@ export async function getUsers(request: Request, env: any): Promise<Response> {
       },
     });
   } catch (error) {
-    return jsonResponse(
+    return c.json(
       {
         error: "사용자 목록 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -102,22 +101,20 @@ export async function getUsers(request: Request, env: any): Promise<Response> {
 
 // 특정 유저의 프로필 조회
 export async function getUserProfiles(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
     // 관리자 권한 체크
-    if (!(await isAdmin(request, env))) {
-      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const userId = Number(params?.userId);
+    const userId = Number(c.req.param("userId"));
     if (!userId) {
-      return jsonResponse({ error: "잘못된 사용자 ID입니다." }, 400);
+      return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // 사용자 존재 여부 확인
     const user = await prisma.user.findUnique({
@@ -134,7 +131,7 @@ export async function getUserProfiles(
 
     if (!user) {
       await prisma.$disconnect();
-      return jsonResponse({ error: "사용자를 찾을 수 없습니다." }, 404);
+      return c.json({ error: "사용자를 찾을 수 없습니다." }, 404);
     }
 
     // 해당 사용자의 사주 프로필 조회
@@ -145,7 +142,7 @@ export async function getUserProfiles(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       user: {
         id: user.id,
@@ -159,7 +156,7 @@ export async function getUserProfiles(
       count: profiles.length,
     });
   } catch (error) {
-    return jsonResponse(
+    return c.json(
       {
         error: "프로필 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -171,16 +168,15 @@ export async function getUserProfiles(
 
 // 전체 통계 정보 조회
 export async function getAdminStats(
-  request: Request,
-  env: any
+  c: Context
 ): Promise<Response> {
   try {
     // 관리자 권한 체크
-    if (!(await isAdmin(request, env))) {
-      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // 전체 통계 조회
     const [totalUsers, totalProfiles, adminUsers] = await Promise.all([
@@ -191,7 +187,7 @@ export async function getAdminStats(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       stats: {
         totalUsers,
@@ -202,7 +198,7 @@ export async function getAdminStats(
       },
     });
   } catch (error) {
-    return jsonResponse(
+    return c.json(
       {
         error: "통계 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -214,21 +210,19 @@ export async function getAdminStats(
 
 // 로그인/로그아웃 기록 조회
 export async function getLoginHistory(
-  request: Request,
-  env: any
+  c: Context
 ): Promise<Response> {
   try {
-    if (!(await isAdmin(request, env))) {
-      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get("page") || "1");
-    const limit = parseInt(url.searchParams.get("limit") || "20");
-    const search = url.searchParams.get("search") || "";
-    const action = url.searchParams.get("action") || ""; // 'login' or 'logout'
+    const page = parseInt(c.req.query("page") || "1");
+    const limit = parseInt(c.req.query("limit") || "20");
+    const search = c.req.query("search") || "";
+    const action = c.req.query("action") || ""; // 'login' or 'logout'
 
     const skip = (page - 1) * limit;
 
@@ -264,7 +258,7 @@ export async function getLoginHistory(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       history: history.map((h: any) => ({
         id: h.id,
@@ -280,7 +274,7 @@ export async function getLoginHistory(
       },
     });
   } catch (error) {
-    return jsonResponse(
+    return c.json(
       {
         error: "로그인 기록 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -294,18 +288,16 @@ export async function getLoginHistory(
  * 모델별 AI 사용량 통계를 조회합니다.
  */
 export async function getAiUsageStatsByModel(
-  request: Request,
-  env: any
-): Promise<Response> {
-  if (!(await isAdmin(request, env))) {
-    return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+  c: Context
+): Promise<any> {
+  if (!(await isAdmin(c))) {
+    return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const prisma = createPrismaClient(env.DB);
-  const url = new URL(request.url);
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const sort = url.searchParams.get("sort") || "total_tokens";
+  const prisma = createPrismaClient(c.env.DB);
+  const page = parseInt(c.req.query("page") || "1");
+  const limit = parseInt(c.req.query("limit") || "20");
+  const sort = c.req.query("sort") || "total_tokens";
   const allowedSortColumns = [
     "model",
     "total_tokens",
@@ -314,9 +306,9 @@ export async function getAiUsageStatsByModel(
   ];
   const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
   const order =
-    url.searchParams.get("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
-  const startDate = url.searchParams.get("startDate");
-  const endDate = url.searchParams.get("endDate");
+    c.req.query("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
   const offset = (page - 1) * limit;
 
   try {
@@ -370,7 +362,7 @@ export async function getAiUsageStatsByModel(
       unique_users: Number(row.unique_users),
     }));
 
-    return jsonResponse({
+    return c.json({
       success: true,
       stats: formattedStats,
       pagination: {
@@ -382,7 +374,7 @@ export async function getAiUsageStatsByModel(
     });
   } catch (error) {
     console.error("Error fetching AI usage stats by model:", error);
-    return jsonResponse(
+    return c.json(
       {
         error: "모델별 AI 사용량 통계 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -398,24 +390,22 @@ export async function getAiUsageStatsByModel(
  * 사용자별 AI 사용량 통계를 조회합니다.
  */
 export async function getAiUsageStatsByUser(
-  request: Request,
-  env: any
-): Promise<Response> {
-  if (!(await isAdmin(request, env))) {
-    return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+  c: Context
+): Promise<any> {
+  if (!(await isAdmin(c))) {
+    return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const prisma = createPrismaClient(env.DB);
-  const url = new URL(request.url);
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const sort = url.searchParams.get("sort") || "total_tokens";
+  const prisma = createPrismaClient(c.env.DB);
+  const page = parseInt(c.req.query("page") || "1");
+  const limit = parseInt(c.req.query("limit") || "20");
+  const sort = c.req.query("sort") || "total_tokens";
   const allowedSortColumns = ["total_tokens", "total_calls"];
   const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
   const order =
-    url.searchParams.get("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
-  const startDate = url.searchParams.get("startDate");
-  const endDate = url.searchParams.get("endDate");
+    c.req.query("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
   const offset = (page - 1) * limit;
 
   try {
@@ -444,7 +434,7 @@ export async function getAiUsageStatsByUser(
       countResult.length > 0 ? Number(countResult[0].totalItems) : 0;
 
     if (totalItems === 0) {
-      return jsonResponse({
+      return c.json({
         success: true,
         stats: [],
         pagination: {
@@ -477,7 +467,7 @@ export async function getAiUsageStatsByUser(
     const userIds = paginatedUserStats.map((u) => u.user_id);
 
     if (userIds.length === 0) {
-      return jsonResponse({
+      return c.json({
         success: true,
         stats: [],
         pagination: {
@@ -545,7 +535,7 @@ export async function getAiUsageStatsByUser(
 
     const finalStats = userIds.map((id) => userStatsMap.get(id));
 
-    return jsonResponse({
+    return c.json({
       success: true,
       stats: finalStats,
       pagination: {
@@ -557,7 +547,7 @@ export async function getAiUsageStatsByUser(
     });
   } catch (error) {
     console.error("Error fetching AI usage stats by user:", error);
-    return jsonResponse(
+      return c.json(
       {
         error: "사용자별 AI 사용량 통계 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -573,23 +563,20 @@ export async function getAiUsageStatsByUser(
  * 특정 사용자의 AI 사용 기록을 페이지네이션하여 조회합니다.
  */
 export async function getAiUsageLogsForUser(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
-  if (!(await isAdmin(request, env))) {
-    return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+  if (!(await isAdmin(c))) {
+    return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const userId = Number(params?.userId);
+  const userId = Number(c.req.param("userId"));
   if (!userId) {
-    return jsonResponse({ error: "잘못된 사용자 ID입니다." }, 400);
+    return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
   }
 
-  const db: D1Database = env.DB;
-  const url = new URL(request.url);
-  const startDate = url.searchParams.get("startDate");
-  const endDate = url.searchParams.get("endDate");
+  const db: D1Database = c.env.DB;
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
 
   try {
     const baseWhereClauses: { clause: string; binding: any }[] = [
@@ -610,14 +597,14 @@ export async function getAiUsageLogsForUser(
       });
     }
 
-    return await paginate(request, db, {
+      return await paginate(c, c.env.DB, {
       tableName: "ai_usage_logs",
       defaultLimit: 20,
       baseWhereClauses,
     });
   } catch (error) {
     console.error("Error fetching AI usage logs for user:", error);
-    return jsonResponse(
+    return c.json(
       {
         error: "사용자 AI 사용 기록 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -631,25 +618,22 @@ export async function getAiUsageLogsForUser(
  * 특정 AI 모델을 사용한 사용자 목록과 사용량 통계를 페이지네이션하여 조회합니다.
  */
 export async function getAiUsageStatsForModel(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
-  if (!(await isAdmin(request, env))) {
-    return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+  if (!(await isAdmin(c))) {
+    return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const model = params?.["model+"];
+  const model = c.req.query("model");
   if (!model) {
-    console.error("Model name is required", params);
-    return jsonResponse({ error: "모델 이름이 필요합니다." }, 400);
+    console.error("Model name is required", c.req.query());
+    return c.json({ error: "모델 이름이 필요합니다." }, 400);
   }
 
-  const prisma = createPrismaClient(env.DB);
-  const url = new URL(request.url);
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
-  const sort = url.searchParams.get("sort") || "total_tokens";
+  const prisma = createPrismaClient(c.env.DB);
+  const page = parseInt(c.req.query("page") || "1");
+  const limit = parseInt(c.req.query("limit") || "20");
+  const sort = c.req.query("sort") || "total_tokens";
   // Whitelist sortable columns to prevent SQL injection
   const allowedSortColumns = [
     "total_tokens",
@@ -659,14 +643,14 @@ export async function getAiUsageStatsForModel(
   ];
   const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
   const order =
-    url.searchParams.get("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
-  const startDate = url.searchParams.get("startDate");
-  const endDate = url.searchParams.get("endDate");
+    c.req.query("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
+  const startDate = c.req.query("startDate");
+  const endDate = c.req.query("endDate");
   const offset = (page - 1) * limit;
 
   try {
     const whereClauses: string[] = ["l.model = ?"];
-    const bindings: any[] = [decodeURIComponent(model)];
+    const bindings: any[] = [model];
 
     if (startDate) {
       whereClauses.push("l.created_at >= ?");
@@ -721,7 +705,7 @@ export async function getAiUsageStatsForModel(
       total_calls: Number(row.total_calls),
     }));
 
-    return jsonResponse({
+    return c.json({
       success: true,
       data: formattedData,
       pagination: {
@@ -733,7 +717,7 @@ export async function getAiUsageStatsForModel(
     });
   } catch (error) {
     console.error("Error fetching AI usage stats for model:", error);
-    return jsonResponse(
+    return c.json(
       {
         error: "모델별 사용자 통계 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",

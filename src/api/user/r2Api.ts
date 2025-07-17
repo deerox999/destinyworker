@@ -1,6 +1,6 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { jsonResponse, getUserFromToken } from "../../common/utils";
+import { Context, MiddlewareHandler } from "hono";
 import { v4 as uuidv4 } from "uuid";
 
 /* 운영 개발 분리 된 환경이 아님. dev 환경에서도, destiny 버킷에 업로드 가능하도록 되어있음. */
@@ -46,20 +46,19 @@ export async function deleteR2Object(objectKey: string, env: any): Promise<boole
 }
 
 export async function getUploadUrl(
-  request: Request,
-  env: any
+  c: Context
 ): Promise<Response> {
-  const userInfo = await getUserFromToken(request);
-  if (!userInfo) return jsonResponse({ error: "인증이 필요합니다." }, 401);
+  const userInfo = c.get("user");
+  if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
   try {
-    const { fileName, contentType } = (await request.json()) as {
+    const { fileName, contentType } = (await c.req.json()) as {
       fileName: string;
       contentType: string;
     };
 
     if (!fileName || !contentType) {
-      return jsonResponse(
+      return c.json(
         { error: "fileName and contentType are required." },
         400
       );
@@ -73,7 +72,7 @@ export async function getUploadUrl(
       R2_SECRET_ACCESS_KEY,
       R2_BUCKET_NAME,
       R2_PUBLIC_URL,
-    } = env;
+    } = c.env;
 
     if (
       !R2_ACCOUNT_ID ||
@@ -90,12 +89,12 @@ export async function getUploadUrl(
         R2_BUCKET_NAME,
         R2_PUBLIC_URL
       );
-      return jsonResponse({ error: "Server configuration error" }, 500);
+      return c.json({ error: "Server configuration error" }, 500);
     }
 
-    const S3 = createR2Client(env);
+    const S3 = createR2Client(c.env);
     if (!S3) {
-      return jsonResponse({ error: "Failed to create R2 client" }, 500);
+      return c.json({ error: "Failed to create R2 client" }, 500);
     }
 
     const signedUrl = await getSignedUrl(
@@ -108,7 +107,7 @@ export async function getUploadUrl(
       { expiresIn: 300 } // 5 minutes
     );
 
-    return jsonResponse({
+    return c.json({
       success: true,
       uploadUrl: signedUrl,
       fileUrl: `${R2_PUBLIC_URL}/${objectKey}`,
@@ -117,7 +116,7 @@ export async function getUploadUrl(
     console.error("Failed to get upload URL:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    return jsonResponse(
+    return c.json(
       { error: "Failed to get upload URL", message: errorMessage },
       500
     );

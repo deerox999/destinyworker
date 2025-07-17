@@ -1,54 +1,53 @@
-import { corsHeaders, htmlResponse, jsonResponse } from "./common/utils";
+import { OpenAPIHono } from "@hono/zod-openapi";
+import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
-import { generateSwaggerHTML } from "./common/swagger/html/swaggerUI";
 
-export default {
-  async fetch(
-    request: Request,
-    env: any,
-    ctx: ExecutionContext
-  ): Promise<Response> {
-    const appRouter = createAppRouter(env);
-    const url = new URL(request.url);
+type Env = {
+  Bindings: {
+    KV: KVNamespace
+  }
+}
 
-    try {
-      // API 라우팅 처리
-      const response = await appRouter.handle(request, env);
-      if (response) {
-        // 모든 응답에 CORS 헤더 추가
-        const newHeaders = new Headers(response.headers);
-        const cors = corsHeaders(request);
+const app = new OpenAPIHono<Env>();
+// app.use(compress()) // 현재 압축 설정하면, 프론트에서 데이터 파싱이 안됨.
 
-        Object.entries(cors).forEach(([key, value]) => {
-          if (!newHeaders.has(key)) {
-            newHeaders.set(key, value);
-          }
-        });
+app.use(
+  "*", // CORS 미들웨어 적용
+  cors({
+    origin: [
+      "http://localhost:9999",
+      "http://127.0.0.1:9999",
+      "http://localhost:9393",
+      "http://127.0.0.1:9393",
+      "https://youram.me",
+      "https://destiny-91f.pages.dev",
+    ],
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    maxAge: 86400, // Access-Control-Max-Age
+  })
+);
 
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: newHeaders,
-        });
-      }
+// 에러 핸들링
+app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    // HTTPException의 경우, 예외에 포함된 상태 코드와 메시지를 사용하여 응답합니다.
+    return c.json({ success: false, error: err.message }, err.status as any);
+  }
+  // 그 외의 모든 오류는 500 내부 서버 오류로 처리합니다.
+  console.error("Internal Server Error:", err);
+  return c.json({ success: false, error: "Internal Server Error" }, 500);
+});
 
-      // 404 처리
-      return jsonResponse(
-        { error: "엔드포인트를 찾을 수 없습니다." },
-        404,
-        request
-      );
-    } catch (error) {
-      console.error("Global Error:", error);
-      return jsonResponse(
-        {
-          error: "서버 내부 오류가 발생했습니다.",
-          message: error instanceof Error ? error.message : "Unknown error",
-          stack: error instanceof Error ? error.stack : undefined,
-        },
-        500,
-        request
-      );
-    }
-  },
-} satisfies ExportedHandler<any>;
+// 404 핸들링
+app.notFound((c) => {
+  return c.json({ error: "엔드포인트를 찾을 수 없습니다." }, 404);
+});
+
+// API 라우트 등록
+const routes = createAppRouter();
+app.route("/", routes);
+
+
+export default app;

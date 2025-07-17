@@ -1,24 +1,24 @@
-import { jsonResponse } from "../../../common/utils";
+
 import { isAdmin, createPrismaClient } from "../../../common/prismaUtils";
 import { paginate } from "../../../common/paginationUtils";
+import { Context } from "hono";
 
 // [Admin] 유명인물 대량 생성
 export async function createCelebritiesBatch(
-  request: Request,
-  env: any
+  c: Context,
 ): Promise<Response> {
   try {
-    const isUserAdmin = await isAdmin(request, env);
+    const isUserAdmin = await isAdmin(c);
     if (!isUserAdmin) {
-      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const body = (await request.json()) as any;
+    const body = (await c.req.json()) as any;
     const { celebrities } = body;
 
     // 배열 데이터 검증
     if (!Array.isArray(celebrities) || celebrities.length === 0) {
-      return jsonResponse({ error: "유명인물 배열 데이터가 필요합니다." }, 400);
+      return c.json({ error: "유명인물 배열 데이터가 필요합니다." }, 400);
     }
 
     // 각 유명인물 데이터 검증
@@ -75,13 +75,13 @@ export async function createCelebritiesBatch(
     });
 
     if (validationErrors.length > 0) {
-      return jsonResponse({ 
+      return c.json({ 
         error: "데이터 검증 실패", 
         details: validationErrors 
       }, 400);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     try {
       // 대량 생성을 위한 트랜잭션
@@ -98,7 +98,7 @@ export async function createCelebritiesBatch(
 
       await prisma.$disconnect();
 
-      return jsonResponse(
+      return c.json(
         { 
           success: true, 
           message: `${validCelebrities.length}명의 유명인물이 생성되었습니다.`,
@@ -111,7 +111,7 @@ export async function createCelebritiesBatch(
       throw error;
     }
   } catch (error) {
-    return jsonResponse(
+    return c.json(
       {
         error: "유명인물 대량 생성 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -123,16 +123,15 @@ export async function createCelebritiesBatch(
 
 // [Admin] 유명인물 생성
 export async function createCelebrity(
-  request: Request,
-  env: any
+  c: Context,
 ): Promise<Response> {
   try {
-    const isUserAdmin = await isAdmin(request, env);
+    const isUserAdmin = await isAdmin(c);
     if (!isUserAdmin) {
-      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const body = (await request.json()) as any;
+    const body = (await c.req.json()) as any;
 
     // 필수 데이터 검증
     const {
@@ -153,10 +152,10 @@ export async function createCelebrity(
       !gender ||
       !translations?.length
     ) {
-      return jsonResponse({ error: "필수 데이터가 누락되었습니다." }, 400);
+      return c.json({ error: "필수 데이터가 누락되었습니다." }, 400);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     // batch transaction 사용
     await prisma.$transaction([
@@ -188,12 +187,12 @@ export async function createCelebrity(
 
     await prisma.$disconnect();
 
-    return jsonResponse(
+    return c.json(
       { success: true, message: "유명인물이 생성되었습니다." },
       201
     );
   } catch (error) {
-    return jsonResponse(
+    return c.json(
       {
         error: "유명인물 생성 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -205,25 +204,23 @@ export async function createCelebrity(
 
 // [Admin] 유명인물 수정
 export async function updateCelebrity(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context,
 ): Promise<Response> {
   try {
-    const isUserAdmin = await isAdmin(request, env);
+    const isUserAdmin = await isAdmin(c);
     if (!isUserAdmin) {
-      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const celebrityId = params?.id;
+    const celebrityId = c.req.param("id");
     if (!celebrityId) {
-      return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
+      return c.json({ error: "유명인물 ID가 필요합니다." }, 400);
     }
 
-    const body = (await request.json()) as any;
+    const body = (await c.req.json()) as any;
     const { translations, ...celebrityData } = body;
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
     
     const transactionQueries = [];
 
@@ -266,12 +263,12 @@ export async function updateCelebrity(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       message: "유명인물 정보가 수정되었습니다.",
     });
   } catch (error) {
-    return jsonResponse(
+    return c.json(
       {
         error: "유명인물 수정 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -283,22 +280,20 @@ export async function updateCelebrity(
 
 // [Admin] 유명인물 삭제
 export async function deleteCelebrity(
-  request: Request,
-  env: any,
-  params?: Record<string, string>
+  c: Context
 ): Promise<Response> {
   try {
-    const isUserAdmin = await isAdmin(request, env);
+    const isUserAdmin = await isAdmin(c);
     if (!isUserAdmin) {
-      return jsonResponse({ error: "관리자 권한이 필요합니다." }, 403);
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const celebrityId = params?.id;
+    const celebrityId = c.req.param("id");
     if (!celebrityId) {
-      return jsonResponse({ error: "유명인물 ID가 필요합니다." }, 400);
+      return c.json({ error: "유명인물 ID가 필요합니다." }, 400);
     }
 
-    const prisma = createPrismaClient(env.DB);
+    const prisma = createPrismaClient(c.env.DB);
 
     await prisma.celebrity.delete({
       where: { id: celebrityId },
@@ -306,12 +301,12 @@ export async function deleteCelebrity(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       success: true,
       message: "유명인물이 삭제되었습니다.",
     });
   } catch (error) {
-    return jsonResponse(
+    return c.json(
       {
         error: "유명인물 삭제 실패",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -326,18 +321,17 @@ export async function deleteCelebrity(
  * 유명인물 요청 목록 조회 (관리자용)
  */
 export async function getCelebrityRequests(
-  request: Request,
-  env: any
+  c: Context,
 ): Promise<Response> {
   try {
-    return await paginate(request, env.DB, {
+    return await paginate(c, c.env.DB, {
       tableName: "celebrity_requests",
       searchField: "name",
       defaultLimit: 10,
     });
   } catch (error) {
     console.error("Celebrity requests fetch error:", error);
-    return jsonResponse(
+    return c.json(
       {
         error: "유명인물 요청 목록 조회 중 오류가 발생했습니다.",
         details: error instanceof Error ? error.message : "알 수 없는 오류",
@@ -351,12 +345,11 @@ export async function getCelebrityRequests(
  * 유명인물 목록 조회
  */
 export async function getCelebrities(
-  request: Request,
-  env: any
+  c: Context,
 ): Promise<Response> {
   try {
-    const prisma = createPrismaClient(env.DB);
-    const { searchParams } = new URL(request.url);
+    const prisma = createPrismaClient(c.env.DB);
+    const { searchParams } = new URL(c.req.url);
 
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
@@ -430,7 +423,7 @@ export async function getCelebrities(
 
     await prisma.$disconnect();
 
-    return jsonResponse({
+    return c.json({
       data: celebrities,
       pagination: {
         totalItems: totalCount,
@@ -441,7 +434,7 @@ export async function getCelebrities(
     });
   } catch (error) {
     console.error("Celebrities fetch error:", error);
-    return jsonResponse(
+    return c.json(
       {
         error: "유명인물 목록 조회 실패",
         details: error instanceof Error ? error.message : "알 수 없는 오류",

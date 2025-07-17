@@ -1,4 +1,4 @@
-import { jsonResponse } from "../../../common/utils";
+import { Context } from "hono";
 
 // JWT 페이로드 인터페이스
 interface JWTPayload {
@@ -70,43 +70,43 @@ interface UnsubscribeBody {
     endpoint: string;
 }
 
-export async function getVapidPublicKey(request: Request, env: any): Promise<Response> {
-  const publicKey = env.VAPID_PUBLIC_KEY;
+export async function getVapidPublicKey(c: Context): Promise<Response> {
+  const publicKey = c.env.VAPID_PUBLIC_KEY;
   if (!publicKey) {
     console.error("VAPID_PUBLIC_KEY is not set in environment variables.");
-    return jsonResponse({ error: "VAPID public key is not configured" }, 500, request);
+    return c.json({ error: "VAPID public key is not configured" }, 500);
   }
-  return jsonResponse({ publicKey }, 200, request);
+  return c.json({ publicKey }, 200);
 }
 
-export async function subscribe(request: Request, env: any): Promise<Response> {
-  if (!env.DB || !env.JWT_SECRET) {
-    return jsonResponse({ error: "서버 설정이 누락되었습니다." }, 500, request);
+export async function subscribe(c: Context): Promise<Response> {
+  if (!c.env.DB || !c.env.JWT_SECRET) {
+    return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
-  const authHeader = request.headers.get("Authorization");
+  const authHeader = c.req.header("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return jsonResponse({ error: "인증 토큰이 필요합니다." }, 401, request);
+    return c.json({ error: "인증 토큰이 필요합니다." }, 401);
   }
   const token = authHeader.substring(7);
-  const payload = await verifyJWT(token, env.JWT_SECRET);
+  const payload = await verifyJWT(token, c.env.JWT_SECRET);
 
   if (!payload) {
-    return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401, request);
+    return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
   }
 
-  const subscription = await request.json() as PushSubscriptionBody;
+  const subscription = await c.req.json() as PushSubscriptionBody;
   if (!subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
-    return jsonResponse({ error: "잘못된 푸시 구독 객체입니다." }, 400, request);
+    return c.json({ error: "잘못된 푸시 구독 객체입니다." }, 400);
   }
 
-  const db = env.DB;
+  const db = c.env.DB;
   try {
     let stmt = db.prepare("SELECT endpoint FROM push_subscriptions WHERE endpoint = ?");
     const existing = await stmt.bind(subscription.endpoint).first();
 
     if (existing) {
-        return jsonResponse({ success: true, message: "이미 구독중입니다." }, 200, request);
+        return c.json({ success: true, message: "이미 구독중입니다." }, 200);
     }
 
     stmt = db.prepare(`
@@ -115,46 +115,46 @@ export async function subscribe(request: Request, env: any): Promise<Response> {
     `);
     await stmt.bind(payload.userId, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth).run();
 
-    return jsonResponse({ success: true, message: "구독 성공" }, 201, request);
+    return c.json({ success: true, message: "구독 성공" }, 201);
   } catch (e) {
     console.error("구독 정보 저장 실패:", e);
-    return jsonResponse({ error: "구독 정보를 저장하는데 실패했습니다." }, 500, request);
+    return c.json({ error: "구독 정보를 저장하는데 실패했습니다." }, 500);
   }
 }
 
-export async function unsubscribe(request: Request, env: any): Promise<Response> {
-  if (!env.DB || !env.JWT_SECRET) {
-    return jsonResponse({ error: "서버 설정이 누락되었습니다." }, 500, request);
+export async function unsubscribe(c: Context): Promise<Response> {
+  if (!c.env.DB || !c.env.JWT_SECRET) {
+    return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
-  const authHeader = request.headers.get("Authorization");
+  const authHeader = c.req.header("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return jsonResponse({ error: "인증 토큰이 필요합니다." }, 401, request);
+    return c.json({ error: "인증 토큰이 필요합니다." }, 401);
   }
   const token = authHeader.substring(7);
-  const payload = await verifyJWT(token, env.JWT_SECRET);
+  const payload = await verifyJWT(token, c.env.JWT_SECRET);
 
   if (!payload) {
-    return jsonResponse({ error: "유효하지 않은 토큰입니다." }, 401, request);
+    return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
   }
 
-  const { endpoint } = await request.json() as UnsubscribeBody;
+  const { endpoint } = await c.req.json() as UnsubscribeBody;
   if (!endpoint) {
-    return jsonResponse({ error: "Endpoint가 필요합니다." }, 400, request);
+    return c.json({ error: "Endpoint가 필요합니다." }, 400);
   }
 
-  const db = env.DB;
+  const db = c.env.DB;
   try {
     const stmt = db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?");
     const info = await stmt.bind(endpoint, payload.userId).run();
 
     if (info.meta.changes === 0) {
-        return jsonResponse({ success: false, message: "구독 정보를 찾을 수 없거나 해당 유저의 구독이 아닙니다." }, 404, request);
+        return c.json({ success: false, message: "구독 정보를 찾을 수 없거나 해당 유저의 구독이 아닙니다." }, 404);
     }
 
-    return jsonResponse({ success: true, message: "구독이 성공적으로 해지되었습니다." }, 200, request);
+    return c.json({ success: true, message: "구독이 성공적으로 해지되었습니다." }, 200);
   } catch (e) {
     console.error("구독 정보 삭제 실패:", e);
-    return jsonResponse({ error: "구독 정보 삭제에 실패했습니다." }, 500, request);
+    return c.json({ error: "구독 정보 삭제에 실패했습니다." }, 500);
   }
 } 

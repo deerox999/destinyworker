@@ -1,700 +1,441 @@
-import { Router } from "../../common/class/router";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { FortuneTelling } from "./DestinyTellerApi";
 import { SajuAnalysisWithGemini } from "./geminiApi";
 import {
-  RagAddDocuments,
-  RagDelete,
-  RagGetMetadataSchema,
-  RagDocuments,
-  RagUpdate,
+    RagAddDocuments,
+    RagDelete,
+    RagDocuments,
+    RagGetMetadataSchema,
+    RagUpdate,
 } from "./RagApi";
 import {
-  SajuChat,
-  SajuChatDelete,
-  SajuChatFull,
-  SajuChatList,
+    SajuChat,
+    SajuChatDelete,
+    SajuChatFull,
+    SajuChatList,
 } from "./SajuKnowledgeApi";
 
-export function createAiRouter(): Router {
-  const router = new Router();
+import { MiddlewareHandler } from "hono";
+import { ConversationIdParamSchema, PaginationResponseSchema, SuccessSchema } from "../../common/schemas";
 
-  // 상세 사주 풀이
-  router.post("/api/ai/detailed-fortune-telling", FortuneTelling, {
+export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
+  const app = new OpenAPIHono();
+  app.use(authMiddleware);
+
+  // --- 스키마 정의 ---
+
+  // Gemini & Fortune Telling 스키마
+  const AiBasicRequestSchema = z.object({
+    userPrompt: z.string().openapi({ description: "사용자 질문", example: "제 사주는 어떤가요?" }),
+    systemPrompt: z.string().optional().openapi({ description: "AI 역할 정의 시스템 프롬프트", example: "당신은 사주 전문가입니다." }),
+    stream: z.boolean().default(false).optional().openapi({ description: "스트리밍 응답 여부", example: false }),
+  }).openapi({ type: 'object' });
+
+  const GeminiHistoryPartSchema = z.object({ text: z.string() }).openapi({ type: 'object' });
+  const GeminiHistorySchema = z.object({
+    role: z.enum(["user", "model"]),
+    parts: z.array(GeminiHistoryPartSchema),
+  }).openapi({ type: 'object' });
+
+  const SajuAnalysisWithGeminiSchema = AiBasicRequestSchema.extend({
+    model: z
+      .string()
+      .default("gemini-1.5-pro-latest")
+      .optional()
+      .openapi({ description: "사용할 Gemini 모델", example: "gemini-1.5-pro-latest" }),
+    history: z.array(GeminiHistorySchema).optional().openapi({ description: "대화 기록" }),
+    generationConfig: z
+      .object({
+        temperature: z.number().min(0).max(1).optional(),
+        topP: z.number().optional(),
+        topK: z.number().optional(),
+        maxOutputTokens: z.number().int().optional(),
+        stopSequences: z.array(z.string()).optional(),
+      }).openapi({ type: 'object' }),
+    safetySettings: z
+      .array(
+        z.object({
+          category: z.string(),
+          threshold: z.string(),
+        }).openapi({ type: 'object' })
+      )
+      .optional(),
+  }).openapi({ type: 'object' });
+
+  // RAG 문서 스키마
+  const RagMetadataSchema = z.object({
+    text: z.string().min(1),
+    metadata: z.object({
+        source: z.string().min(1),
+        category: z.string().min(1),
+        author: z.string().optional(),
+        relatedConcepts: z.array(z.string()).optional(),
+        url: z.string().optional()
+    })
+});
+
+  const RagDocumentSchema = z.object({
+    text: z.string().openapi({ description: "저장할 텍스트 내용", example: "정관은..." }),
+    metadata: RagMetadataSchema,
+  }).openapi({ type: 'object' });
+  
+  // 대화형 RAG 스키마
+  const SajuChatRequestSchema = z.object({
+      message: z.string().openapi({ description: "사용자 메시지", example: "안녕하세요, 제 사주에 대해 알려주세요." }),
+      i18n: z.enum(["ko", "en", "ja", "zh", "vi"]).default("ko").optional().openapi({ description: "언어 코드", example: "ko" })
+  }).openapi({ type: 'object' });
+
+
+  // --- 라우트 정의 ---
+
+  const FortuneTellingRoute = createRoute({
+    method: "post",
+    path: "/detailed-fortune-telling",
     summary: "상세 사주 풀이 (RAG 결합)",
-    description:
-      "사용자 프롬프트와 사주 지식 베이스(RAG)를 결합하여 AI가 상세한 운세 풀이를 제공합니다. 스트리밍 응답을 지원합니다.",
+    description: "사용자 프롬프트와 사주 지식 베이스(RAG)를 결합하여 AI가 상세한 운세 풀이를 제공합니다.",
     tags: ["AI"],
-    auth: true,
-    requestBody: {
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              systemPrompt: {
-                type: "string",
-                description: "AI의 역할을 정의하는 시스템 프롬프트",
-              },
-              userPrompt: {
-                type: "string",
-                description: "사주 분석을 위한 사용자의 질문 또는 정보",
-              },
-              stream: {
-                type: "boolean",
-                description: "스트리밍 응답 여부",
-                default: false,
-              },
-              // 기타 고급 파라미터(max_tokens, temperature 등)는 DestinyTellerApi.ts 참조
-            },
-            required: ["userPrompt"],
-          },
-        },
-      },
+    security: [{ BearerAuth: [] }],
+    request: {
+      body: { content: { "application/json": { schema: AiBasicRequestSchema } } },
     },
     responses: {
-      "200": {
-        description:
-          "성공. stream=true일 경우 text/event-stream, false일 경우 application/json.",
-      },
-      "400": { description: "잘못된 요청" },
-      "500": { description: "AI 모델 실행 오류" },
-    },
-  });
-
-  // Gemini 사주 분석 (신규)
-  router.post("/api/ai/gemini-saju-analysis", SajuAnalysisWithGemini, {
-    summary: "Gemini AI 기반 사주 분석",
-    description:
-      "Google의 Gemini AI 모델과 RAG를 결합하여 심층적인 사주 분석을 제공합니다. 스트리밍과 다양한 고급 옵션을 지원합니다.",
-    tags: ["AI"],
-    auth: true,
-    requestBody: {
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              model: {
-                type: "string",
-                description:
-                  "사용할 Gemini 모델. 예: 'gemini-1.5-pro-latest'",
-                default: "gemini-1.5-pro-latest",
-              },
-              userPrompt: {
-                type: "string",
-                description: "사주 분석을 위한 사용자의 질문 또는 정보",
-              },
-              systemPrompt: {
-                type: "string",
-                description: "AI의 역할을 정의하는 커스텀 시스템 프롬프트",
-              },
-              history: {
-                type: "array",
-                description: "대화 기록(context)을 전달합니다.",
-                items: {
-                  type: "object",
-                  properties: {
-                    role: { type: "string", enum: ["user", "model"] },
-                    parts: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          text: { type: "string" },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              stream: {
-                type: "boolean",
-                description: "스트리밍 응답 여부",
-                default: false,
-              },
-              generationConfig: {
-                type: "object",
-                description: "AI 응답 생성에 대한 고급 설정",
-                properties: {
-                  temperature: { type: "number", minimum: 0, maximum: 1 },
-                  topP: { type: "number" },
-                  topK: { type: "number" },
-                  maxOutputTokens: { type: "integer" },
-                  stopSequences: { type: "array", items: { type: "string" } },
-                },
-              },
-              safetySettings: {
-                type: "array",
-                description: "유해 콘텐츠 차단 설정",
-                items: {
-                  type: "object",
-                  properties: {
-                    category: { type: "string" },
-                    threshold: { type: "string" },
-                  },
-                },
-              },
-            },
-            required: ["userPrompt"],
-          },
-        },
-      },
-    },
-    responses: {
-      "200": {
-        description:
-          "성공. stream=true일 경우 text/event-stream, false일 경우 application/json.",
-      },
-      "400": { description: "잘못된 요청" },
-      "401": { description: "인증 실패" },
-      "500": { description: "Gemini API 또는 서버 오류" },
-    },
-  });
-
-  // RAG 문서 추가
-  router.post("/api/rag/documents", RagAddDocuments, {
-    summary: "[RAG] 문서 일괄 추가",
-    description:
-      "RAG 시스템에 여러 지식 문서를 한 번에 추가하고 벡터 인덱싱을 수행합니다. 메타데이터도 함께 저장할 수 있습니다.",
-    tags: ["AI - RAG"],
-    auth: true, // 관리자 권한 필요
-    requestBody: {
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              documents: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    text: {
-                      type: "string",
-                      description: "저장할 텍스트 내용",
-                    },
-                    metadata: {
-                      type: "object",
-                      description:
-                        "문서에 대한 구조화된 메타데이터. 도서관의 '색인 카드'처럼 문서의 핵심 정보를 담습니다. 일관된 메타데이터는 AI 답변의 품질과 데이터 필터링 기능에 큰 영향을 미칩니다.",
-                      properties: {
-                        source: {
-                          type: "string",
-                          description:
-                            "필수. 지식의 출처 (예: '자평진전', '궁통보감').",
-                        },
-                        category: {
-                          type: "string",
-                          enum: [
-                            "십신론",
-                            "격국론",
-                            "용신론",
-                            "물상론",
-                            "기타",
-                          ],
-                          description: "필수. 사주 명리학의 대분류.",
-                        },
-                        author: {
-                          type: "string",
-                          description: "선택. 원본 저자.",
-                          nullable: true,
-                        },
-                        relatedConcepts: {
-                          type: "array",
-                          items: { type: "string" },
-                          description:
-                            "선택. 관련된 핵심 개념어 배열. (예: ['갑목', '편재'])",
-                          nullable: true,
-                        },
-                        url: {
-                          type: "string",
-                          description: "선택. 웹 출처인 경우의 URL.",
-                          nullable: true,
-                        },
-                      },
-                      required: ["source", "category"],
-                    },
-                  },
-                  required: ["text", "metadata"],
-                },
-              },
-            },
-            required: ["documents"],
-          },
-          example: {
-            documents: [
-              {
-                text: "갑목은 양의 목으로, 하늘로 솟아오르는 큰 나무와 같다.",
-                metadata: {
-                  source: "자평진전",
-                  author: "심효첨",
-                  category: "물상론",
-                  relatedConcepts: ["갑목", "물상"],
-                },
-              },
-              {
-                text: "편재는 내가 극하는 오행이면서 음양이 같은 것을 말한다.",
-                metadata: {
-                  source: "어떤 사주 블로그",
-                  category: "십신론",
-                  url: "https://some.blog/saju/123",
-                },
-              },
-            ],
-          },
-        },
-      },
-    },
-    responses: {
-      "201": { description: "문서 추가 및 인덱싱 성공" },
-      "400": { description: "잘못된 요청" },
-      "409": { description: "모든 문서가 이미 존재함" },
-      "500": { description: "서버 오류" },
-    },
-  });
-
-  // RAG 문서 메타데이터 수정
-  router.put("/api/rag/documents/:id", RagUpdate, {
-    summary: "[RAG] 문서 메타데이터 수정",
-    description:
-      "ID로 특정 문서의 메타데이터 전체를 수정합니다. 벡터 인덱스는 재계산되지 않습니다.",
-    tags: ["AI - RAG"],
-    auth: true, // 관리자 권한 필요
-    parameters: [
-      {
-        name: "id",
-        in: "path",
-        required: true,
-        description: "메타데이터를 수정할 문서의 ID",
-        schema: { type: "integer" },
-      },
-    ],
-    requestBody: {
-      description:
-        "새로운 메타데이터 객체. 모든 필드를 포함하여 전송해야 합니다.",
-      required: true,
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              source: {
-                type: "string",
-                description: "필수. 지식의 출처 (예: '자평진전', '궁통보감').",
-              },
-              category: {
-                type: "string",
-                enum: ["십신론", "격국론", "용신론", "물상론", "기타"],
-                description: "필수. 사주 명리학의 대분류.",
-              },
-              author: {
-                type: "string",
-                description: "선택. 원본 저자.",
-                nullable: true,
-              },
-              relatedConcepts: {
-                type: "array",
-                items: { type: "string" },
-                description:
-                  "선택. 관련된 핵심 개념어 배열. (예: ['갑목', '편재'])",
-                nullable: true,
-              },
-              url: {
-                type: "string",
-                description: "선택. 웹 출처인 경우의 URL.",
-                nullable: true,
-              },
-            },
-            required: ["source", "category"],
-          },
-          example: {
-            source: "궁통보감",
-            category: "용신론",
-            author: "작자미상",
-          },
-        },
-      },
-    },
-    responses: {
-      "200": { description: "메타데이터 수정 성공" },
-      "400": { description: "잘못된 요청 (ID 또는 메타데이터 형식 오류)" },
-      "404": { description: "해당 ID의 문서를 찾을 수 없음" },
-      "500": { description: "서버 오류" },
-    },
-  });
-
-  // RAG 문서 목록 조회
-  router.get("/api/rag/documents", RagDocuments, {
-    summary: "[RAG] 문서 목록 조회",
-    description:
-      "RAG 시스템에 저장된 모든 문서를 페이지네이션 및 검색 기능과 함께 조회합니다.",
-    tags: ["AI - RAG"],
-    auth: true, // 관리자 권한 필요
-    parameters: [
-      {
-        name: "page",
-        in: "query",
-        description: "페이지 번호 (기본값: 1)",
-        schema: { type: "integer", default: 1 },
-      },
-      {
-        name: "limit",
-        in: "query",
-        description: "페이지당 항목 수 (기본값: 10)",
-        schema: { type: "integer", default: 10 },
-      },
-      {
-        name: "search",
-        in: "query",
-        description: "문서 내용에서 검색할 키워드",
-        schema: { type: "string" },
-      },
-    ],
-    responses: {
-      "200": {
-        description: "성공적인 응답",
+      200: {
+        description: "성공. stream=true일 경우 text/event-stream, false일 경우 application/json.",
         content: {
           "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                data: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "integer" },
-                      text: { type: "string" },
-                      metadata: {
-                        type: "object",
-                        properties: {
-                          source: { type: "string" },
-                          category: { type: "string" },
-                          author: { type: "string", nullable: true },
-                          relatedConcepts: {
-                            type: "array",
-                            items: { type: "string" },
-                            nullable: true,
-                          },
-                          url: { type: "string", nullable: true },
-                        },
-                        nullable: true,
-                      },
-                      created_at: { type: "string", format: "date-time" },
-                      updated_at: { type: "string", format: "date-time" },
-                    },
-                  },
-                },
-                pagination: {
-                  type: "object",
-                  properties: {
-                    page: { type: "integer" },
-                    limit: { type: "integer" },
-                    totalItems: { type: "integer" },
-                    totalPages: { type: "integer" },
-                  },
-                },
-              },
-            },
+            schema: z.object({
+              result: z.string().openapi({ example: "당신의 사주는..." }),
+            }).openapi({ type: 'object' }),
           },
+          // "text/event-stream": {
+          //   schema: z.object({}).openapi({ example: "event: message\ndata: ..." }),
+          // },
         },
-        // 상세 스키마는 common/paginationUtils.ts에 의해 결정됨
       },
-      "500": { description: "서버 오류" },
+      400: { description: "잘못된 요청" },
+      500: { description: "AI 모델 실행 오류" },
     },
   });
 
-  // RAG 문서 삭제
-  router.delete("/api/rag/documents", RagDelete, {
-    summary: "[RAG] 문서 일괄 삭제",
-    description:
-      "ID 목록을 이용해 D1과 Vectorize 인덱스에서 여러 문서를 한 번에 삭제합니다.",
-    tags: ["AI - RAG"],
-    auth: true, // 관리자 권한 필요
-    requestBody: {
-      required: true,
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              ids: {
-                type: "array",
-                items: { type: "integer" },
-                description: "삭제할 문서 ID 목록",
-              },
-            },
-            required: ["ids"],
-          },
-        },
+  const SajuAnalysisWithGeminiRoute = createRoute({
+      method: 'post',
+      path: '/gemini-saju-analysis',
+      summary: "Gemini AI 기반 사주 분석",
+      description: "Google의 Gemini AI 모델과 RAG를 결합하여 심층적인 사주 분석을 제공합니다.",
+      tags: ["AI"],
+      security: [{ BearerAuth: [] }],
+      request: {
+          body: { content: { "application/json": { schema: SajuAnalysisWithGeminiSchema } } }
       },
-    },
-    responses: {
-      "200": { description: "삭제 성공" },
-      "400": { description: "잘못된 요청 (ID 목록이 없거나 형식이 잘못됨)" },
-      "500": { description: "서버 오류" },
-    },
-  });
-
-  // RAG 메타데이터 스키마 조회
-  router.get("/api/rag/metadata-schema", RagGetMetadataSchema, {
-    summary: "[RAG] 메타데이터 스키마 조회",
-    description:
-      "문서 추가/수정에 필요한 메타데이터의 '설계도'를 제공합니다. 프론트엔드에서 이 정보를 바탕으로 입력 폼을 동적으로 생성할 수 있습니다. 예를 들어 'category' 필드는 드롭다운으로, 나머지는 텍스트 입력으로 구현할 수 있습니다.",
-    tags: ["AI - RAG"],
-    auth: true,
-    responses: {
-      "200": {
-        description: "스키마 정보 조회 성공",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                keys: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "사용 가능한 모든 메타데이터 키 목록",
+      responses: {
+        200: {
+            description: "성공. stream=true일 경우 text/event-stream, false일 경우 application/json.",
+            content: {
+                "application/json": {
+                    schema: z.object({
+                        result: z.string().openapi({ example: "Gemini 분석 결과..." })
+                    }).openapi({ type: 'object' })
                 },
-                required: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "필수 메타데이터 키 목록",
-                },
-                options: {
-                  type: "object",
-                  properties: {
-                    category: {
-                      type: "array",
-                      items: { type: "string" },
-                      description: "category 필드에서 선택 가능한 값 목록",
-                    },
-                  },
-                  description: "선택지가 정해진 필드의 옵션 값 목록",
-                },
-                fields: {
-                  type: "object",
-                  additionalProperties: {
-                    type: "object",
-                    properties: {
-                      type: { type: "string" },
-                      description: { type: "string" },
-                      optional: { type: "boolean" },
-                    },
-                  },
-                  description: "각 필드에 대한 상세 설명",
-                },
-              },
-            },
-          },
+                // "text/event-stream": {
+                //     schema: z.object({}).openapi({ example: "event: message\ndata: ..." }) // 스트림은 스키마를 특정하기 어려우므로 빈 객체로 둡니다.
+                // }
+            }
         },
-      },
-      "500": { description: "서버 오류" },
-    },
+          400: { description: "잘못된 요청" },
+          401: { description: "인증 실패" },
+          500: { description: "Gemini API 또는 서버 오류" },
+      }
   });
 
-  // 대화형 RAG 새 대화 시작
-  router.post("/api/ai/saju-chat", SajuChat, {
-    summary: "[대화형 RAG] 새 대화 시작",
-    description:
-      "사주 지식 기반의 대화형 AI와 새로운 대화를 시작합니다. 첫 질문을 보내면 고유한 conversationId가 반환됩니다.",
-    tags: ["AI - 대화형 RAG"],
-    auth: true,
-    requestBody: {
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              message: { type: "string", description: "사용자의 첫 질문" },
-              i18n: { type: "string", description: "언어 코드 (ko, en, ja, zh, vi)", default: "ko" },
-            },
-            required: ["message"],
-          },
-        },
+  const RagAddDocumentsRoute = createRoute({
+      method: "post",
+      path: "/rag/documents",
+      summary: "[RAG] 문서 일괄 추가",
+      description: "RAG 시스템에 여러 지식 문서를 한 번에 추가하고 벡터 인덱싱을 수행합니다.",
+      tags: ["AI - RAG"],
+      security: [{ BearerAuth: [] }],
+      request: {
+          body: {
+              content: {
+                  "application/json": {
+                      schema: z.object({ documents: z.array(RagDocumentSchema) }).openapi({ type: 'object' })
+                  }
+              }
+          }
       },
-    },
-    responses: {
-      "200": {
-        description: "새 대화 시작 성공",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                conversationId: { type: "string", format: "uuid" },
-                answer: { type: "string" },
-              },
-            },
+      responses: {
+          201: { 
+            description: "문서 추가 및 인덱싱 성공",
+            content: {
+              "application/json": {
+                schema: SuccessSchema.extend({
+                  count: z.number().int().openapi({ example: 5 }),
+                }).openapi({ type: 'object' })
+              }
+            }
           },
-        },
+          400: { description: "잘못된 요청" },
+          409: { description: "모든 문서가 이미 존재함" },
+          500: { description: "서버 오류" },
+      }
+  });
+  
+  const RagUpdateRoute = createRoute({
+      method: "put",
+      path: "/rag/documents/{id}",
+      summary: "[RAG] 문서 메타데이터 수정",
+      description: "ID로 특정 문서의 메타데이터 전체를 수정합니다.",
+      tags: ["AI - RAG"],
+      security: [{ BearerAuth: [] }],
+      request: {
+          body: {
+              content: {
+                  "application/json": { schema: RagMetadataSchema }
+              }
+          }
       },
-      "400": { description: "메시지 누락" },
-      "500": { description: "서버 오류" },
-    },
+      responses: {
+          200: {
+            description: "메타데이터 수정 성공",
+            content: {
+              "application/json": {
+                schema: RagMetadataSchema
+              }
+            }
+          },
+          400: { description: "잘못된 요청 (ID 또는 메타데이터 형식 오류)" },
+          404: { description: "해당 ID의 문서를 찾을 수 없음" },
+          500: { description: "서버 오류" },
+      }
   });
 
-  // 대화형 RAG 대화 이어가기
-  router.post("/api/ai/saju-chat/:id", SajuChat, {
-    summary: "[대화형 RAG] 대화 이어가기",
-    description:
-      "기존 대화의 맥락을 이어받아 답변을 생성합니다. Path에 conversationId를 포함하여 요청해야 합니다.",
-    tags: ["AI - 대화형 RAG"],
-    auth: true,
-    parameters: [
-      {
-        name: "id",
-        in: "path",
-        required: true,
-        description: "대화 ID (conversationId)",
-        schema: { type: "string", format: "uuid" },
-      },
-    ],
-    requestBody: {
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              message: { type: "string", description: "사용자의 다음 질문" },
-              i18n: { type: "string", description: "언어 코드 (ko, en, ja, zh, vi)", default: "ko" },
-            },
-            required: ["message"],
-          },
+  const RagGetDocumentsRoute = createRoute({
+      method: 'get',
+      path: '/rag/documents',
+      summary: "[RAG] 문서 목록 조회",
+      description: "RAG 시스템에 저장된 모든 문서를 페이지네이션 및 검색 기능과 함께 조회합니다.",
+      tags: ["AI - RAG"],
+      security: [{ BearerAuth: [] }],
+      // request: {
+      //     query: z.object({
+      //         page: z.coerce.number().int().positive().default(1).optional(),
+      //         limit: z.coerce.number().int().positive().default(10).optional(),
+      //         search: z.string().optional(),
+      //     }).openapi({ type: 'object' })
+      // },
+      responses: {
+        200: {
+            description: "성공적인 응답",
+            content: {
+                "application/json": {
+                    schema: z.object({
+                        documents: z.array(
+                            RagDocumentSchema.extend({ id: z.number().int() }).openapi({ type: 'object' })
+                        ),
+                        pagination: PaginationResponseSchema
+                    }).openapi({ type: 'object' })
+                }
+            }
         },
-      },
-    },
-    responses: {
-      "200": {
-        description: "대화 성공",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                conversationId: { type: "string", format: "uuid" },
-                answer: { type: "string" },
-              },
-            },
-          },
-        },
-      },
-      "400": { description: "메시지 누락" },
-      "500": { description: "서버 오류" },
-    },
+          500: { description: "서버 오류" },
+      }
   });
 
-  // 대화형 RAG 목록 조회
-  router.get("/api/ai/saju-chat/history", SajuChatList, {
-    summary: "[대화형 RAG] 내 대화 목록 조회",
-    description:
-      "현재 로그인한 사용자의 모든 대화 목록을 최신순으로 조회합니다.",
-    tags: ["AI - 대화형 RAG"],
-    auth: true,
-    responses: {
-      "200": {
-        description: "대화 목록 조회 성공",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                conversations: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "string", format: "uuid" },
-                      title: {
-                        type: "string",
-                        description: "대화의 첫 메시지 내용",
-                      },
-                      updatedAt: { type: "string", format: "date-time" },
-                    },
-                  },
-                },
-              },
-            },
-          },
+  const RagDeleteRoute = createRoute({
+      method: 'delete',
+      path: '/rag/documents/{id}',
+      summary: "[RAG] 문서 삭제",
+      description: "ID로 특정 문서를 RAG 시스템에서 삭제합니다.",
+      tags: ["AI - RAG"],
+      security: [{ BearerAuth: [] }],
+      request: {
+          // params: RagIdParamSchema
+      },
+      responses: {
+        200: {
+            description: "삭제 성공",
+            content: {
+                "application/json": {
+                    schema: SuccessSchema.extend({
+                        deletedCount: z.number().int().openapi({ example: 3 })
+                    }).openapi({ type: 'object' })
+                }
+            }
         },
-      },
-      "401": { description: "인증 실패" },
-      "500": { description: "서버 오류" },
-    },
+          400: { description: "잘못된 요청" },
+          500: { description: "서버 오류" },
+      }
   });
-
-  // 대화형 RAG 특정 대화 기록 조회
-  router.get("/api/ai/saju-chat/:id", SajuChatFull, {
-    summary: "[대화형 RAG] 특정 대화 기록 조회",
-    description: "특정 대화 ID에 해당하는 모든 메시지 기록을 조회합니다.",
-    tags: ["AI - 대화형 RAG"],
-    auth: true,
-    parameters: [
-      {
-        name: "id",
-        in: "path",
-        required: true,
-        description: "조회할 대화의 ID",
-        schema: { type: "string", format: "uuid" },
-      },
-    ],
-    responses: {
-      "200": {
-        description: "대화 기록 조회 성공",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                conversationId: { type: "string", format: "uuid" },
-                messages: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      role: {
-                        type: "string",
-                        enum: ["user", "assistant", "system"],
-                      },
-                      content: { type: "string" },
-                    },
-                  },
-                },
-              },
-            },
-          },
+  
+  const RagGetMetadataSchemaRoute = createRoute({
+      method: 'get',
+      path: '/rag/metadata-schema',
+      summary: "[RAG] 메타데이터 스키마 조회",
+      description: "RAG 문서에 사용되는 메타데이터의 구조(enum 등)를 조회합니다.",
+      tags: ["AI - RAG"],
+      security: [{ BearerAuth: [] }],
+      responses: {
+        200: {
+            description: "스키마 정보 조회 성공",
+            content: {
+                "application/json": {
+                    schema: z.object({
+                        schema: z.any().openapi({ type: 'object' }) // 실제 스키마는 동적이므로 any로 처리
+                    })
+                }
+            }
         },
+          500: { description: "서버 오류" },
+      }
+  });
+  
+  const SajuChatRoute = createRoute({
+      method: 'post',
+      path: '/saju-chat',
+      summary: "사주 지식 기반 채팅",
+      description: "특정 사주에 대한 지식 기반으로 대화를 시작하거나 이어갑니다. 대화 ID가 없으면 새로운 대화를 시작합니다.",
+      tags: ["AI - 대화형 RAG"],
+      security: [{ BearerAuth: [] }],
+      request: {
+          body: { content: { "application/json": { schema: SajuChatRequestSchema }}}
       },
-      "401": { description: "인증 실패" },
-      "404": { description: "대화를 찾을 수 없거나 권한이 없음" },
-      "500": { description: "서버 오류" },
-    },
+      responses: {
+        200: {
+            description: "새 대화 시작 성공",
+            content: {
+                "application/json": {
+                    schema: SuccessSchema.extend({
+                        conversationId: z.string().uuid().openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
+                        response: z.string().openapi({ example: "안녕하세요! 무엇을 도와드릴까요?" }),
+                    }).openapi({ type: 'object' })
+                }
+            }
+        },
+          400: { description: "메시지 누락" },
+          500: { description: "서버 오류" },
+      }
   });
 
-  // 대화형 RAG 특정 대화 삭제
-  router.delete("/api/ai/saju-chat/:id", SajuChatDelete, {
-    summary: "[대화형 RAG] 특정 대화 삭제",
-    description: "특정 대화 ID에 해당하는 모든 메시지 기록을 삭제합니다.",
-    tags: ["AI - 대화형 RAG"],
-    auth: true,
-    parameters: [
-      {
-        name: "id",
-        in: "path",
-        required: true,
-        description: "삭제할 대화의 ID",
-        schema: { type: "string", format: "uuid" },
+  const SajuChatContinueRoute = createRoute({
+      method: 'post',
+      path: '/saju-chat/{id}',
+      summary: "[대화형 RAG] 대화 이어가기",
+      description: "기존 대화의 맥락을 이어받아 답변을 생성합니다.",
+      tags: ["AI - 대화형 RAG"],
+      security: [{ BearerAuth: [] }],
+      request: {
+          params: ConversationIdParamSchema,
+          body: { content: { "application/json": { schema: SajuChatRequestSchema } } }
       },
-    ],
-    responses: {
-      "200": { description: "삭제 성공" },
-      "401": { description: "인증 실패" },
-      "404": { description: "대화를 찾을 수 없거나 권한이 없음" },
-      "500": { description: "서버 오류" },
-    },
+      responses: {
+        200: {
+            description: "대화 이어가기 성공",
+            content: {
+                "application/json": {
+                    schema: SuccessSchema.extend({
+                        conversationId: z.string().uuid().openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
+                        response: z.string().openapi({ example: "네, 계속 말씀하세요." }),
+                    }).openapi({ type: 'object' })
+                }
+            }
+        },
+          400: { description: "메시지 또는 대화 ID 누락" },
+          404: { description: "대화를 찾을 수 없음" },
+          500: { description: "서버 오류" },
+      }
   });
 
-  return router;
+  const SajuChatListRoute = createRoute({
+      method: 'get',
+      path: '/saju-chat',
+      summary: "[대화형 RAG] 내 대화 목록 조회",
+      description: "현재 로그인한 사용자의 모든 대화 목록을 최신순으로 조회합니다.",
+      tags: ["AI - 대화형 RAG"],
+      security: [{ BearerAuth: [] }],
+      responses: {
+        200: {
+            description: "대화 목록 조회 성공",
+            content: {
+                "application/json": {
+                    schema: z.array(z.object({
+                        id: z.string().uuid().openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
+                        userId: z.string().openapi({ example: "google-oauth2|12345" }),
+                        title: z.string().nullable().openapi({ example: "나의 사주 이야기" }),
+                        createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                        updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                    }).openapi({ type: 'object' }))
+                }
+            }
+        },
+          401: { description: "인증 실패" },
+          500: { description: "서버 오류" },
+      }
+  });
+
+  const SajuChatFullRoute = createRoute({
+      method: 'get',
+      path: '/saju-chat/{id}',
+      summary: "[대화형 RAG] 특정 대화 기록 조회",
+      description: "특정 대화 ID에 해당하는 모든 메시지 기록을 조회합니다.",
+      tags: ["AI - 대화형 RAG"],
+      security: [{ BearerAuth: [] }],
+      request: {
+          params: ConversationIdParamSchema
+      },
+      responses: {
+        200: {
+            description: "전체 대화 내용 조회 성공",
+            content: {
+                "application/json": {
+                    schema: z.object({
+                        id: z.string().uuid().openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
+                        title: z.string().nullable().openapi({ example: "나의 사주 이야기" }),
+                        messages: z.array(z.object({
+                            role: z.enum(["user", "assistant"]).openapi({ example: "user" }),
+                            content: z.string().openapi({ example: "안녕하세요" }),
+                            createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                        }).openapi({ type: 'object' })).openapi({ type: 'array' })
+                    }).openapi({ type: 'object' })
+                }
+            }
+        },
+          401: { description: "인증 실패 또는 권한 없음" },
+          404: { description: "대화를 찾을 수 없음" },
+          500: { description: "서버 오류" },
+      }
+  });
+
+  const SajuChatDeleteRoute = createRoute({
+      method: 'delete',
+      path: '/saju-chat/{id}',
+      summary: "[대화형 RAG] 특정 대화 삭제",
+      description: "특정 대화 ID에 해당하는 모든 메시지 기록을 삭제합니다.",
+      tags: ["AI - 대화형 RAG"],
+      security: [{ BearerAuth: [] }],
+      request: {
+          params: ConversationIdParamSchema
+      },
+      responses: {
+        204: { description: "대화 삭제 성공" },
+          401: { description: "인증 실패 또는 권한 없음" },
+          404: { description: "대화를 찾을 수 없음" },
+          500: { description: "서버 오류" },
+      }
+  });
+
+  // 라우트 등록
+  app.openapi(FortuneTellingRoute, FortuneTelling);
+  app.openapi(SajuAnalysisWithGeminiRoute, SajuAnalysisWithGemini);
+  app.openapi(SajuChatRoute, SajuChat);
+
+  app.openapi(RagAddDocumentsRoute, RagAddDocuments); // 안됨
+  app.openapi(RagUpdateRoute, RagUpdate); // 안됨
+  app.openapi(RagGetDocumentsRoute, RagDocuments); // 안됨
+  app.openapi(RagDeleteRoute, RagDelete); // 안됨
+  app.openapi(RagGetMetadataSchemaRoute, RagGetMetadataSchema); // 안됨
+  app.openapi(SajuChatContinueRoute, SajuChat); // 안됨
+  app.openapi(SajuChatListRoute, SajuChatList); // 안됨
+  app.openapi(SajuChatFullRoute, SajuChatFull); // 안됨
+  app.openapi(SajuChatDeleteRoute, SajuChatDelete); // 안됨
+  return app;
 }
