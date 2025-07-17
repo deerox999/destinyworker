@@ -11,6 +11,8 @@ const toDbFields = (data: any) => ({
   minute: data.분 === "" || data.분 === null ? null : data.분,
   calendar: data.달력,
   gender: data.성별,
+  country: data.국가,
+  calculationMethod: data.계산방법,
 });
 
 // 영어 -> 한글 필드 변환
@@ -24,6 +26,8 @@ const toKoreanFields = (profile: any) => ({
   분: profile.minute,
   달력: profile.calendar,
   성별: profile.gender,
+  국가: profile.country,
+  계산방법: profile.calculationMethod,
   createdAt: profile.createdAt,
   updatedAt: profile.updatedAt,
 });
