@@ -46,6 +46,8 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
       .openapi({ description: "출생분 (MM, 00-59)", example: "30" }),
     달력: z.enum(["양력", "음력"]).openapi({ description: "달력 종류", example: "양력" }),
     성별: z.enum(["남자", "여자"]).openapi({ description: "성별", example: "남자" }),
+    국가: z.string().openapi({ description: "국가", example: "한국" }),
+    계산방법: z.string().openapi({ description: "계산 방법", example: "정통" }),
   }).openapi({ type: 'object' });
 
   const SajuProfileResponseSchema = SajuProfileSchema.extend({
