@@ -63,6 +63,7 @@ model SajuProfile {
   calendar  String /// 달력 종류 (양력/음력)
   gender    String /// 성별 (남자/여자)
   country   String? /// 국가
+  city      String? /// 도시
   calculationMethod String? /// 계산 방법
   createdAt DateTime @default(now()) @map("created_at") /// 프로필 생성 시간
   updatedAt DateTime @updatedAt @map("updated_at") /// 프로필 마지막 업데이트 시간
