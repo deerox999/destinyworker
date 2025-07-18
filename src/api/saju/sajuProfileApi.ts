@@ -1,5 +1,6 @@
+import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
-import { Context, MiddlewareHandler } from "hono";
+import { getUserFromToken } from "../../common/utils";
 
 // 한글 -> 영어 필드 변환
 const toDbFields = (data: any) => ({
@@ -58,12 +59,12 @@ export async function getSajuProfiles(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = c.get("user");
-    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const prisma = createPrismaClient(c.env.DB);
     const profiles = await prisma.sajuProfile.findMany({
-      where: { userId: userInfo.id },
+      where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
     });
     await prisma.$disconnect();
@@ -90,8 +91,8 @@ export async function createSajuProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = c.get("user");
-    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const body = await c.req.json();
     if (!validateSajuData(body)) {
@@ -100,7 +101,7 @@ export async function createSajuProfile(
 
     const prisma = createPrismaClient(c.env.DB);
     const profile = await prisma.sajuProfile.create({
-      data: { userId: userInfo.id, ...toDbFields(body) },
+      data: { userId: user.id, ...toDbFields(body) },
     });
     await prisma.$disconnect();
 
@@ -129,8 +130,8 @@ export async function updateSajuProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = c.get("user");
-    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(c.req.param("id"));
     if (!profileId) return c.json({ error: "잘못된 ID입니다." }, 400);
@@ -153,7 +154,7 @@ export async function updateSajuProfile(
       return c.json({ error: "프로필을 찾을 수 없습니다." }, 404);
     }
 
-    if (existing.userId !== userInfo.id) {
+    if (existing.userId !== user.id) {
       await prisma.$disconnect();
       return c.json({ error: "권한이 없습니다." }, 403);
     }
@@ -182,8 +183,8 @@ export async function deleteSajuProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = c.get("user");
-    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(c.req.param("id"));
     if (!profileId) return c.json({ error: "잘못된 ID입니다." }, 400);
@@ -201,7 +202,7 @@ export async function deleteSajuProfile(
       return c.json({ error: "프로필을 찾을 수 없습니다." }, 404);
     }
 
-    if (existing.userId !== userInfo.id) {
+    if (existing.userId !== user.id) {
       await prisma.$disconnect();
       return c.json({ error: "권한이 없습니다." }, 403);
     }
@@ -227,8 +228,8 @@ export async function getSajuProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = c.get("user");
-    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const profileId = Number(c.req.param("id"));
     if (!profileId) return c.json({ error: "잘못된 ID입니다." }, 400);
@@ -241,7 +242,7 @@ export async function getSajuProfile(
 
     if (!profile)
       return c.json({ error: "프로필을 찾을 수 없습니다." }, 404);
-    if (profile.userId !== userInfo.id)
+    if (profile.userId !== user.id)
       return c.json({ error: "권한이 없습니다." }, 403);
 
     return c.json({

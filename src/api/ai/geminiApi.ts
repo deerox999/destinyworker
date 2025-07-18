@@ -11,6 +11,7 @@ import {
   getDocumentsFromD1,
   RagEnv
 } from "../../common/ragUtils";
+import { getUserFromToken } from "../../common/utils";
 
 // Gemini API와 통신하기 위한 환경 변수 확장
 export interface Env extends RagEnv {
@@ -221,8 +222,7 @@ function buildGeminiPayload(
 export async function SajuAnalysisWithGemini(
   c: Context
 ): Promise<Response> {
-  // 1. 사용자 인증 (기존 로직 재사용)
-  const user = c.get("user");
+  const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }

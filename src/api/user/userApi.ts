@@ -1,5 +1,6 @@
-import { Context, MiddlewareHandler } from "hono";
+import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
+import { getUserFromToken } from "../../common/utils";
 import { deleteR2Object } from "./r2Api";
 
 // 프로필 이름 유효성 검사
@@ -24,7 +25,7 @@ export async function getUserProfile(
   c: Context
 ): Promise<Response> {
   try {
-    const userInfo = c.get("user");
+    const userInfo = await getUserFromToken(c);
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const prisma = createPrismaClient(c.env.DB);
@@ -75,8 +76,8 @@ export async function updateUserProfile(
   c: Context
 ): Promise<Response> {
   try {
-      const userInfo = c.get("user");
-    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
 
     const body = (await c.req.json()) as {
       userName?: string;
@@ -101,7 +102,7 @@ export async function updateUserProfile(
 
     // 사용자 존재 확인 및 현재 프로필 정보 가져오기
     const existingUser = await prisma.user.findUnique({
-      where: { id: userInfo.id },
+      where: { id: user.id },
       select: { id: true, picture: true },
     });
 
@@ -138,7 +139,7 @@ export async function updateUserProfile(
 
     // 프로필 정보 업데이트
     const updatedUser = await prisma.user.update({
-      where: { id: userInfo.id },
+      where: { id: user.id },
       data: dataToUpdate,
     });
 

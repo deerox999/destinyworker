@@ -12,6 +12,7 @@ import {
   getRejectionMessage,
   SupportedLanguage,
 } from "./prompt/sajuTeacher";
+import { getUserFromToken } from "../../common/utils";
 
 /**
  * 사용자의 질문이 사주 관련 주제인지 확인합니다.
@@ -158,7 +159,7 @@ export async function SajuChatList(
   const prisma = createPrismaClient(c.env.DB);
 
   try {
-    const user = c.get("user");
+    const user = await getUserFromToken(c);
     if (!user) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -264,7 +265,7 @@ export async function SajuChat(
     );
   }
 
-  const user = c.get("user");
+  const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
@@ -397,7 +398,7 @@ export async function SajuChatFull(
   const conversationId = c.req.param("id");
 
   try {
-    const user = c.get("user");
+    const user = await getUserFromToken(c);
     if (!user) {
       return c.json({ error: "Unauthorized" }, 401);
     }
@@ -445,7 +446,7 @@ export async function SajuChatDelete(
   const conversationId = c.req.param("id");
 
   try {
-    const user = c.get("user");
+    const user = await getUserFromToken(c);
     if (!user) {
       return c.json({ error: "Unauthorized" }, 401);
     }

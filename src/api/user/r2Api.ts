@@ -2,6 +2,7 @@ import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Context, MiddlewareHandler } from "hono";
 import { v4 as uuidv4 } from "uuid";
+import { getUserFromToken } from "../../common/utils";
 
 /* 운영 개발 분리 된 환경이 아님. dev 환경에서도, destiny 버킷에 업로드 가능하도록 되어있음. */
 // R2 클라이언트 생성 함수
@@ -48,7 +49,7 @@ export async function deleteR2Object(objectKey: string, env: any): Promise<boole
 export async function getUploadUrl(
   c: Context
 ): Promise<Response> {
-  const userInfo = c.get("user");
+  const userInfo = await getUserFromToken(c);
   if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
   try {

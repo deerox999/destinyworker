@@ -7,6 +7,7 @@ import {
   logAiUsage,
   RagEnv,
 } from "../../common/ragUtils";
+import { getUserFromToken } from "../../common/utils";
 
 export interface Env extends RagEnv {
   AI: Ai;
@@ -165,7 +166,7 @@ export async function FortuneTelling(
   c: Context
 ): Promise<Response> {
   // 1. 사용자 인증
-  const user = c.get("user");
+  const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
