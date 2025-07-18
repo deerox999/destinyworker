@@ -12,6 +12,9 @@ const toDbFields = (data: any) => ({
   minute: data.분 === "" || data.분 === null ? null : data.분,
   calendar: data.달력,
   gender: data.성별,
+  country: data.국가,
+  city: data.도시,
+  calculationMethod: data.계산방법,
 });
 
 // 영어 -> 한글 필드 변환
@@ -25,6 +28,9 @@ const toKoreanFields = (profile: any) => ({
   분: profile.minute,
   달력: profile.calendar,
   성별: profile.gender,
+  국가: profile.country,
+  도시: profile.city,
+  계산방법: profile.calculationMethod,
   createdAt: profile.createdAt,
   updatedAt: profile.updatedAt,
 });
@@ -50,7 +56,11 @@ const validateSajuData = (data: any): boolean => {
     isHourValid &&
     isMinuteValid &&
     ["양력", "음력"].includes(data.달력) &&
-    ["남자", "여자"].includes(data.성별)
+    ["남자", "여자"].includes(data.성별) &&
+    // 선택적 필드들은 존재할 경우에만 검증
+    (data.국가 === undefined || typeof data.국가 === 'string') &&
+    (data.도시 === undefined || typeof data.도시 === 'string') &&
+    (data.계산방법 === undefined || typeof data.계산방법 === 'string')
   );
 };
 
@@ -98,7 +108,6 @@ export async function createSajuProfile(
     if (!validateSajuData(body)) {
       return c.json({ error: "잘못된 데이터입니다." }, 400);
     }
-
     const prisma = createPrismaClient(c.env.DB);
     const profile = await prisma.sajuProfile.create({
       data: { userId: user.id, ...toDbFields(body) },
