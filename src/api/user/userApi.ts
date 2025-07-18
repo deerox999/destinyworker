@@ -95,7 +95,30 @@ export async function updateUserProfile(
           400
         );
       }
-      dataToUpdate.userName = body.userName.trim();
+      
+      const trimmedUserName = body.userName.trim();
+      
+      // 사용자 이름 중복 체크
+      const prisma = createPrismaClient(c.env.DB);
+      const existingUserWithName = await prisma.user.findFirst({
+        where: {
+          userName: trimmedUserName,
+          id: { not: user.id } // 현재 사용자 제외
+        },
+        select: { id: true }
+      });
+
+      if (existingUserWithName) {
+        await prisma.$disconnect();
+        return c.json(
+          {
+            error: "이미 사용 중인 프로필 이름입니다.",
+          },
+          400
+        );
+      }
+
+      dataToUpdate.userName = trimmedUserName;
     }
 
     const prisma = createPrismaClient(c.env.DB);
