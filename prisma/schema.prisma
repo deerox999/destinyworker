@@ -34,6 +34,13 @@ model User {
   loginHistories LoginHistory[] /// 관계: 한 사용자는 여러 로그인 기록을 가질 수 있음
   aiUsageLogs AiUsageLog[] /// 관계: 한 사용자는 여러 AI 사용 기록을 가질 수 있음
   pushSubscriptions PushSubscription[] /// 관계: 한 사용자는 여러 푸시 구독을 가질 수 있음
+  
+  // 커뮤니티 관련 관계들
+  posts        Post[]        /// 사용자가 작성한 게시글들
+  comments     Comment[]     /// 사용자가 작성한 댓글들
+  postLikes    PostLike[]    /// 사용자가 추천한 게시글들
+  commentLikes CommentLike[] /// 사용자가 추천한 댓글들
+  
   @@map("users")
 }
 
@@ -231,4 +238,132 @@ model PushSubscription {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 구독은 하나의 사용자에 속함
 
   @@map("push_subscriptions")
+}
+
+/// 게시판 테이블 - 커뮤니티 게시판 관리
+model Board {
+  id          Int      @id @default(autoincrement()) /// 게시판 고유 ID
+  name        String   @unique /// 게시판 식별자 ('bug-report', 'free-discussion')
+  displayName String   /// 게시판 표시 이름 ('버그 제보', '자유 토론')
+  description String?  /// 게시판 설명
+  isActive    Boolean  @default(true) /// 게시판 활성화 여부
+  createdAt   DateTime @default(now()) @map("created_at") /// 생성 시간
+  updatedAt   DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  posts       Post[] /// 관계: 게시판에 속한 게시글들
+  categories  BoardCategory[] /// 관계: 게시판에 속한 카테고리들
+  @@map("boards")
+}
+
+/// 게시판 카테고리 테이블 - 게시판별 카테고리 관리
+model BoardCategory {
+  id        Int      @id @default(autoincrement()) /// 카테고리 고유 ID
+  boardId   Int      @map("board_id") /// 소속 게시판 ID
+  name      String   /// 카테고리 이름 ('치명적 버그', '사소한 버그', '일상', '정보 공유' 등)
+  sortOrder Int      @default(0) @map("sort_order") /// 정렬 순서
+  isActive  Boolean  @default(true) /// 카테고리 활성화 여부
+  createdAt DateTime @default(now()) @map("created_at") /// 생성 시간
+  updatedAt DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade) /// 관계: 카테고리는 하나의 게시판에 속함
+  posts     Post[] /// 관계: 카테고리에 속한 게시글들
+  @@map("board_categories")
+}
+
+/// 게시글 테이블 - 커뮤니티 게시글 관리
+model Post {
+  id          Int      @id @default(autoincrement()) /// 게시글 고유 ID
+  boardId     Int      @map("board_id") /// 소속 게시판 ID
+  categoryId  Int      @map("category_id") /// 소속 카테고리 ID
+  authorId    Int      @map("author_id") /// 작성자 ID
+  title       String   /// 게시글 제목
+  content     String   /// 게시글 내용 (HTML content from QuillEditor)
+  viewCount   Int      @default(0) @map("view_count") /// 조회수
+  likeCount   Int      @default(0) @map("like_count") /// 추천수
+  commentCount Int     @default(0) @map("comment_count") /// 댓글수
+  isNotice    Boolean  @default(false) @map("is_notice") /// 공지사항 여부
+  isDeleted   Boolean  @default(false) @map("is_deleted") /// 삭제 여부
+  createdAt   DateTime @default(now()) @map("created_at") /// 생성 시간
+  updatedAt   DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  
+  // Relations
+  board       Board    @relation(fields: [boardId], references: [id], onDelete: Cascade) /// 관계: 게시글은 하나의 게시판에 속함
+  category    BoardCategory @relation(fields: [categoryId], references: [id]) /// 관계: 게시글은 하나의 카테고리에 속함
+  author      User     @relation(fields: [authorId], references: [id]) /// 관계: 게시글은 하나의 사용자가 작성함
+  comments    Comment[] /// 관계: 게시글에 달린 댓글들
+  postLikes   PostLike[] /// 관계: 게시글에 대한 추천들
+  postTags    PostTag[] /// 관계: 게시글에 연결된 태그들
+  @@map("posts")
+}
+
+/// 댓글 테이블 - 게시글 댓글 관리
+model Comment {
+  id          Int      @id @default(autoincrement()) /// 댓글 고유 ID
+  postId      Int      @map("post_id") /// 소속 게시글 ID
+  authorId    Int      @map("author_id") /// 작성자 ID
+  parentId    Int?     @map("parent_id") /// 부모 댓글 ID (대댓글용)
+  content     String   /// 댓글 내용
+  likeCount   Int      @default(0) @map("like_count") /// 추천수
+  isDeleted   Boolean  @default(false) @map("is_deleted") /// 삭제 여부
+  createdAt   DateTime @default(now()) @map("created_at") /// 생성 시간
+  updatedAt   DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  
+  // Relations
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade) /// 관계: 댓글은 하나의 게시글에 속함
+  author      User     @relation(fields: [authorId], references: [id]) /// 관계: 댓글은 하나의 사용자가 작성함
+  parent      Comment? @relation("CommentReplies", fields: [parentId], references: [id]) /// 관계: 부모 댓글 (대댓글의 경우)
+  replies     Comment[] @relation("CommentReplies") /// 관계: 자식 댓글들 (대댓글들)
+  commentLikes CommentLike[] /// 관계: 댓글에 대한 추천들
+  @@map("comments")
+}
+
+/// 게시글 추천 테이블 - 게시글 추천 관리
+model PostLike {
+  id        Int      @id @default(autoincrement()) /// 추천 기록 고유 ID
+  postId    Int      @map("post_id") /// 추천된 게시글 ID
+  userId    Int      @map("user_id") /// 추천한 사용자 ID
+  createdAt DateTime @default(now()) @map("created_at") /// 추천 시간
+  
+  // Relations
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade) /// 관계: 추천은 하나의 게시글에 속함
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 추천은 하나의 사용자에 속함
+  
+  @@unique([postId, userId]) /// 같은 사용자가 같은 게시글을 중복 추천할 수 없음
+  @@map("post_likes")
+}
+
+/// 댓글 추천 테이블 - 댓글 추천 관리
+model CommentLike {
+  id        Int      @id @default(autoincrement()) /// 추천 기록 고유 ID
+  commentId Int      @map("comment_id") /// 추천된 댓글 ID
+  userId    Int      @map("user_id") /// 추천한 사용자 ID
+  createdAt DateTime @default(now()) @map("created_at") /// 추천 시간
+  
+  // Relations
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade) /// 관계: 추천은 하나의 댓글에 속함
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 추천은 하나의 사용자에 속함
+  
+  @@unique([commentId, userId]) /// 같은 사용자가 같은 댓글을 중복 추천할 수 없음
+  @@map("comment_likes")
+}
+
+/// 태그 테이블 - 게시글 태그 관리
+model Tag {
+  id        Int      @id @default(autoincrement()) /// 태그 고유 ID
+  name      String   @unique /// 태그 이름
+  createdAt DateTime @default(now()) @map("created_at") /// 생성 시간
+  postTags  PostTag[] /// 관계: 태그가 연결된 게시글들
+  @@map("tags")
+}
+
+/// 게시글-태그 연결 테이블 - 게시글과 태그의 다대다 관계
+model PostTag {
+  id     Int @id @default(autoincrement()) /// 연결 고유 ID
+  postId Int @map("post_id") /// 게시글 ID
+  tagId  Int @map("tag_id") /// 태그 ID
+  
+  // Relations
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade) /// 관계: 연결은 하나의 게시글에 속함
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade) /// 관계: 연결은 하나의 태그에 속함
+  
+  @@unique([postId, tagId]) /// 같은 게시글과 태그의 중복 연결 방지
+  @@map("post_tags")
 } 
