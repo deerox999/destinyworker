@@ -611,7 +611,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
                 content: z
                   .string()
                   .min(1)
-                  .max(10000)
+                  .max(10000000)
                   .openapi({ example: "게시글 내용..." }),
                 boardId: z.number().int().positive().openapi({ example: 1 }),
                 categoryId: z
@@ -706,7 +706,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
                 content: z
                   .string()
                   .min(1)
-                  .max(10000)
+                  .max(10000000)
                   .optional()
                   .openapi({ example: "게시글 내용..." }),
                 categoryId: z
@@ -918,6 +918,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
                         authorName: z
                           .string()
                           .openapi({ example: "댓글 작성자" }),
+                        authorImage: z.string().nullable().openapi({ example: "https://example.com/user-profile.jpg" }),
                         isAnonymous: z.boolean().openapi({ example: false }),
                         likeCount: z.number().int().openapi({ example: 2 }),
                         createdAt: z
@@ -978,7 +979,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
                 content: z
                   .string()
                   .min(1)
-                  .max(1000)
+                  .max(100000)
                   .openapi({ example: "댓글 내용" }),
                 parentId: z
                   .number()
@@ -1013,6 +1014,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
                   id: z.number().int().openapi({ example: 1 }),
                   content: z.string().openapi({ example: "댓글 내용" }),
                   authorName: z.string().openapi({ example: "댓글 작성자" }),
+                  authorImage: z.string().nullable().openapi({ example: "https://example.com/user-profile.jpg" }),
                   isAnonymous: z.boolean().openapi({ example: false }),
                   createdAt: z
                     .string()
@@ -1057,7 +1059,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
                 content: z
                   .string()
                   .min(1)
-                  .max(1000)
+                  .max(100000)
                   .openapi({ example: "댓글 내용" }),
                 password: z
                   .string()
