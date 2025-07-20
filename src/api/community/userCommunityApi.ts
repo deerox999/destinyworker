@@ -1,5 +1,7 @@
 import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
+import { getUserFromToken } from "../../common/utils";
+import { deleteImagesFromR2 } from '../user/r2Api';
 
 export const userCommunityApi = {
   // 커뮤니티 전체 데이터 조회
@@ -534,6 +536,27 @@ export const userCommunityApi = {
         return c.json({ success: false, message: '익명 게시글은 비밀번호가 필요합니다.' }, 400);
       }
 
+      // 로그인한 사용자 정보 가져오기
+      let user = null;
+      let authorId = null;
+      let authorName = '익명';
+
+      if (!isAnonymous) {
+        user = await getUserFromToken(c);
+        if (!user) {
+          await prisma.$disconnect();
+          return c.json({ success: false, message: '로그인이 필요합니다.' }, 401);
+        }
+        authorId = user.id;
+        
+        // 사용자 정보 조회
+        const userInfo = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { name: true, userName: true }
+        });
+        authorName = userInfo?.userName || userInfo?.name || '사용자';
+      }
+
       // 게시글 생성
       const post = await prisma.post.create({
         data: {
@@ -541,8 +564,8 @@ export const userCommunityApi = {
           content,
           boardId,
           categoryId: categoryId || 1, // 기본 카테고리
-          authorId: isAnonymous ? null : 1, // TODO: 실제 사용자 ID로 변경
-          authorName: isAnonymous ? '익명' : '유람하는 방랑자', // TODO: 실제 사용자 정보로 변경
+          authorId,
+          authorName,
           password: isAnonymous ? password : null,
           viewCount: 0,
           likeCount: 0,
@@ -595,6 +618,8 @@ export const userCommunityApi = {
     }
   },
 
+
+
   // 게시글 수정
   async updatePost(c: Context) {
     try {
@@ -613,16 +638,21 @@ export const userCommunityApi = {
         return c.json({ success: false, message: '게시글을 찾을 수 없습니다.' }, 404);
       }
 
-      // 권한 확인 (본인 또는 관리자)
-      // TODO: 실제 사용자 인증 로직으로 변경
-      const isAuthor = true; // 임시로 true
-      const isAdmin = false; // 임시로 false
+      // 권한 확인
+      const user = await getUserFromToken(c);
+      const isAdmin = user?.role === 'admin';
+      const isAuthor = user && post.authorId === user.id;
 
       if (!isAuthor && !isAdmin) {
         // 익명 게시글인 경우 비밀번호 확인
         if (!post.authorId && post.password !== password) {
           await prisma.$disconnect();
           return c.json({ success: false, message: '비밀번호가 일치하지 않습니다.' }, 403);
+        }
+        
+        if (!post.authorId && !password) {
+          await prisma.$disconnect();
+          return c.json({ success: false, message: '권한이 없습니다.' }, 403);
         }
       }
 
@@ -636,6 +666,13 @@ export const userCommunityApi = {
           await prisma.$disconnect();
           return c.json({ success: false, message: '존재하지 않는 카테고리입니다.' }, 400);
         }
+      }
+
+      // 기존 게시글의 이미지들을 R2에서 삭제 (비동기)
+      if (post.content.includes(c.env.R2_PUBLIC_URL)) {
+        deleteImagesFromR2(post.content, c.env).catch(error => {
+          console.error('기존 R2 이미지 삭제 실패:', error);
+        });
       }
 
       // 게시글 수정
@@ -713,10 +750,10 @@ export const userCommunityApi = {
         return c.json({ success: false, message: '게시글을 찾을 수 없습니다.' }, 404);
       }
 
-      // 권한 확인 (본인, 관리자, 또는 익명 비밀번호)
-      // TODO: 실제 사용자 인증 로직으로 변경
-      const isAuthor = true; // 임시로 true
-      const isAdmin = false; // 임시로 false
+      // 권한 확인
+      const user = await getUserFromToken(c);
+      const isAdmin = user?.role === 'admin';
+      const isAuthor = user && post.authorId === user.id;
 
       if (!isAuthor && !isAdmin) {
         // 익명 게시글인 경우 비밀번호 확인
@@ -724,7 +761,17 @@ export const userCommunityApi = {
           await prisma.$disconnect();
           return c.json({ success: false, message: '비밀번호가 일치하지 않습니다.' }, 403);
         }
+        
+        if (!post.authorId && !password) {
+          await prisma.$disconnect();
+          return c.json({ success: false, message: '권한이 없습니다.' }, 403);
+        }
       }
+
+      // 게시글에 포함된 이미지 URL들을 추출하여 R2에서 삭제 (비동기)
+      deleteImagesFromR2(post.content, c.env).catch(error => {
+        console.error('R2 이미지 삭제 실패:', error);
+      });
 
       // 물리적 삭제가 아닌 비활성화
       await prisma.post.update({
@@ -760,15 +807,19 @@ export const userCommunityApi = {
         return c.json({ success: false, message: '게시글을 찾을 수 없습니다.' }, 400);
       }
 
-      // TODO: 실제 사용자 ID로 변경
-      const userId = 1; // 임시 사용자 ID
+      // 로그인한 사용자 확인
+      const user = await getUserFromToken(c);
+      if (!user) {
+        await prisma.$disconnect();
+        return c.json({ success: false, message: '로그인이 필요합니다.' }, 401);
+      }
 
       // 기존 추천 확인
       const existingLike = await prisma.postLike.findUnique({
         where: {
           postId_userId: {
             postId: parseInt(id),
-            userId
+            userId: user.id
           }
         }
       });
@@ -795,7 +846,7 @@ export const userCommunityApi = {
         await prisma.postLike.create({
           data: {
             postId: parseInt(id),
-            userId
+            userId: user.id
           }
         });
 
@@ -867,6 +918,7 @@ export const userCommunityApi = {
             id: comment.id,
             content: comment.content,
             authorName: comment.authorName || '익명',
+            authorImage: comment.authorImage,
             isAnonymous: !comment.authorId,
             likeCount: comment._count.commentLikes,
             createdAt: comment.createdAt,
@@ -891,7 +943,7 @@ export const userCommunityApi = {
     try {
       const { postId } = c.req.param();
       const body = await c.req.json();
-      const { content, parentId, isAnonymous = false, password } = body;
+      const { content, parentId, isAnonymous = false, password, authorImage } = body;
 
       const prisma = createPrismaClient(c.env.DB);
 
@@ -922,13 +974,35 @@ export const userCommunityApi = {
         return c.json({ success: false, message: '익명 댓글은 비밀번호가 필요합니다.' }, 400);
       }
 
+      // 로그인한 사용자 정보 가져오기
+      let user = null;
+      let authorId = null;
+      let authorName = '익명';
+
+      if (!isAnonymous) {
+        user = await getUserFromToken(c);
+        if (!user) {
+          await prisma.$disconnect();
+          return c.json({ success: false, message: '로그인이 필요합니다.' }, 401);
+        }
+        authorId = user.id;
+        
+        // 사용자 정보 조회
+        const userInfo = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { name: true, userName: true }
+        });
+        authorName = userInfo?.userName || userInfo?.name || '사용자';
+      }
+
       const comment = await prisma.comment.create({
         data: {
           content,
           postId: parseInt(postId),
           parentId: parentId ? parseInt(parentId) : null,
-          authorId: isAnonymous ? null : 1, // TODO: 실제 사용자 ID로 변경
-          authorName: isAnonymous ? '익명' : '유람하는 방랑자', // TODO: 실제 사용자 정보로 변경
+          authorId,
+          authorName,
+          authorImage: isAnonymous ? null : authorImage, // 로그인 사용자의 이미지 URL
           password: isAnonymous ? password : null,
           likeCount: 0,
           isDeleted: false
@@ -949,6 +1023,7 @@ export const userCommunityApi = {
           id: comment.id,
           content: comment.content,
           authorName: comment.authorName,
+          authorImage: comment.authorImage,
           isAnonymous: !comment.authorId,
           createdAt: comment.createdAt
         }
@@ -977,10 +1052,10 @@ export const userCommunityApi = {
         return c.json({ success: false, message: '댓글을 찾을 수 없습니다.' }, 404);
       }
 
-      // 권한 확인 (본인 또는 관리자)
-      // TODO: 실제 사용자 인증 로직으로 변경
-      const isAuthor = true; // 임시로 true
-      const isAdmin = false; // 임시로 false
+      // 권한 확인
+      const user = await getUserFromToken(c);
+      const isAdmin = user?.role === 'admin';
+      const isAuthor = user && comment.authorId === user.id;
 
       if (!isAuthor && !isAdmin) {
         // 익명 댓글인 경우 비밀번호 확인
@@ -988,6 +1063,18 @@ export const userCommunityApi = {
           await prisma.$disconnect();
           return c.json({ success: false, message: '비밀번호가 일치하지 않습니다.' }, 403);
         }
+        
+        if (!comment.authorId && !password) {
+          await prisma.$disconnect();
+          return c.json({ success: false, message: '권한이 없습니다.' }, 403);
+        }
+      }
+
+      // 기존 댓글의 이미지들을 R2에서 삭제 (비동기)
+      if (comment.content.includes(c.env.R2_PUBLIC_URL)) {
+        deleteImagesFromR2(comment.content, c.env).catch(error => {
+          console.error('기존 R2 이미지 삭제 실패:', error);
+        });
       }
 
       const updatedComment = await prisma.comment.update({
@@ -1032,10 +1119,10 @@ export const userCommunityApi = {
         return c.json({ success: false, message: '댓글을 찾을 수 없습니다.' }, 404);
       }
 
-      // 권한 확인 (본인, 관리자, 또는 익명 비밀번호)
-      // TODO: 실제 사용자 인증 로직으로 변경
-      const isAuthor = true; // 임시로 true
-      const isAdmin = false; // 임시로 false
+      // 권한 확인
+      const user = await getUserFromToken(c);
+      const isAdmin = user?.role === 'admin';
+      const isAuthor = user && comment.authorId === user.id;
 
       if (!isAuthor && !isAdmin) {
         // 익명 댓글인 경우 비밀번호 확인
@@ -1043,7 +1130,17 @@ export const userCommunityApi = {
           await prisma.$disconnect();
           return c.json({ success: false, message: '비밀번호가 일치하지 않습니다.' }, 403);
         }
+        
+        if (!comment.authorId && !password) {
+          await prisma.$disconnect();
+          return c.json({ success: false, message: '권한이 없습니다.' }, 403);
+        }
       }
+
+      // 댓글에 포함된 이미지 URL들을 추출하여 R2에서 삭제 (비동기)
+      deleteImagesFromR2(comment.content, c.env).catch(error => {
+        console.error('R2 이미지 삭제 실패:', error);
+      });
 
       // 물리적 삭제가 아닌 비활성화
       await prisma.comment.update({
@@ -1085,15 +1182,19 @@ export const userCommunityApi = {
         return c.json({ success: false, message: '댓글을 찾을 수 없습니다.' }, 400);
       }
 
-      // TODO: 실제 사용자 ID로 변경
-      const userId = 1; // 임시 사용자 ID
+      // 로그인한 사용자 확인
+      const user = await getUserFromToken(c);
+      if (!user) {
+        await prisma.$disconnect();
+        return c.json({ success: false, message: '로그인이 필요합니다.' }, 401);
+      }
 
       // 기존 추천 확인
       const existingLike = await prisma.commentLike.findUnique({
         where: {
           commentId_userId: {
             commentId: parseInt(id),
-            userId
+            userId: user.id
           }
         }
       });
@@ -1115,7 +1216,7 @@ export const userCommunityApi = {
         await prisma.commentLike.create({
           data: {
             commentId: parseInt(id),
-            userId
+            userId: user.id
           }
         });
 
@@ -1130,5 +1231,7 @@ export const userCommunityApi = {
       console.error('댓글 추천 오류:', error);
       return c.json({ success: false, message: '서버 오류가 발생했습니다.' }, 500);
     }
-  }
+  },
+
+
 }; 

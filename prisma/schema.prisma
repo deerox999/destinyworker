@@ -302,6 +302,7 @@ model Comment {
   postId      Int      @map("post_id") /// 소속 게시글 ID
   authorId    Int?     @map("author_id") /// 작성자 ID (로그인 사용자의 경우)
   authorName  String?  @map("author_name") /// 작성자 이름 (익명 사용자의 경우)
+  authorImage String?  @map("author_image") /// 작성자 이미지 URL (로그인 사용자의 경우)
   password    String?  @map("password") /// 비밀번호 (익명 사용자의 경우, 해시된 값)
   parentId    Int?     @map("parent_id") /// 부모 댓글 ID (대댓글용)
   content     String   /// 댓글 내용

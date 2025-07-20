@@ -6,7 +6,7 @@ import { getUserFromToken } from "../../common/utils";
 
 /* 운영 개발 분리 된 환경이 아님. dev 환경에서도, destiny 버킷에 업로드 가능하도록 되어있음. */
 // R2 클라이언트 생성 함수
-const createR2Client = (env: any): S3Client | null => {
+export const createR2Client = (env: any): S3Client | null => {
   const {
     R2_ACCOUNT_ID,
     R2_ACCESS_KEY_ID,
@@ -43,6 +43,46 @@ export async function deleteR2Object(objectKey: string, env: any): Promise<boole
   } catch (error) {
     console.error("Failed to delete object from R2:", error);
     return false;
+  }
+}
+
+// R2에서 이미지를 삭제하는 비동기 함수
+export async function deleteImagesFromR2(content: string, env: any): Promise<void> {
+  try {
+    // R2 URL 패턴을 찾아서 이미지 파일들을 삭제
+    const r2UrlRegex = new RegExp(`${env.R2_PUBLIC_URL}/post-images/[^"\\s]+`, 'g');
+    const matches = content.match(r2UrlRegex);
+    
+    if (!matches || matches.length === 0) {
+      return;
+    }
+
+    const S3 = createR2Client(env);
+    if (!S3) {
+      throw new Error('R2 클라이언트 생성 실패');
+    }
+
+    // 각 이미지 파일을 비동기로 삭제
+    const deletePromises = matches.map(async (url) => {
+      try {
+        // URL에서 파일 경로 추출
+        const filePath = url.replace(env.R2_PUBLIC_URL + '/', '');
+        
+        await S3.send(new DeleteObjectCommand({
+          Bucket: env.R2_BUCKET_NAME,
+          Key: filePath,
+        }));
+        
+        console.log(`R2 이미지 삭제 성공: ${filePath}`);
+      } catch (error) {
+        console.error(`R2 이미지 삭제 실패: ${url}`, error);
+      }
+    });
+
+    // 모든 삭제 작업을 병렬로 실행
+    await Promise.all(deletePromises);
+  } catch (error) {
+    console.error('R2 이미지 삭제 중 오류:', error);
   }
 }
 
