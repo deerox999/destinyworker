@@ -10,16 +10,30 @@ async function seedCommunity() {
     
     console.log('조회 결과:', boardsResult);
     
-    // 결과 파싱 개선
-    const boardLines = boardsResult.split('\n').filter(line => line.includes('|') && !line.includes('id') && !line.includes('─'));
-    const boards = {};
-    
-    boardLines.forEach(line => {
-      const parts = line.split('|').map(part => part.trim());
-      if (parts.length >= 2 && parts[0] && parts[1] && !isNaN(parseInt(parts[0]))) {
-        boards[parts[1]] = parseInt(parts[0]);
+    // JSON 결과 파싱
+    let boards = {};
+    try {
+      // wrangler 출력에서 JSON 부분만 추출
+      const jsonMatch = boardsResult.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const jsonResult = JSON.parse(jsonMatch[0]);
+        if (jsonResult[0] && jsonResult[0].results) {
+          jsonResult[0].results.forEach(row => {
+            boards[row.name] = row.id;
+          });
+        }
       }
-    });
+    } catch (e) {
+      console.log('JSON 파싱 실패, 텍스트 파싱 시도...');
+      // 기존 텍스트 파싱 방식
+      const boardLines = boardsResult.split('\n').filter(line => line.includes('|') && !line.includes('id') && !line.includes('─'));
+      boardLines.forEach(line => {
+        const parts = line.split('|').map(part => part.trim());
+        if (parts.length >= 2 && parts[0] && parts[1] && !isNaN(parseInt(parts[0]))) {
+          boards[parts[1]] = parseInt(parts[0]);
+        }
+      });
+    }
 
     console.log('파싱된 공간 ID:', boards);
 
@@ -40,14 +54,26 @@ async function seedCommunity() {
 
       // 다시 공간 ID 조회
       const boardsResult2 = execSync(`npx wrangler d1 execute destiny --remote --command "SELECT id, name FROM boards WHERE name IN ('bug-report', 'saju-discussion', 'feature-request')"`, { encoding: 'utf8' });
-      const boardLines2 = boardsResult2.split('\n').filter(line => line.includes('|') && !line.includes('id') && !line.includes('─'));
       
-      boardLines2.forEach(line => {
-        const parts = line.split('|').map(part => part.trim());
-        if (parts.length >= 2 && parts[0] && parts[1] && !isNaN(parseInt(parts[0]))) {
-          boards[parts[1]] = parseInt(parts[0]);
+      try {
+        const jsonMatch2 = boardsResult2.match(/\[[\s\S]*\]/);
+        if (jsonMatch2) {
+          const jsonResult2 = JSON.parse(jsonMatch2[0]);
+          if (jsonResult2[0] && jsonResult2[0].results) {
+            jsonResult2[0].results.forEach(row => {
+              boards[row.name] = row.id;
+            });
+          }
         }
-      });
+      } catch (e) {
+        const boardLines2 = boardsResult2.split('\n').filter(line => line.includes('|') && !line.includes('id') && !line.includes('─'));
+        boardLines2.forEach(line => {
+          const parts = line.split('|').map(part => part.trim());
+          if (parts.length >= 2 && parts[0] && parts[1] && !isNaN(parseInt(parts[0]))) {
+            boards[parts[1]] = parseInt(parts[0]);
+          }
+        });
+      }
     }
 
     console.log('최종 공간 ID:', boards);

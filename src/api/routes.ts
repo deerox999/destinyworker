@@ -11,7 +11,7 @@ import { createAuthRouter } from "./user/auth/auth.routes";
 import { createR2Router } from "./user/r2.routes";
 import { createUserRouter } from "./user/user.routes";
 import { createPushRouter } from "./user/auth/push.routes";
-import { createCommunityRouter } from "./community/community.routes";
+import { createCommunityRouter } from "./community/routes";
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터 (Hono 기반)
  */

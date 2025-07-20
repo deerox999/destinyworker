@@ -215,7 +215,7 @@ export async function googleLogin(
 
     // JWT 토큰 생성
     const jwtToken = await generateJWT(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, role: "user" },
       c.env.JWT_SECRET
     );
 
@@ -383,7 +383,7 @@ export async function refreshToken(
 
     // 새 JWT 토큰 생성
     const newJwtToken = await generateJWT(
-      { userId: payload.userId, email: payload.email },
+      { userId: payload.userId, email: payload.email, role: payload.role || "user" },
       c.env.JWT_SECRET
     );
 

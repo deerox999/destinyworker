@@ -2,8 +2,7 @@
  GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"
  사용하려면, GEMINI API키 추가 필요함.
 */
-import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
-import { Context, MiddlewareHandler } from "hono";
+import { Context } from "hono";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   createEmbedding,

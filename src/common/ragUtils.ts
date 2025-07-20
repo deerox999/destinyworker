@@ -1,6 +1,4 @@
-import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 import { createPrismaClient } from "./prismaUtils";
-
 /**
  * D1에서 조회한 문서의 타입 정의
  */

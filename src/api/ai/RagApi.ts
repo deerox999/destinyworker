@@ -1,8 +1,6 @@
-import { D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 import { Context } from "hono";
 import { paginate } from "../../common/paginationUtils";
 import { createEmbedding, createEmbeddings } from "../../common/ragUtils";
-
 /**
  * RAG 문서에 대한 사주 프로젝트용 표준 메타데이터 스키마.
  * 일관된 메타데이터는 AI 답변의 품질과 데이터 필터링 기능에 큰 영향을 미칩니다.

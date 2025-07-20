@@ -1,5 +1,15 @@
-import { D1Database } from "@cloudflare/workers-types";
 import { Context } from "hono";
+
+// D1Database 타입 정의 (Cloudflare Workers Types가 없는 경우)
+interface D1Database {
+  prepare: (query: string) => D1PreparedStatement;
+}
+
+interface D1PreparedStatement {
+  bind: (...values: any[]) => D1PreparedStatement;
+  all: () => Promise<{ results: any[] }>;
+  first: <T>() => Promise<T | null>;
+}
 
 interface PaginateOptions {
   tableName: string;

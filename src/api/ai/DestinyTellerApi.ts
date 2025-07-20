@@ -1,5 +1,4 @@
-import { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
-import { Context, MiddlewareHandler } from "hono";
+import { Context } from "hono";
 import {
   createEmbedding,
   findSimilarVectors,

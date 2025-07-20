@@ -308,7 +308,9 @@ export const PostSchema = z.object({
   id: z.number().int().openapi({ example: 1 }),
   boardId: z.number().int().openapi({ example: 1 }),
   categoryId: z.number().int().openapi({ example: 1 }),
-  authorId: z.number().int().openapi({ example: 1 }),
+  authorId: z.number().int().nullable().openapi({ example: 1 }),
+  authorName: z.string().nullable().openapi({ example: "유람하는 방랑자" }),
+  isAnonymous: z.boolean().openapi({ example: false }),
   title: z.string().openapi({ example: "버그 제보합니다" }),
   content: z.string().openapi({ example: "<p>버그 내용입니다.</p>" }),
   viewCount: z.number().int().openapi({ example: 10 }),
@@ -318,12 +320,7 @@ export const PostSchema = z.object({
   isDeleted: z.boolean().openapi({ example: false }),
   createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
   updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-  author: UserInfoSchema,
-  board: z.object({
-    id: z.number().int().openapi({ example: 1 }),
-    name: z.string().openapi({ example: "bug-report" }),
-    displayName: z.string().openapi({ example: "버그 제보" }),
-  }).openapi({ type: 'object' }),
+  author: UserInfoSchema.nullable(),
   category: z.object({
     id: z.number().int().openapi({ example: 1 }),
     name: z.string().openapi({ example: "치명적 버그" }),
@@ -336,50 +333,59 @@ export const PostSchema = z.object({
 export const CommentSchema = z.object({
   id: z.number().int().openapi({ example: 1 }),
   postId: z.number().int().openapi({ example: 1 }),
-  authorId: z.number().int().openapi({ example: 1 }),
+  authorId: z.number().int().nullable().openapi({ example: 1 }),
+  authorName: z.string().nullable().openapi({ example: "유람하는 방랑자" }),
+  isAnonymous: z.boolean().openapi({ example: false }),
   parentId: z.number().int().nullable().openapi({ example: null }),
   content: z.string().openapi({ example: "좋은 게시글이네요!" }),
   likeCount: z.number().int().openapi({ example: 2 }),
   isDeleted: z.boolean().openapi({ example: false }),
   createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
   updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-  author: UserInfoSchema,
+  author: UserInfoSchema.nullable(),
   replies: z.array(z.object({
     id: z.number().int().openapi({ example: 2 }),
     postId: z.number().int().openapi({ example: 1 }),
-    authorId: z.number().int().openapi({ example: 2 }),
+    authorId: z.number().int().nullable().openapi({ example: 2 }),
+    authorName: z.string().nullable().openapi({ example: "유람하는 방랑자" }),
+    isAnonymous: z.boolean().openapi({ example: false }),
     parentId: z.number().int().openapi({ example: 1 }),
     content: z.string().openapi({ example: "동의합니다!" }),
     likeCount: z.number().int().openapi({ example: 1 }),
     isDeleted: z.boolean().openapi({ example: false }),
     createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
     updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-    author: UserInfoSchema,
+    author: UserInfoSchema.nullable(),
   })).openapi({ type: 'array' }),
 }).openapi({ type: 'object' });
 
 export const CreatePostSchema = z.object({
-  boardId: z.number().int().openapi({ example: 1 }),
-  categoryId: z.number().int().openapi({ example: 1 }),
   title: z.string().min(1).openapi({ example: "버그 제보합니다" }),
   content: z.string().min(1).openapi({ example: "<p>버그 내용입니다.</p>" }),
-  tags: z.array(z.string()).optional().openapi({ example: ["버그", "UI"] }),
+  categoryId: z.number().int().optional().openapi({ example: 1 }),
+  tagIds: z.array(z.number().int()).optional().openapi({ example: [1, 2] }),
+  authorName: z.string().optional().openapi({ example: "유람하는 방랑자" }),
+  password: z.string().optional().openapi({ example: "mypassword123" }),
 }).openapi({ type: 'object' });
 
 export const UpdatePostSchema = z.object({
   title: z.string().min(1).openapi({ example: "버그 제보합니다" }),
   content: z.string().min(1).openapi({ example: "<p>버그 내용입니다.</p>" }),
-  tags: z.array(z.string()).optional().openapi({ example: ["버그", "UI"] }),
+  categoryId: z.number().int().optional().openapi({ example: 1 }),
+  tagIds: z.array(z.number().int()).optional().openapi({ example: [1, 2] }),
+  password: z.string().optional().openapi({ example: "mypassword123" }),
 }).openapi({ type: 'object' });
 
 export const CreateCommentSchema = z.object({
-  postId: z.number().int().openapi({ example: 1 }),
-  parentId: z.number().int().nullable().optional().openapi({ example: null }),
   content: z.string().min(1).openapi({ example: "좋은 게시글이네요!" }),
+  parentId: z.number().int().nullable().optional().openapi({ example: null }),
+  authorName: z.string().optional().openapi({ example: "유람하는 방랑자" }),
+  password: z.string().optional().openapi({ example: "mypassword123" }),
 }).openapi({ type: 'object' });
 
 export const UpdateCommentSchema = z.object({
   content: z.string().min(1).openapi({ example: "좋은 게시글이네요!" }),
+  password: z.string().optional().openapi({ example: "mypassword123" }),
 }).openapi({ type: 'object' });
 
 export const PostQuerySchema = z.object({
@@ -388,10 +394,10 @@ export const PostQuerySchema = z.object({
     description: "게시판 ID",
     example: 1,
   }),
-  categoryId: z.coerce.number().int().positive().optional().openapi({
+  categoryId: z.string().optional().openapi({
     param: { name: "categoryId", in: "query" },
-    description: "카테고리 ID",
-    example: 1,
+    description: "카테고리 ID (숫자 또는 'all' - 모든 카테고리)",
+    example: "1",
   }),
   page: z.coerce.number().int().positive().default(1).optional().openapi({
     param: { name: "page", in: "query" },
@@ -403,10 +409,10 @@ export const PostQuerySchema = z.object({
     description: "페이지당 항목 수",
     example: 20,
   }),
-  sort: z.enum(["latest", "oldest", "popular", "views"]).default("latest").optional().openapi({
+  sort: z.string().optional().openapi({
     param: { name: "sort", in: "query" },
-    description: "정렬 기준",
-    example: "latest",
+    description: "정렬 기준 (newest/latest, oldest, popular, views)",
+    example: "newest",
   }),
   search: z.string().optional().openapi({
     param: { name: "search", in: "query" },

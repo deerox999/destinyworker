@@ -273,7 +273,9 @@ model Post {
   id          Int      @id @default(autoincrement()) /// 게시글 고유 ID
   boardId     Int      @map("board_id") /// 소속 게시판 ID
   categoryId  Int      @map("category_id") /// 소속 카테고리 ID
-  authorId    Int      @map("author_id") /// 작성자 ID
+  authorId    Int?     @map("author_id") /// 작성자 ID (로그인 사용자의 경우)
+  authorName  String?  @map("author_name") /// 작성자 이름 (익명 사용자의 경우)
+  password    String?  @map("password") /// 비밀번호 (익명 사용자의 경우, 해시된 값)
   title       String   /// 게시글 제목
   content     String   /// 게시글 내용 (HTML content from QuillEditor)
   viewCount   Int      @default(0) @map("view_count") /// 조회수
@@ -287,7 +289,7 @@ model Post {
   // Relations
   board       Board    @relation(fields: [boardId], references: [id], onDelete: Cascade) /// 관계: 게시글은 하나의 게시판에 속함
   category    BoardCategory @relation(fields: [categoryId], references: [id]) /// 관계: 게시글은 하나의 카테고리에 속함
-  author      User     @relation(fields: [authorId], references: [id]) /// 관계: 게시글은 하나의 사용자가 작성함
+  author      User?    @relation(fields: [authorId], references: [id]) /// 관계: 게시글은 하나의 사용자가 작성함 (선택적)
   comments    Comment[] /// 관계: 게시글에 달린 댓글들
   postLikes   PostLike[] /// 관계: 게시글에 대한 추천들
   postTags    PostTag[] /// 관계: 게시글에 연결된 태그들
@@ -298,7 +300,9 @@ model Post {
 model Comment {
   id          Int      @id @default(autoincrement()) /// 댓글 고유 ID
   postId      Int      @map("post_id") /// 소속 게시글 ID
-  authorId    Int      @map("author_id") /// 작성자 ID
+  authorId    Int?     @map("author_id") /// 작성자 ID (로그인 사용자의 경우)
+  authorName  String?  @map("author_name") /// 작성자 이름 (익명 사용자의 경우)
+  password    String?  @map("password") /// 비밀번호 (익명 사용자의 경우, 해시된 값)
   parentId    Int?     @map("parent_id") /// 부모 댓글 ID (대댓글용)
   content     String   /// 댓글 내용
   likeCount   Int      @default(0) @map("like_count") /// 추천수
@@ -308,7 +312,7 @@ model Comment {
   
   // Relations
   post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade) /// 관계: 댓글은 하나의 게시글에 속함
-  author      User     @relation(fields: [authorId], references: [id]) /// 관계: 댓글은 하나의 사용자가 작성함
+  author      User?    @relation(fields: [authorId], references: [id]) /// 관계: 댓글은 하나의 사용자가 작성함 (선택적)
   parent      Comment? @relation("CommentReplies", fields: [parentId], references: [id]) /// 관계: 부모 댓글 (대댓글의 경우)
   replies     Comment[] @relation("CommentReplies") /// 관계: 자식 댓글들 (대댓글들)
   commentLikes CommentLike[] /// 관계: 댓글에 대한 추천들

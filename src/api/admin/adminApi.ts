@@ -1,5 +1,4 @@
 import { Context } from "hono";
-import { D1Database } from "@cloudflare/workers-types";
 import { paginate } from "../../common/paginationUtils";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
 
@@ -574,7 +573,6 @@ export async function getAiUsageLogsForUser(
     return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
   }
 
-  const db: D1Database = c.env.DB;
   const startDate = c.req.query("startDate");
   const endDate = c.req.query("endDate");
 
