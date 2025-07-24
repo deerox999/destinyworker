@@ -276,6 +276,7 @@ model Post {
   categoryId  Int      @map("category_id") /// 소속 카테고리 ID
   authorId    Int?     @map("author_id") /// 작성자 ID (로그인 사용자의 경우)
   authorName  String?  @map("author_name") /// 작성자 이름 (익명 사용자의 경우)
+  authorImage String?  @map("author_image") /// 작성자 이미지 URL (로그인 사용자의 경우)
   password    String?  @map("password") /// 비밀번호 (익명 사용자의 경우, 해시된 값)
   title       String   /// 게시글 제목
   content     String   /// 게시글 내용 (HTML content from QuillEditor)

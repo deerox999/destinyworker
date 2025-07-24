@@ -84,6 +84,7 @@ export const userCommunityApi = {
           id: post.id,
           title: post.title,
           authorName: post.authorName || '익명',
+          authorImage: post.authorImage,
           isAnonymous: !post.authorId,
           tags: post.postTags.map(pt => pt.tag.name),
           viewCount: post.viewCount,
@@ -120,6 +121,7 @@ export const userCommunityApi = {
             boardId: post.boardId,
             title: post.title,
             authorName: post.authorName || '익명',
+            authorImage: post.authorImage,
             isAnonymous: !post.authorId,
             tags: post.postTags.map(pt => pt.tag.name),
             viewCount: post.viewCount,
@@ -132,6 +134,7 @@ export const userCommunityApi = {
             boardId: post.boardId,
             title: post.title,
             authorName: post.authorName || '익명',
+            authorImage: post.authorImage,
             isAnonymous: !post.authorId,
             tags: post.postTags.map(pt => pt.tag.name),
             viewCount: post.viewCount,
@@ -147,13 +150,19 @@ export const userCommunityApi = {
     }
   },
 
-  // 게시판 목록 조회
+  // 게시판 목록 조회 (카테고리 포함)
   async getBoards(c: Context) {
     try {
       const prisma = createPrismaClient(c.env.DB);
       
       const boards = await prisma.board.findMany({
         where: { isActive: true },
+        include: {
+          categories: {
+            where: { isActive: true },
+            orderBy: { sortOrder: 'asc' }
+          }
+        },
         orderBy: [
           { sortOrder: 'asc' },
           { createdAt: 'asc' }
@@ -164,7 +173,22 @@ export const userCommunityApi = {
 
       return c.json({
         success: true,
-        data: boards
+        data: boards.map(board => ({
+          id: board.id,
+          name: board.name,
+          displayName: board.displayName,
+          description: board.description,
+          sortOrder: board.sortOrder,
+          isActive: board.isActive,
+          createdAt: board.createdAt,
+          updatedAt: board.updatedAt,
+          categories: board.categories.map(category => ({
+            id: category.id,
+            name: category.name,
+            sortOrder: category.sortOrder,
+            isActive: category.isActive
+          }))
+        }))
       });
     } catch (error) {
       console.error('게시판 목록 조회 오류:', error);
@@ -293,6 +317,7 @@ export const userCommunityApi = {
             id: post.id,
             title: post.title,
             authorName: post.authorName || '익명',
+            authorImage: post.authorImage,
             isAnonymous: !post.authorId,
             tags: post.postTags.map(pt => pt.tag.name),
             viewCount: post.viewCount,
@@ -410,6 +435,7 @@ export const userCommunityApi = {
             title: post.title,
             content: post.content,
             authorName: post.authorName || '익명',
+            authorImage: post.authorImage,
             isAnonymous: !post.authorId,
             tags: post.postTags.map(pt => pt.tag.name),
             viewCount: post.viewCount,
@@ -502,6 +528,7 @@ export const userCommunityApi = {
           title: post.title,
           content: post.content,
           authorName: post.authorName || '익명',
+          authorImage: post.authorImage,
           isAnonymous: !post.authorId,
           tags: post.postTags.map(pt => pt.tag.name),
           viewCount: post.viewCount + 1, // 증가된 조회수 반영
@@ -568,6 +595,7 @@ export const userCommunityApi = {
       let user = null;
       let authorId = null;
       let authorName = '익명';
+      let authorImage = null;
 
       if (!isAnonymous) {
         user = await getUserFromToken(c);
@@ -580,9 +608,10 @@ export const userCommunityApi = {
         // 사용자 정보 조회
         const userInfo = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { name: true, userName: true }
+          select: { name: true, userName: true, picture: true }
         });
         authorName = userInfo?.userName || userInfo?.name || '사용자';
+        authorImage = userInfo?.picture;
       }
 
       // 게시글 생성
@@ -594,6 +623,7 @@ export const userCommunityApi = {
           categoryId: categoryId || 1, // 기본 카테고리
           authorId,
           authorName,
+          authorImage: isAnonymous ? null : authorImage, // 로그인 사용자의 이미지 URL
           password: isAnonymous ? password : null,
           viewCount: 0,
           likeCount: 0,
@@ -635,6 +665,7 @@ export const userCommunityApi = {
           title: post.title,
           content: post.content,
           authorName: post.authorName,
+          authorImage: post.authorImage,
           isAnonymous: !post.authorId,
           tags,
           createdAt: post.createdAt
@@ -1053,6 +1084,7 @@ export const userCommunityApi = {
       let user = null;
       let authorId = null;
       let authorName = '익명';
+      let commentAuthorImage = null;
 
       if (!isAnonymous) {
         user = await getUserFromToken(c);
@@ -1065,9 +1097,10 @@ export const userCommunityApi = {
         // 사용자 정보 조회
         const userInfo = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { name: true, userName: true }
+          select: { name: true, userName: true, picture: true }
         });
         authorName = userInfo?.userName || userInfo?.name || '사용자';
+        commentAuthorImage = userInfo?.picture;
       }
 
       const comment = await prisma.comment.create({
@@ -1077,7 +1110,7 @@ export const userCommunityApi = {
           parentId: parentId ? parseInt(parentId) : null,
           authorId,
           authorName,
-          authorImage: isAnonymous ? null : authorImage, // 로그인 사용자의 이미지 URL
+          authorImage: isAnonymous ? null : commentAuthorImage, // 로그인 사용자의 이미지 URL
           password: isAnonymous ? password : null,
           likeCount: 0,
           isDeleted: false
