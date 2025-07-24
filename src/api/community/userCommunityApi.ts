@@ -1,7 +1,7 @@
 import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
-import { deleteImagesFromR2 } from '../user/r2Api';
+import { deleteImagesFromR2, deleteR2Object, extractR2ImageUrls } from '../user/r2Api';
 
 export const userCommunityApi = {
   // 커뮤니티 전체 데이터 조회
@@ -33,7 +33,10 @@ export const userCommunityApi = {
             }
           }
         },
-        orderBy: { createdAt: 'asc' }
+        orderBy: [
+          { sortOrder: 'asc' },
+          { createdAt: 'asc' }
+        ]
       });
 
       // 최근 게시글 (전체)
@@ -100,6 +103,7 @@ export const userCommunityApi = {
             name: board.name,
             displayName: board.displayName,
             description: board.description,
+            sortOrder: board.sortOrder,
             isActive: board.isActive,
             createdAt: board.createdAt,
             updatedAt: board.updatedAt,
@@ -150,7 +154,10 @@ export const userCommunityApi = {
       
       const boards = await prisma.board.findMany({
         where: { isActive: true },
-        orderBy: { createdAt: 'asc' }
+        orderBy: [
+          { sortOrder: 'asc' },
+          { createdAt: 'asc' }
+        ]
       });
 
       await prisma.$disconnect();
@@ -271,6 +278,7 @@ export const userCommunityApi = {
             name: board.name,
             displayName: board.displayName,
             description: board.description,
+            sortOrder: board.sortOrder,
             isActive: board.isActive,
             createdAt: board.createdAt,
             updatedAt: board.updatedAt
@@ -412,7 +420,8 @@ export const userCommunityApi = {
             board: {
               id: post.board.id,
               name: post.board.name,
-              displayName: post.board.displayName
+              displayName: post.board.displayName,
+              sortOrder: post.board.sortOrder
             },
             category: post.category ? {
               id: post.category.id,
@@ -440,6 +449,9 @@ export const userCommunityApi = {
 
       const prisma = createPrismaClient(c.env.DB);
 
+      // 현재 사용자 정보 확인 (로그인 여부 확인, 필수 아님)
+      const currentUser = await getUserFromToken(c);
+
       const post = await prisma.post.findUnique({
         where: { id: parseInt(id), isDeleted: false },
         include: {
@@ -459,6 +471,20 @@ export const userCommunityApi = {
       if (!post) {
         await prisma.$disconnect();
         return c.json({ success: false, message: '게시글을 찾을 수 없습니다.' }, 404);
+      }
+
+      // 현재 사용자가 로그인한 경우 추천 여부 확인
+      let isLiked = false;
+      if (currentUser) {
+        const existingLike = await prisma.postLike.findUnique({
+          where: {
+            postId_userId: {
+              postId: parseInt(id),
+              userId: currentUser.id
+            }
+          }
+        });
+        isLiked = !!existingLike;
       }
 
       // 조회수 증가
@@ -481,12 +507,14 @@ export const userCommunityApi = {
           viewCount: post.viewCount + 1, // 증가된 조회수 반영
           likeCount: post.likeCount,
           commentCount: post._count.comments,
+          isLiked: isLiked, // 현재 사용자의 추천 여부
           createdAt: post.createdAt,
           updatedAt: post.updatedAt,
           board: {
             id: post.board.id,
             name: post.board.name,
-            displayName: post.board.displayName
+            displayName: post.board.displayName,
+            sortOrder: post.board.sortOrder
           },
           category: post.category ? {
             id: post.category.id,
@@ -668,11 +696,35 @@ export const userCommunityApi = {
         }
       }
 
-      // 기존 게시글의 이미지들을 R2에서 삭제 (비동기)
-      if (post.content.includes(c.env.R2_PUBLIC_URL)) {
-        deleteImagesFromR2(post.content, c.env).catch(error => {
-          console.error('기존 R2 이미지 삭제 실패:', error);
-        });
+      // 기존 이미지와 새 이미지 비교하여 삭제된 이미지만 R2에서 삭제
+      if (content && post.content !== content) {
+        try {
+          // 기존 이미지 URL 추출
+          const oldImages = extractR2ImageUrls(post.content, c.env.R2_PUBLIC_URL);
+          
+          // 새 이미지 URL 추출
+          const newImages = extractR2ImageUrls(content, c.env.R2_PUBLIC_URL);
+          
+          // 삭제된 이미지 찾기 (기존에 있지만 새 내용에는 없는 이미지)
+          const deletedImages = oldImages.filter(oldImg => !newImages.includes(oldImg));
+          
+          if (deletedImages.length > 0) {
+            console.log(`게시글 수정 시 삭제된 이미지 ${deletedImages.length}개 발견`);
+            
+            // 삭제된 이미지들을 R2에서 삭제
+            for (const imageUrl of deletedImages) {
+              try {
+                const filePath = imageUrl.replace(c.env.R2_PUBLIC_URL + '/', '');
+                await deleteR2Object(filePath, c.env);
+                console.log(`삭제된 이미지 R2에서 제거 완료: ${filePath}`);
+              } catch (error) {
+                console.error(`삭제된 이미지 R2 제거 실패: ${imageUrl}`, error);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('게시글 수정 시 이미지 비교 중 오류:', error);
+        }
       }
 
       // 게시글 수정
@@ -768,10 +820,15 @@ export const userCommunityApi = {
         }
       }
 
-      // 게시글에 포함된 이미지 URL들을 추출하여 R2에서 삭제 (비동기)
-      deleteImagesFromR2(post.content, c.env).catch(error => {
-        console.error('R2 이미지 삭제 실패:', error);
-      });
+      // 게시글에 포함된 이미지 URL들을 추출하여 R2에서 삭제
+      if (post.content && post.content.includes(c.env.R2_PUBLIC_URL)) {
+        try {
+          await deleteImagesFromR2(post.content, c.env);
+          console.log('게시글 삭제 시 R2 이미지 삭제 완료');
+        } catch (error) {
+          console.error('게시글 삭제 시 R2 이미지 삭제 실패:', error);
+        }
+      }
 
       // 물리적 삭제가 아닌 비활성화
       await prisma.post.update({
@@ -876,6 +933,9 @@ export const userCommunityApi = {
 
       const prisma = createPrismaClient(c.env.DB);
 
+      // 현재 사용자 정보 확인 (로그인 여부 확인, 필수 아님)
+      const currentUser = await getUserFromToken(c);
+
       const post = await prisma.post.findUnique({
         where: { id: parseInt(id), isDeleted: false }
       });
@@ -907,6 +967,20 @@ export const userCommunityApi = {
         })
       ]);
 
+      // 현재 사용자가 로그인한 경우 댓글 추천 정보 조회
+      let userCommentLikes: Set<number> = new Set();
+      if (currentUser) {
+        const commentIds = comments.map(comment => comment.id);
+        const likes = await prisma.commentLike.findMany({
+          where: {
+            userId: currentUser.id,
+            commentId: { in: commentIds }
+          },
+          select: { commentId: true }
+        });
+        userCommentLikes = new Set(likes.map(like => like.commentId));
+      }
+
       const totalPages = Math.ceil(total / take);
 
       await prisma.$disconnect();
@@ -921,6 +995,7 @@ export const userCommunityApi = {
             authorImage: comment.authorImage,
             isAnonymous: !comment.authorId,
             likeCount: comment._count.commentLikes,
+            isLiked: userCommentLikes.has(comment.id), // 현재 사용자의 추천 여부
             createdAt: comment.createdAt,
             parentId: comment.parentId
           })),
@@ -1070,11 +1145,35 @@ export const userCommunityApi = {
         }
       }
 
-      // 기존 댓글의 이미지들을 R2에서 삭제 (비동기)
-      if (comment.content.includes(c.env.R2_PUBLIC_URL)) {
-        deleteImagesFromR2(comment.content, c.env).catch(error => {
-          console.error('기존 R2 이미지 삭제 실패:', error);
-        });
+      // 기존 이미지와 새 이미지 비교하여 삭제된 이미지만 R2에서 삭제
+      if (content && comment.content !== content) {
+        try {
+          // 기존 이미지 URL 추출
+          const oldImages = extractR2ImageUrls(comment.content, c.env.R2_PUBLIC_URL);
+          
+          // 새 이미지 URL 추출
+          const newImages = extractR2ImageUrls(content, c.env.R2_PUBLIC_URL);
+          
+          // 삭제된 이미지 찾기 (기존에 있지만 새 내용에는 없는 이미지)
+          const deletedImages = oldImages.filter(oldImg => !newImages.includes(oldImg));
+          
+          if (deletedImages.length > 0) {
+            console.log(`댓글 수정 시 삭제된 이미지 ${deletedImages.length}개 발견`);
+            
+            // 삭제된 이미지들을 R2에서 삭제
+            for (const imageUrl of deletedImages) {
+              try {
+                const filePath = imageUrl.replace(c.env.R2_PUBLIC_URL + '/', '');
+                await deleteR2Object(filePath, c.env);
+                console.log(`삭제된 이미지 R2에서 제거 완료: ${filePath}`);
+              } catch (error) {
+                console.error(`삭제된 이미지 R2 제거 실패: ${imageUrl}`, error);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('댓글 수정 시 이미지 비교 중 오류:', error);
+        }
       }
 
       const updatedComment = await prisma.comment.update({
@@ -1137,10 +1236,15 @@ export const userCommunityApi = {
         }
       }
 
-      // 댓글에 포함된 이미지 URL들을 추출하여 R2에서 삭제 (비동기)
-      deleteImagesFromR2(comment.content, c.env).catch(error => {
-        console.error('R2 이미지 삭제 실패:', error);
-      });
+      // 댓글에 포함된 이미지 URL들을 추출하여 R2에서 삭제
+      if (comment.content && comment.content.includes(c.env.R2_PUBLIC_URL)) {
+        try {
+          await deleteImagesFromR2(comment.content, c.env);
+          console.log('댓글 삭제 시 R2 이미지 삭제 완료');
+        } catch (error) {
+          console.error('댓글 삭제 시 R2 이미지 삭제 실패:', error);
+        }
+      }
 
       // 물리적 삭제가 아닌 비활성화
       await prisma.comment.update({
@@ -1233,5 +1337,187 @@ export const userCommunityApi = {
     }
   },
 
+  // 일반 사용자용 샘플 데이터 생성 (익명 접근 가능)
+  async createSampleData(c: Context) {
+    try {
+      const prisma = createPrismaClient(c.env.DB);
 
+      // 샘플 게시판들 생성
+      const sampleBoards = [
+        {
+          name: 'free-discussion',
+          displayName: '자유 토론',
+          description: '자유롭게 이야기를 나누는 공간입니다.',
+          sortOrder: 0,
+          isActive: true
+        },
+        {
+          name: 'bug-report',
+          displayName: '버그 제보',
+          description: '버그를 발견하셨다면 여기에 제보해주세요.',
+          sortOrder: 1,
+          isActive: true
+        },
+        {
+          name: 'feature-request',
+          displayName: '기능 요청',
+          description: '새로운 기능을 제안하는 공간입니다.',
+          sortOrder: 2,
+          isActive: true
+        },
+        {
+          name: 'announcement',
+          displayName: '공지사항',
+          description: '중요한 공지사항을 확인하세요.',
+          sortOrder: 3,
+          isActive: true
+        }
+      ];
+
+      const createdBoards = [];
+      for (const boardData of sampleBoards) {
+        // 기존 게시판이 있는지 확인
+        const existingBoard = await prisma.board.findUnique({
+          where: { name: boardData.name }
+        });
+
+        if (!existingBoard) {
+          const board = await prisma.board.create({
+            data: boardData
+          });
+          createdBoards.push(board);
+        } else {
+          createdBoards.push(existingBoard);
+        }
+      }
+
+      // 샘플 카테고리들 생성
+      const sampleCategories = [
+        // 자유 토론 카테고리
+        {
+          boardId: createdBoards[0].id,
+          name: '일상',
+          sortOrder: 0,
+          isActive: true
+        },
+        {
+          boardId: createdBoards[0].id,
+          name: '정보 공유',
+          sortOrder: 1,
+          isActive: true
+        },
+        {
+          boardId: createdBoards[0].id,
+          name: '질문',
+          sortOrder: 2,
+          isActive: true
+        },
+        // 버그 제보 카테고리
+        {
+          boardId: createdBoards[1].id,
+          name: '치명적 버그',
+          sortOrder: 0,
+          isActive: true
+        },
+        {
+          boardId: createdBoards[1].id,
+          name: '사소한 버그',
+          sortOrder: 1,
+          isActive: true
+        },
+        {
+          boardId: createdBoards[1].id,
+          name: 'UI/UX 문제',
+          sortOrder: 2,
+          isActive: true
+        },
+        // 기능 요청 카테고리
+        {
+          boardId: createdBoards[2].id,
+          name: '새로운 기능',
+          sortOrder: 0,
+          isActive: true
+        },
+        {
+          boardId: createdBoards[2].id,
+          name: '개선 사항',
+          sortOrder: 1,
+          isActive: true
+        },
+        {
+          boardId: createdBoards[2].id,
+          name: '사용자 경험',
+          sortOrder: 2,
+          isActive: true
+        },
+        // 공지사항 카테고리
+        {
+          boardId: createdBoards[3].id,
+          name: '시스템 공지',
+          sortOrder: 0,
+          isActive: true
+        },
+        {
+          boardId: createdBoards[3].id,
+          name: '업데이트',
+          sortOrder: 1,
+          isActive: true
+        },
+        {
+          boardId: createdBoards[3].id,
+          name: '이벤트',
+          sortOrder: 2,
+          isActive: true
+        }
+      ];
+
+      const createdCategories = [];
+      for (const categoryData of sampleCategories) {
+        // 기존 카테고리가 있는지 확인
+        const existingCategory = await prisma.boardCategory.findFirst({
+          where: {
+            boardId: categoryData.boardId,
+            name: categoryData.name
+          }
+        });
+
+        if (!existingCategory) {
+          const category = await prisma.boardCategory.create({
+            data: categoryData
+          });
+          createdCategories.push(category);
+        } else {
+          createdCategories.push(existingCategory);
+        }
+      }
+
+      await prisma.$disconnect();
+
+      return c.json({
+        success: true,
+        data: {
+          message: '샘플 데이터가 생성되었습니다.',
+          boards: createdBoards.length,
+          categories: createdCategories.length,
+          details: {
+            boards: createdBoards.map(board => ({
+              id: board.id,
+              name: board.name,
+              displayName: board.displayName,
+              sortOrder: board.sortOrder
+            })),
+            categories: createdCategories.map(category => ({
+              id: category.id,
+              name: category.name,
+              boardId: category.boardId,
+              sortOrder: category.sortOrder
+            }))
+          }
+        }
+      }, 201);
+    } catch (error) {
+      console.error('샘플 데이터 생성 오류:', error);
+      return c.json({ success: false, message: '서버 오류가 발생했습니다.' }, 500);
+    }
+  },
 }; 

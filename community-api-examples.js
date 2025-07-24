@@ -269,6 +269,7 @@ async function getPost() {
   const response = await fetch('http://localhost:9393/api/community/user/posts/1');
   const result = await response.json();
   console.log('게시글 상세:', result);
+  // 응답에 isLiked 필드가 포함됩니다 (현재 사용자가 추천했는지 여부)
 }
 
 // 5. 댓글 목록 조회
@@ -276,6 +277,7 @@ async function getComments() {
   const response = await fetch('http://localhost:9393/api/community/user/posts/1/comments?page=1&limit=20');
   const result = await response.json();
   console.log('댓글 목록:', result);
+  // 각 댓글에 isLiked 필드가 포함됩니다 (현재 사용자가 추천했는지 여부)
 }
 
 // ===== 로그인 사용자 전용 API =====

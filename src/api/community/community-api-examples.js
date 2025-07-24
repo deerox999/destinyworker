@@ -138,6 +138,7 @@ async function getPost(postId) {
   //     viewCount: 10,
   //     likeCount: 5,
   //     commentCount: 3,
+  //     isLiked: false, // 현재 사용자가 추천했는지 여부
   //     board: { 게시판 정보 },
   //     category: { 카테고리 정보 }
   //   }
@@ -372,6 +373,7 @@ async function getComments(postId, options = {}) {
   //         authorName: "댓글 작성자",
   //         isAnonymous: false,
   //         likeCount: 2,
+  //         isLiked: false, // 현재 사용자가 추천했는지 여부
   //         createdAt: "2023-01-01T00:00:00.000Z",
   //         parentId: null  // 대댓글인 경우 부모 댓글 ID
   //       }

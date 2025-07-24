@@ -8,6 +8,7 @@ interface User {
   email: string;
   name: string;
   picture?: string;
+  role: string;
   created_at: string;
   updated_at: string;
 }
@@ -215,7 +216,7 @@ export async function googleLogin(
 
     // JWT 토큰 생성
     const jwtToken = await generateJWT(
-      { userId: user.id, email: user.email, role: "user" },
+      { userId: user.id, email: user.email, role: user.role },
       c.env.JWT_SECRET
     );
 
@@ -331,7 +332,7 @@ export async function getUserInfo(
 
     // 사용자 정보 조회
     const userStmt = c.env.DB.prepare(
-      "SELECT id, email, name, picture, created_at FROM users WHERE id = ?"
+      "SELECT id, email, name, picture, role, created_at FROM users WHERE id = ?"
     );
     const user = await userStmt.bind(payload.userId).first();
 
@@ -345,6 +346,7 @@ export async function getUserInfo(
         email: user.email,
         name: user.name,
         picture: user.picture,
+        role: user.role,
         created_at: user.created_at,
       },
     });

@@ -246,6 +246,7 @@ model Board {
   name        String   @unique /// 게시판 식별자 ('bug-report', 'free-discussion')
   displayName String   /// 게시판 표시 이름 ('버그 제보', '자유 토론')
   description String?  /// 게시판 설명
+  sortOrder   Int      @default(0) @map("sort_order") /// 정렬 순서
   isActive    Boolean  @default(true) /// 게시판 활성화 여부
   createdAt   DateTime @default(now()) @map("created_at") /// 생성 시간
   updatedAt   DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간

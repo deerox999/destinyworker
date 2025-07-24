@@ -46,16 +46,47 @@ export async function deleteR2Object(objectKey: string, env: any): Promise<boole
   }
 }
 
+// R2 이미지 URL 추출 함수
+export function extractR2ImageUrls(content: string, r2PublicUrl: string): string[] {
+  if (!content || typeof content !== 'string') {
+    return [];
+  }
+
+  // HTML img 태그에서 src 속성 추출
+  const imgSrcRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  const imgMatches = content.match(imgSrcRegex) || [];
+  
+  // src 속성 값만 추출
+  const imgUrls: string[] = [];
+  imgMatches.forEach(match => {
+    const srcMatch = match.match(/src=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1]) {
+      imgUrls.push(srcMatch[1]);
+    }
+  });
+
+  // R2 URL만 필터링
+  return imgUrls.filter(url => url.startsWith(r2PublicUrl));
+}
+
 // R2에서 이미지를 삭제하는 비동기 함수
 export async function deleteImagesFromR2(content: string, env: any): Promise<void> {
   try {
-    // R2 URL 패턴을 찾아서 이미지 파일들을 삭제
-    const r2UrlRegex = new RegExp(`${env.R2_PUBLIC_URL}/post-images/[^"\\s]+`, 'g');
-    const matches = content.match(r2UrlRegex);
-    
-    if (!matches || matches.length === 0) {
+    if (!content || typeof content !== 'string') {
+      console.log('삭제할 이미지가 없습니다: content가 비어있거나 문자열이 아님');
       return;
     }
+
+    // 정확한 이미지 URL 추출
+    const matches = extractR2ImageUrls(content, env.R2_PUBLIC_URL);
+    
+    if (!matches || matches.length === 0) {
+      console.log('삭제할 R2 이미지 URL을 찾을 수 없습니다');
+      return;
+    }
+
+    console.log(`삭제할 이미지 URL 개수: ${matches.length}`);
+    console.log('삭제할 이미지 URL들:', matches);
 
     const S3 = createR2Client(env);
     if (!S3) {
@@ -68,21 +99,37 @@ export async function deleteImagesFromR2(content: string, env: any): Promise<voi
         // URL에서 파일 경로 추출
         const filePath = url.replace(env.R2_PUBLIC_URL + '/', '');
         
+        console.log(`R2 이미지 삭제 시도: ${filePath}`);
+        
         await S3.send(new DeleteObjectCommand({
           Bucket: env.R2_BUCKET_NAME,
           Key: filePath,
         }));
         
         console.log(`R2 이미지 삭제 성공: ${filePath}`);
+        return { success: true, path: filePath };
       } catch (error) {
         console.error(`R2 이미지 삭제 실패: ${url}`, error);
+        return { success: false, path: url, error };
       }
     });
 
     // 모든 삭제 작업을 병렬로 실행
-    await Promise.all(deletePromises);
+    const results = await Promise.all(deletePromises);
+    
+    // 결과 요약
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    
+    console.log(`R2 이미지 삭제 완료: 성공 ${successCount}개, 실패 ${failCount}개`);
+    
+    if (failCount > 0) {
+      const failedPaths = results.filter(r => !r.success).map(r => r.path);
+      console.error('삭제 실패한 이미지들:', failedPaths);
+    }
   } catch (error) {
     console.error('R2 이미지 삭제 중 오류:', error);
+    throw error; // 상위에서 처리할 수 있도록 에러를 다시 던짐
   }
 }
 
