@@ -221,7 +221,8 @@ export async function googleLogin(
     );
 
     // 세션 저장
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const limitDate = 7 * 24 * 60 * 60 * 1000
+    const expiresAt = new Date(Date.now() + limitDate);
     await saveSession(c.env.DB, user.id, jwtToken, expiresAt);
 
     // 만료된 세션 정리
