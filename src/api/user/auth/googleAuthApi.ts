@@ -334,7 +334,7 @@ export async function getUserInfo(
 
     // 사용자 정보 조회
     const userStmt = c.env.DB.prepare(
-      "SELECT id, email, name, picture, role, point, created_at FROM users WHERE id = ?"
+      "SELECT id, email, name, userName, picture, role, point, created_at FROM users WHERE id = ?"
     );
     const user = await userStmt.bind(payload.userId).first();
 
@@ -347,6 +347,7 @@ export async function getUserInfo(
         id: user.id,
         email: user.email,
         name: user.name,
+        userName: user.userName,
         picture: user.picture,
         role: user.role,
         point: user.point,
