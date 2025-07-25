@@ -9,6 +9,7 @@ interface User {
   name: string;
   picture?: string;
   role: string;
+  point: number;
   created_at: string;
   updated_at: string;
 }
@@ -109,10 +110,10 @@ async function findOrCreateUser(
 
       return updatedUser as User;
     } else {
-      // 새 사용자 생성
+      // 새 사용자 생성 (기본 포인트 3000 지급)
       stmt = db.prepare(`
-        INSERT INTO users (google_id, email, name, picture) 
-        VALUES (?, ?, ?, ?)
+        INSERT INTO users (google_id, email, name, picture, point) 
+        VALUES (?, ?, ?, ?, 3000)
       `);
       const insertResult = await stmt
         .bind(
@@ -333,7 +334,7 @@ export async function getUserInfo(
 
     // 사용자 정보 조회
     const userStmt = c.env.DB.prepare(
-      "SELECT id, email, name, picture, role, created_at FROM users WHERE id = ?"
+      "SELECT id, email, name, picture, role, point, created_at FROM users WHERE id = ?"
     );
     const user = await userStmt.bind(payload.userId).first();
 
@@ -348,6 +349,7 @@ export async function getUserInfo(
         name: user.name,
         picture: user.picture,
         role: user.role,
+        point: user.point,
         created_at: user.created_at,
       },
     });

@@ -1,6 +1,6 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { FortuneTelling } from "./DestinyTellerApi";
-import { SajuAnalysisWithGemini, TestGeminiApi } from "./geminiApi";
+import { SajuAnalysisWithGemini } from "./geminiApi";
 import {
   RagAddDocuments,
   RagDelete,
@@ -28,41 +28,17 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   // --- 스키마 정의 ---
 
-  // 테스트용 간단한 Gemini API 스키마
-  const TestGeminiRequestSchema = z
-    .object({
-      systemPrompt: z
-        .string()
-        .optional()
-        .openapi({
-          description: "AI 역할 정의 시스템 프롬프트",
-          example: "당신은 친절한 AI 어시스턴트입니다.",
-        }),
-      userPrompt: z
-        .string()
-        .openapi({
-          description: "사용자 질문",
-          example: "안녕하세요! 간단한 테스트입니다.",
-        }),
-    })
-    .openapi({ type: "object" });
-
   // Gemini & Fortune Telling 스키마
   const AiBasicRequestSchema = z
     .object({
-      userPrompt: z
-        .string()
-        .openapi({
-          description: "사용자 질문",
-          example: "제 사주는 어떤가요?",
-        }),
-      systemPrompt: z
-        .string()
-        .optional()
-        .openapi({
-          description: "AI 역할 정의 시스템 프롬프트",
-          example: "당신은 사주 전문가입니다.",
-        }),
+      userPrompt: z.string().openapi({
+        description: "사용자 질문",
+        example: "제 사주는 어떤가요?",
+      }),
+      systemPrompt: z.string().optional().openapi({
+        description: "AI 역할 정의 시스템 프롬프트",
+        example: "당신은 사주 전문가입니다.",
+      }),
       stream: z
         .boolean()
         .default(false)
@@ -71,34 +47,56 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
     })
     .openapi({ type: "object" });
 
-  const SajuDataSchema = z
-    .any()
-    .openapi({
-      description: "계산된 상세 사주 정보 (JSON)",
-      example: {
-        birthDate: "1990-03-15",
-        calculatedData: { saju: "경진", elements: ["금", "토"] },
-      },
-    });
+  const SajuDataSchema = z.any().openapi({
+    description: "계산된 상세 사주 정보 (JSON)",
+    example: {
+      birthDate: "1990-03-15",
+      calculatedData: { saju: "경진", elements: ["금", "토"] },
+    },
+  });
+
+  // Content 타입 정의 (Gemini API용)
+  const ContentSchema = z.object({
+    role: z.enum(["user", "model", "function", "tool"]),
+    parts: z.array(z.object({
+      text: z.string().optional(),
+      inlineData: z.object({
+        mimeType: z.string(),
+        data: z.string()
+      }).optional(),
+      fileData: z.object({
+        mimeType: z.string(),
+        fileUri: z.string()
+      }).optional(),
+      functionCall: z.object({
+        name: z.string(),
+        args: z.record(z.string(), z.any())
+      }).optional(),
+      functionResponse: z.object({
+        name: z.string(),
+        response: z.record(z.string(), z.any())
+      }).optional()
+    }))
+  });
 
   const SajuAnalysisWithGeminiSchema = AiBasicRequestSchema.extend({
-    model: z
-      .string()
-      .default("gemini-2.5-flash")
-      .optional()
-      .openapi({
-        description: "사용할 Gemini 모델",
-        example: "gemini-2.5-flash",
-      }),
-    conversationId: z
-      .string()
-      .uuid()
-      .nullable()
-      .optional()
-      .openapi({
-        description: "대화 ID (기존 대화 이어가기용)",
-        example: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-      }),
+    model: z.string().default("gemini-2.5-pro").optional().openapi({
+      description: "사용할 Gemini 모델",
+      example: "gemini-2.5-pro",
+    }),
+    conversationHistory: z.array(ContentSchema).optional().openapi({
+      description: "프론트에서 관리하는 전체 대화 기록",
+      example: [
+        {
+          role: "user",
+          parts: [{ text: "내 사주를 분석해주세요" }]
+        },
+        {
+          role: "model", 
+          parts: [{ text: "사주 분석 결과..." }]
+        }
+      ]
+    }),
     sajuData: SajuDataSchema.optional().openapi({
       description: "사주 정보 (첫 대화에서만 전송)",
     }),
@@ -109,18 +107,43 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
         topK: z.number().optional(),
         maxOutputTokens: z.number().int().optional(),
         stopSequences: z.array(z.string()).optional(),
+        responseMimeType: z.enum(["text/plain", "application/json"]).optional(),
+        seed: z.number().optional(),
       })
       .openapi({ type: "object" }),
     safetySettings: z
       .array(
         z
           .object({
-            category: z.string(),
-            threshold: z.string(),
+            category: z.enum([
+              "HARM_CATEGORY_HARASSMENT",
+              "HARM_CATEGORY_HATE_SPEECH", 
+              "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              "HARM_CATEGORY_DANGEROUS_CONTENT"
+            ]),
+            threshold: z.enum([
+              "BLOCK_NONE",
+              "BLOCK_ONLY_HIGH",
+              "BLOCK_MEDIUM_AND_ABOVE",
+              "BLOCK_LOW_AND_ABOVE",
+              "OFF"
+            ]),
           })
           .openapi({ type: "object" })
       )
       .optional(),
+    tools: z.array(z.object({
+      functionDeclarations: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        parameters: z.record(z.string(), z.any()).optional()
+      })).optional()
+    })).optional(),
+    toolConfig: z.object({
+      functionCallingConfig: z.object({
+        mode: z.enum(["AUTO", "ANY", "NONE"])
+      }).optional()
+    }).optional(),
   }).openapi({ type: "object" });
 
   // RAG 문서 스키마
@@ -147,12 +170,10 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   // 대화형 RAG 스키마
   const SajuChatRequestSchema = z
     .object({
-      message: z
-        .string()
-        .openapi({
-          description: "사용자 메시지",
-          example: "안녕하세요, 제 사주에 대해 알려주세요.",
-        }),
+      message: z.string().openapi({
+        description: "사용자 메시지",
+        example: "안녕하세요, 제 사주에 대해 알려주세요.",
+      }),
       i18n: z
         .enum(["ko", "en", "ja", "zh", "vi"])
         .default("ko")
@@ -162,39 +183,6 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
     .openapi({ type: "object" });
 
   // --- 라우트 정의 ---
-
-  const TestGeminiRoute = createRoute({
-    method: "post",
-    path: "/test-gemini",
-    summary: "테스트용 간단한 Gemini API",
-    description: "systemPrompt와 userPrompt만 받아서 간단하게 테스트할 수 있는 API입니다.",
-    tags: ["AI"],
-    security: [{ BearerAuth: [] }],
-    request: {
-      body: {
-        content: { "application/json": { schema: TestGeminiRequestSchema } },
-      },
-    },
-    responses: {
-      200: {
-        description: "성공적인 응답",
-        content: {
-          "application/json": {
-            schema: z
-              .object({
-                success: z.boolean().openapi({ example: true }),
-                response: z.string().openapi({ example: "안녕하세요! 테스트 응답입니다." }),
-                model: z.string().openapi({ example: "gemini-2.5-flash" }),
-                timestamp: z.string().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-              })
-              .openapi({ type: "object" }),
-          },
-        },
-      },
-      400: { description: "잘못된 요청 (userPrompt 누락)" },
-      500: { description: "Gemini API 또는 서버 오류" },
-    },
-  });
 
   const FortuneTellingRoute = createRoute({
     method: "post",
@@ -231,9 +219,9 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const SajuAnalysisWithGeminiRoute = createRoute({
     method: "post",
     path: "/gemini-saju-analysis",
-    summary: "Gemini AI 기반 사주 분석",
+    summary: "Gemini AI 기반 사주 분석 (단순화된 버전)",
     description:
-      "Google의 Gemini AI 모델과 RAG를 결합하여 심층적인 사주 분석을 제공합니다.",
+      "Google의 Gemini AI 모델을 사용하여 사주 분석을 제공합니다. 프론트에서 대화 기록을 관리하며, 백엔드는 순수 Gemini API 호출만 처리합니다.",
     tags: ["AI"],
     security: [{ BearerAuth: [] }],
     request: {
@@ -251,15 +239,10 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
           "application/json": {
             schema: z
               .object({
-                conversationId: z
-                  .string()
-                  .uuid()
-                  .openapi({ example: "a1b2c3d4-e5f6-7890-1234-567890abcdef" }),
                 answer: z.string().openapi({ example: "Gemini 분석 결과..." }),
                 metadata: z
                   .object({
                     model_used: z.string(),
-                    gateway_enabled: z.boolean(),
                     timestamp: z.string(),
                     stream_enabled: z.boolean(),
                     response_type: z.string(),
@@ -268,9 +251,6 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
               })
               .openapi({ type: "object" }),
           },
-          // "text/event-stream": {
-          //     schema: z.object({}).openapi({ example: "event: message\ndata: ..." }) // 스트림은 스키마를 특정하기 어려우므로 빈 객체로 둡니다.
-          // }
         },
       },
       400: { description: "잘못된 요청" },
@@ -365,13 +345,6 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
       "RAG 시스템에 저장된 모든 문서를 페이지네이션 및 검색 기능과 함께 조회합니다.",
     tags: ["AI - RAG"],
     security: [{ BearerAuth: [] }],
-    // request: {
-    //     query: z.object({
-    //         page: z.coerce.number().int().positive().default(1).optional(),
-    //         limit: z.coerce.number().int().positive().default(10).optional(),
-    //         search: z.string().optional(),
-    //     }).openapi({ type: 'object' })
-    // },
     responses: {
       200: {
         description: "성공적인 응답",
@@ -539,12 +512,9 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
             schema: z.array(
               z
                 .object({
-                  id: z
-                    .string()
-                    .uuid()
-                    .openapi({
-                      example: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                    }),
+                  id: z.string().uuid().openapi({
+                    example: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                  }),
                   userId: z
                     .string()
                     .openapi({ example: "google-oauth2|12345" }),
@@ -627,7 +597,8 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
     method: "delete",
     path: "/saju-chat",
     summary: "[대화형 RAG] 대화 일괄 삭제",
-    description: "여러 대화 ID를 배열로 받아서 해당하는 모든 메시지 기록을 일괄 삭제합니다.",
+    description:
+      "여러 대화 ID를 배열로 받아서 해당하는 모든 메시지 기록을 일괄 삭제합니다.",
     tags: ["AI - 대화형 RAG"],
     security: [{ BearerAuth: [] }],
     request: {
@@ -641,7 +612,10 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
                   .min(1)
                   .openapi({
                     description: "삭제할 대화 ID 배열",
-                    example: ["a1b2c3d4-e5f6-7890-1234-567890abcdef", "b2c3d4e5-f6g7-8901-2345-678901bcdefg"],
+                    example: [
+                      "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                      "b2c3d4e5-f6g7-8901-2345-678901bcdefg",
+                    ],
                   }),
               })
               .openapi({ type: "object" }),
@@ -656,19 +630,22 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
           "application/json": {
             schema: SuccessSchema.extend({
               deletedCount: z.number().int().openapi({ example: 5 }),
-              deletedConversationIds: z.array(z.string().uuid()).openapi({ example: ["a1b2c3d4-e5f6-7890-1234-567890abcdef"] }),
+              deletedConversationIds: z
+                .array(z.string().uuid())
+                .openapi({ example: ["a1b2c3d4-e5f6-7890-1234-567890abcdef"] }),
             }).openapi({ type: "object" }),
           },
         },
       },
-      400: { description: "잘못된 요청 (conversationIds 배열 누락 또는 빈 배열)" },
+      400: {
+        description: "잘못된 요청 (conversationIds 배열 누락 또는 빈 배열)",
+      },
       401: { description: "인증 실패 또는 권한 없음" },
       500: { description: "서버 오류" },
     },
   });
 
   // 라우트 등록 (구체적인 경로를 먼저 등록)
-  app.openapi(TestGeminiRoute, TestGeminiApi);
   app.openapi(FortuneTellingRoute, FortuneTelling);
   app.openapi(SajuAnalysisWithGeminiRoute, SajuAnalysisWithGemini);
   app.openapi(SajuChatRoute, SajuChat);
@@ -679,7 +656,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   app.openapi(RagGetDocumentsRoute, RagDocuments);
   app.openapi(RagDeleteRoute, RagDelete);
   app.openapi(RagGetMetadataSchemaRoute, RagGetMetadataSchema);
-  
+
   // 파라미터가 있는 라우트는 나중에 등록 (경로 충돌 방지)
   app.openapi(SajuChatContinueRoute, SajuChat);
   app.openapi(SajuChatFullRoute, SajuChatFull);
