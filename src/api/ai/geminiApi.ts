@@ -363,8 +363,7 @@ export async function SajuAnalysisWithGemini(
 
   try {
     const body: SajuAnalysisRequest = await c.req.json();
-    const model = body.model || "gemini-2.5-pro"; // Gemini 2.5 pro 사용 (더 안정적)
-
+    const model = body.model || "gemini-2.5-pro"; // default는 Gemini 2.5 pro 사용 (더 안정적)
     // 대화 ID 생성 또는 기존 ID 사용
     const conversationId = body.conversationId || crypto.randomUUID();
 
@@ -375,7 +374,7 @@ export async function SajuAnalysisWithGemini(
 
     // 3. 사주 정보 처리
     let sajuData: SajuData | undefined;
-    console.log(body)
+    
     if (body.sajuData) {
       // 새로운 사주 정보가 전송된 경우 저장
       sajuData = body.sajuData;
@@ -422,8 +421,6 @@ export async function SajuAnalysisWithGemini(
       const stream = new ReadableStream({
         async start(controller) {
           try {
-            console.log("=== 스트리밍 시작 ===");
-            console.log("geminiPayload:", JSON.stringify(geminiPayload, null, 2));
             
             for await (const chunk of streamingResp) {
               if (chunk.text) {
@@ -436,7 +433,6 @@ export async function SajuAnalysisWithGemini(
                 controller.enqueue(new TextEncoder().encode(data));
               }
             }
-            console.log("=== 스트리밍 종료 ===");
             // 스트림 종료
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
             controller.close();

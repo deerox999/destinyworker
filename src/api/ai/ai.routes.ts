@@ -625,18 +625,44 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   const SajuChatDeleteRoute = createRoute({
     method: "delete",
-    path: "/saju-chat/{id}",
-    summary: "[대화형 RAG] 특정 대화 삭제",
-    description: "특정 대화 ID에 해당하는 모든 메시지 기록을 삭제합니다.",
+    path: "/saju-chat",
+    summary: "[대화형 RAG] 대화 일괄 삭제",
+    description: "여러 대화 ID를 배열로 받아서 해당하는 모든 메시지 기록을 일괄 삭제합니다.",
     tags: ["AI - 대화형 RAG"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: ConversationIdParamSchema,
+      body: {
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                conversationIds: z
+                  .array(z.string().uuid())
+                  .min(1)
+                  .openapi({
+                    description: "삭제할 대화 ID 배열",
+                    example: ["a1b2c3d4-e5f6-7890-1234-567890abcdef", "b2c3d4e5-f6g7-8901-2345-678901bcdefg"],
+                  }),
+              })
+              .openapi({ type: "object" }),
+          },
+        },
+      },
     },
     responses: {
-      204: { description: "대화 삭제 성공" },
+      200: {
+        description: "대화 일괄 삭제 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              deletedCount: z.number().int().openapi({ example: 5 }),
+              deletedConversationIds: z.array(z.string().uuid()).openapi({ example: ["a1b2c3d4-e5f6-7890-1234-567890abcdef"] }),
+            }).openapi({ type: "object" }),
+          },
+        },
+      },
+      400: { description: "잘못된 요청 (conversationIds 배열 누락 또는 빈 배열)" },
       401: { description: "인증 실패 또는 권한 없음" },
-      404: { description: "대화를 찾을 수 없음" },
       500: { description: "서버 오류" },
     },
   });

@@ -1,18 +1,27 @@
+import { GoogleGenAI } from '@google/genai';
 import { PrismaClient } from "@prisma/client";
-import { Context, MiddlewareHandler } from "hono";
+import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
 import {
   createEmbedding,
   findSimilarVectors,
-  getDocumentsFromD1,
-  logAiUsage
+  getDocumentsFromD1
 } from "../../common/ragUtils";
+import { getUserFromToken } from "../../common/utils";
 import {
   getPersonaPrompt,
   getRejectionMessage,
   SupportedLanguage,
 } from "./prompt/sajuTeacher";
-import { getUserFromToken } from "../../common/utils";
+
+// Gemini API와 통신하기 위한 환경 변수 확장
+export interface Env {
+  AI: Ai; // Cloudflare AI (임베딩용)
+  VECTORIZE_INDEX: VectorizeIndex;
+  DB: D1Database;
+  GOOGLE_GEMINI_API_KEY: string; // Gemini API 키
+  BRAVE_API_KEY?: string;
+}
 
 /**
  * 사용자의 질문이 사주 관련 주제인지 확인합니다.
@@ -118,8 +127,12 @@ async function getConversationHistory(
       content: true,
     },
   });
-  // Prisma 반환 타입과 ChatMessage 타입이 호환되므로 직접 반환
-  return history as ChatMessage[];
+  
+  // role 값이 "assistant"인지 확인하고 ChatMessage 형식으로 변환
+  return history.map(msg => ({
+    role: msg.role as "user" | "assistant" | "system",
+    content: msg.content
+  }));
 }
 
 /**
@@ -251,10 +264,25 @@ export async function SajuChat(
     return c.json({ error: "'message' is required." }, 400);
   }
 
-  // 1. 질문 연관성 검사
+  // 1. 질문 연관성 검사 (Cloudflare AI 사용)
   const isRelevant = await isQuerySajuRelated(c.env.AI, userQuery);
   if (!isRelevant) {
-    const responseConversationId = conversationId || null;
+    const responseConversationId = conversationId || crypto.randomUUID();
+    
+    // 사주와 관련 없는 질문이어도 대화 기록에 저장
+    if (conversationId) {
+      const user = await getUserFromToken(c);
+      if (user) {
+        await saveConversationTurn(
+          prisma,
+          conversationId,
+          user.id,
+          userQuery,
+          getRejectionMessage(lang)
+        );
+      }
+    }
+    
     return c.json(
       {
         conversationId: responseConversationId,
@@ -273,10 +301,8 @@ export async function SajuChat(
   const newConversationId = conversationId || crypto.randomUUID();
 
   try {
-    // 2. 대화 기록 가져오기 (기존 대화인 경우)
-    const history = conversationId
-      ? await getConversationHistory(prisma, conversationId)
-      : [];
+    // 2. 대화 기록은 사용하지 않음 (단발성 질문에 최적화)
+    const history: ChatMessage[] = [];
 
     // 3. RAG 및 조건부 웹 검색
     const queryVector = await createEmbedding(c.env.AI, userQuery);
@@ -334,32 +360,55 @@ ${fullContext}`;
     }
 
     const messages: ChatMessage[] = [];
-    messages.push({ role: "system", content: finalSystemPrompt });
+    
+    // 매번 시스템 프롬프트를 포함하여 일관성 유지 (단발성 질문에 최적화)
+    messages.push({ 
+      role: "user", 
+      content: `${finalSystemPrompt}\n\n사용자 질문: ${userQuery}` 
+    });
 
-    // 시스템 메시지 다음에 대화 기록과 현재 사용자 질문을 추가합니다.
-    messages.push(...history, { role: "user", content: userQuery });
+    // 5. LLM 호출 및 사용량 기록 (Gemini 사용)
+    const model = "gemini-2.5-flash";
+    
+    // Gemini API 초기화
+    const geminiApi = new GoogleGenAI({
+      apiKey: c.env.GOOGLE_GEMINI_API_KEY
+    });
+    
+    // Gemini 형식으로 메시지 변환 (assistant를 model로 변환)
+    const geminiContents = messages.map(msg => {
+      let geminiRole: string = msg.role;
+      if (msg.role === "assistant") {
+        geminiRole = "model";
+      }
+      return {
+        role: geminiRole,
+        parts: [{ text: msg.content }]
+      };
+    });
 
-    // 5. LLM 호출 및 사용량 기록
-    const model = "@cf/google/gemma-3-12b-it";
-    const llmResponse: any = await c.env.AI.run(model, {
-      messages,
-      max_tokens: 2048, // 답변 끊김 방지를 위해 max_tokens 증가
+    // 디버깅을 위한 로그 추가
+    console.log("Original messages:", JSON.stringify(messages, null, 2));
+    console.log("Gemini messages:", JSON.stringify(geminiContents, null, 2));
+
+    const llmResponse = await geminiApi.models.generateContent({
+      model: model,
+      contents: geminiContents,
+      config: {
+        maxOutputTokens: 1024, // 채팅 인터페이스에 맞게 간결한 답변 유도
+        temperature: 0.3,
+        topP: 0.8,
+        topK: 20,
+      }
     });
 
     const assistantResponse =
-      llmResponse.response || "죄송합니다. 답변을 생성할 수 없습니다.";
+      llmResponse.text || "죄송합니다. 답변을 생성할 수 없습니다.";
 
-    // 토큰 사용량이 응답에 포함된 경우 로그를 기록합니다.
-    if (
-      llmResponse.usage &&
-      typeof llmResponse.usage.prompt_tokens === "number" &&
-      typeof llmResponse.usage.completion_tokens === "number" &&
-      typeof llmResponse.usage.total_tokens === "number"
-    ) {
-      await logAiUsage(c.env.DB, user.id, model, llmResponse.usage);
-    }
+    // Gemini SDK에서는 usage 정보를 직접 제공하지 않으므로 생략
+    // await logAiUsage(c.env.DB, user.id, model, llmResponse.usage);
 
-    // 6. 새로운 대화 내용 D1에 저장
+    // 6. 새로운 대화 내용 D1에 저장 (단발성 질문이므로 각각 독립적으로 저장)
     await saveConversationTurn(
       prisma,
       newConversationId,
@@ -436,14 +485,12 @@ export async function SajuChatFull(
 }
 
 /**
- * 특정 대화 및 관련 메시지를 모두 삭제합니다.
+ * 여러 대화 및 관련 메시지를 일괄 삭제합니다.
  */
 export async function SajuChatDelete(
   c: Context
 ): Promise<Response> {
   const prisma = createPrismaClient(c.env.DB);
-
-  const conversationId = c.req.param("id");
 
   try {
     const user = await getUserFromToken(c);
@@ -451,36 +498,62 @@ export async function SajuChatDelete(
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    // 대화 소유권 확인
-    const conversation = await prisma.conversationHistory.findFirst({
-      where: { conversationId, userId: user.id },
-      select: { id: true },
-    });
+    const { conversationIds } = await c.req.json<{
+      conversationIds: string[];
+    }>();
 
-    if (!conversation) {
+    if (!conversationIds || !Array.isArray(conversationIds) || conversationIds.length === 0) {
       return c.json(
-        { error: "Conversation not found or access denied" },
-        404
+        { error: "conversationIds array is required and must not be empty" },
+        400
       );
     }
 
-    // 해당 대화의 모든 메시지 삭제
+    // 사용자가 소유한 대화들만 필터링
+    const userConversations = await prisma.conversationHistory.findMany({
+      where: {
+        conversationId: { in: conversationIds },
+        userId: user.id,
+      },
+      select: { conversationId: true },
+      distinct: ['conversationId'],
+    });
+
+    const validConversationIds = userConversations.map(c => c.conversationId);
+
+    if (validConversationIds.length === 0) {
+      return c.json(
+        {
+          success: true,
+          deletedCount: 0,
+          deletedConversationIds: [],
+          message: "No conversations found or access denied for all provided IDs.",
+        },
+        200
+      );
+    }
+
+    // 해당 대화들의 모든 메시지 삭제
     const { count } = await prisma.conversationHistory.deleteMany({
-      where: { conversationId, userId: user.id },
+      where: {
+        conversationId: { in: validConversationIds },
+        userId: user.id,
+      },
     });
 
     return c.json(
       {
         success: true,
-        message: `Conversation ${conversationId} and its ${count} messages have been deleted.`,
-        deletedMessagesCount: count,
+        deletedCount: count,
+        deletedConversationIds: validConversationIds,
+        message: `${validConversationIds.length} conversations and their ${count} messages have been deleted.`,
       },
       200
     );
   } catch (error) {
-    console.error(`Error deleting conversation ${conversationId}:`, error);
+    console.error("Error deleting conversations:", error);
     return c.json(
-      { error: "Failed to delete conversation." },
+      { error: "Failed to delete conversations." },
       500
     );
   } finally {
