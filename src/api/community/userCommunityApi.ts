@@ -657,24 +657,39 @@ export const userCommunityApi = {
         }
       }
 
-      // 로그인한 사용자의 경우 포인트 증가 (익명 게시글 제외)
+      // 로그인한 사용자의 경우 포인트 증가 (익명 게시글 제외, 이미지 없는 순수 텍스트만, 100자 이상)
       if (!isAnonymous && authorId) {
-        try {
-          const pointResult = await addPoints(
-            c.env.DB,
-            authorId,
-            300, // 게시글 작성 시 300포인트 증가
-            "커뮤니티 게시글 작성",
-            `post_${post.id}`
-          );
-          
-          if (pointResult.success) {
-            console.log(`게시글 작성 포인트 증가 성공: 사용자 ${authorId}, ${pointResult.message}`);
-          } else {
-            console.error(`게시글 작성 포인트 증가 실패: ${pointResult.message}`);
+        // 이미지가 포함되어 있는지 확인 (R2 URL 패턴 체크)
+        const hasImages = content.includes(c.env.R2_PUBLIC_URL);
+        
+        // 순수 텍스트 길이 계산 (HTML 태그 제거)
+        const textContent = content.replace(/<[^>]*>/g, '').trim();
+        const textLength = textContent.length;
+        
+        if (!hasImages && textLength >= 100) {
+          try {
+            const pointResult = await addPoints(
+              c.env.DB,
+              authorId,
+              300, // 순수 텍스트 게시글 작성 시 300포인트 증가 (100자 이상)
+              "커뮤니티 순수 텍스트 게시글 작성",
+              `post_${post.id}`
+            );
+            
+            if (pointResult.success) {
+              console.log(`순수 텍스트 게시글 작성 포인트 증가 성공: 사용자 ${authorId}, 글자수 ${textLength}, ${pointResult.message}`);
+            } else {
+              console.error(`순수 텍스트 게시글 작성 포인트 증가 실패: ${pointResult.message}`);
+            }
+          } catch (error) {
+            console.error('순수 텍스트 게시글 작성 포인트 증가 중 오류:', error);
           }
-        } catch (error) {
-          console.error('게시글 작성 포인트 증가 중 오류:', error);
+        } else {
+          if (hasImages) {
+            console.log(`이미지가 포함된 게시글이므로 포인트 증가 없음: 사용자 ${authorId}, 게시글 ID ${post.id}`);
+          } else {
+            console.log(`글자수가 부족하여 포인트 증가 없음: 사용자 ${authorId}, 게시글 ID ${post.id}, 글자수 ${textLength}/100`);
+          }
         }
       }
 
@@ -889,24 +904,39 @@ export const userCommunityApi = {
         data: { isDeleted: true }
       });
 
-      // 로그인한 사용자의 경우 포인트 차감 (익명 게시글 제외)
+      // 로그인한 사용자의 경우 포인트 차감 (익명 게시글 제외, 이미지 없는 순수 텍스트만, 100자 이상)
       if (post.authorId) {
-        try {
-          const pointResult = await deductPoints(
-            c.env.DB,
-            post.authorId,
-            300, // 게시글 삭제 시 300포인트 차감
-            "커뮤니티 게시글 삭제",
-            `post_${post.id}`
-          );
-          
-          if (pointResult.success) {
-            console.log(`게시글 삭제 포인트 차감 성공: 사용자 ${post.authorId}, ${pointResult.message}`);
-          } else {
-            console.error(`게시글 삭제 포인트 차감 실패: ${pointResult.message}`);
+        // 이미지가 포함되어 있는지 확인 (R2 URL 패턴 체크)
+        const hasImages = post.content.includes(c.env.R2_PUBLIC_URL);
+        
+        // 순수 텍스트 길이 계산 (HTML 태그 제거)
+        const textContent = post.content.replace(/<[^>]*>/g, '').trim();
+        const textLength = textContent.length;
+        
+        if (!hasImages && textLength >= 100) {
+          try {
+            const pointResult = await deductPoints(
+              c.env.DB,
+              post.authorId,
+              300, // 순수 텍스트 게시글 삭제 시 300포인트 차감 (100자 이상)
+              "커뮤니티 순수 텍스트 게시글 삭제",
+              `post_${post.id}`
+            );
+            
+            if (pointResult.success) {
+              console.log(`순수 텍스트 게시글 삭제 포인트 차감 성공: 사용자 ${post.authorId}, 글자수 ${textLength}, ${pointResult.message}`);
+            } else {
+              console.error(`순수 텍스트 게시글 삭제 포인트 차감 실패: ${pointResult.message}`);
+            }
+          } catch (error) {
+            console.error('순수 텍스트 게시글 삭제 포인트 차감 중 오류:', error);
           }
-        } catch (error) {
-          console.error('게시글 삭제 포인트 차감 중 오류:', error);
+        } else {
+          if (hasImages) {
+            console.log(`이미지가 포함된 게시글 삭제이므로 포인트 차감 없음: 사용자 ${post.authorId}, 게시글 ID ${post.id}`);
+          } else {
+            console.log(`글자수가 부족하여 포인트 차감 없음: 사용자 ${post.authorId}, 게시글 ID ${post.id}, 글자수 ${textLength}/100`);
+          }
         }
       }
 
@@ -1166,24 +1196,32 @@ export const userCommunityApi = {
         data: { commentCount: { increment: 1 } }
       });
 
-      // 로그인한 사용자의 경우 포인트 증가 (익명 댓글 제외)
+      // 로그인한 사용자의 경우 포인트 증가 (익명 댓글 제외, 20자 이상)
       if (!isAnonymous && authorId) {
-        try {
-          const pointResult = await addPoints(
-            c.env.DB,
-            authorId,
-            50, // 댓글 작성 시 50포인트 증가
-            "커뮤니티 댓글 작성",
-            `comment_${comment.id}`
-          );
-          
-          if (pointResult.success) {
-            console.log(`댓글 작성 포인트 증가 성공: 사용자 ${authorId}, ${pointResult.message}`);
-          } else {
-            console.error(`댓글 작성 포인트 증가 실패: ${pointResult.message}`);
+        // 순수 텍스트 길이 계산 (HTML 태그 제거)
+        const textContent = content.replace(/<[^>]*>/g, '').trim();
+        const textLength = textContent.length;
+        
+        if (textLength >= 20) {
+          try {
+            const pointResult = await addPoints(
+              c.env.DB,
+              authorId,
+              50, // 댓글 작성 시 50포인트 증가 (20자 이상)
+              "커뮤니티 댓글 작성",
+              `comment_${comment.id}`
+            );
+            
+            if (pointResult.success) {
+              console.log(`댓글 작성 포인트 증가 성공: 사용자 ${authorId}, 글자수 ${textLength}, ${pointResult.message}`);
+            } else {
+              console.error(`댓글 작성 포인트 증가 실패: ${pointResult.message}`);
+            }
+          } catch (error) {
+            console.error('댓글 작성 포인트 증가 중 오류:', error);
           }
-        } catch (error) {
-          console.error('댓글 작성 포인트 증가 중 오류:', error);
+        } else {
+          console.log(`댓글 글자수가 부족하여 포인트 증가 없음: 사용자 ${authorId}, 댓글 ID ${comment.id}, 글자수 ${textLength}/20`);
         }
       }
 
@@ -1355,24 +1393,32 @@ export const userCommunityApi = {
         data: { commentCount: { decrement: 1 } }
       });
 
-      // 로그인한 사용자의 경우 포인트 차감 (익명 댓글 제외)
+      // 로그인한 사용자의 경우 포인트 차감 (익명 댓글 제외, 20자 이상)
       if (comment.authorId) {
-        try {
-          const pointResult = await deductPoints(
-            c.env.DB,
-            comment.authorId,
-            50, // 댓글 삭제 시 50포인트 차감
-            "커뮤니티 댓글 삭제",
-            `comment_${comment.id}`
-          );
-          
-          if (pointResult.success) {
-            console.log(`댓글 삭제 포인트 차감 성공: 사용자 ${comment.authorId}, ${pointResult.message}`);
-          } else {
-            console.error(`댓글 삭제 포인트 차감 실패: ${pointResult.message}`);
+        // 순수 텍스트 길이 계산 (HTML 태그 제거)
+        const textContent = comment.content.replace(/<[^>]*>/g, '').trim();
+        const textLength = textContent.length;
+        
+        if (textLength >= 20) {
+          try {
+            const pointResult = await deductPoints(
+              c.env.DB,
+              comment.authorId,
+              50, // 댓글 삭제 시 50포인트 차감 (20자 이상)
+              "커뮤니티 댓글 삭제",
+              `comment_${comment.id}`
+            );
+            
+            if (pointResult.success) {
+              console.log(`댓글 삭제 포인트 차감 성공: 사용자 ${comment.authorId}, 글자수 ${textLength}, ${pointResult.message}`);
+            } else {
+              console.error(`댓글 삭제 포인트 차감 실패: ${pointResult.message}`);
+            }
+          } catch (error) {
+            console.error('댓글 삭제 포인트 차감 중 오류:', error);
           }
-        } catch (error) {
-          console.error('댓글 삭제 포인트 차감 중 오류:', error);
+        } else {
+          console.log(`댓글 글자수가 부족하여 포인트 차감 없음: 사용자 ${comment.authorId}, 댓글 ID ${comment.id}, 글자수 ${textLength}/20`);
         }
       }
 

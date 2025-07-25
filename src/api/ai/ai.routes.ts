@@ -1,6 +1,6 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { FortuneTelling } from "./DestinyTellerApi";
-import { SajuAnalysisWithGemini } from "./geminiApi";
+import { SajuAnalysisWithGemini, SajuCompatibilityAnalysis } from "./geminiApi";
 import {
   RagAddDocuments,
   RagDelete,
@@ -48,10 +48,14 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
     .openapi({ type: "object" });
 
   const SajuDataSchema = z.any().openapi({
-    description: "계산된 상세 사주 정보 (JSON)",
+    description: "계산된 상세 사주 정보 (JSON) - 개인 사주 또는 궁합 비교용",
     example: {
+      // 개인 사주용
       birthDate: "1990-03-15",
       calculatedData: { saju: "경진", elements: ["금", "토"] },
+      // 또는 궁합 비교용
+      person1: { id: "person1", name: "첫 번째 사람", sajuData: { /* 사주 데이터 */ } },
+      person2: { id: "person2", name: "두 번째 사람", sajuData: { /* 사주 데이터 */ } }
     },
   });
 
@@ -254,6 +258,51 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
         },
       },
       400: { description: "잘못된 요청" },
+      401: { description: "인증 실패" },
+      500: { description: "Gemini API 또는 서버 오류" },
+    },
+  });
+
+  const SajuCompatibilityAnalysisRoute = createRoute({
+    method: "post",
+    path: "/gemini-compatibility-analysis",
+    summary: "Gemini AI 기반 궁합 분석",
+    description:
+      "Google의 Gemini AI 모델을 사용하여 두 사람의 사주 궁합을 분석합니다. person1과 person2의 사주 데이터를 비교하여 궁합을 분석합니다.",
+    tags: ["AI"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      body: {
+        content: {
+          "application/json": { schema: SajuAnalysisWithGeminiSchema },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          "성공. stream=true일 경우 text/event-stream, false일 경우 application/json.",
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                answer: z.string().openapi({ example: "궁합 분석 결과..." }),
+                metadata: z
+                  .object({
+                    model_used: z.string(),
+                    timestamp: z.string(),
+                    stream_enabled: z.boolean(),
+                    response_type: z.string(),
+                    person1_name: z.string(),
+                    person2_name: z.string(),
+                  })
+                  .optional(),
+              })
+              .openapi({ type: "object" }),
+          },
+        },
+      },
+      400: { description: "잘못된 요청 또는 궁합 데이터 누락" },
       401: { description: "인증 실패" },
       500: { description: "Gemini API 또는 서버 오류" },
     },
@@ -648,6 +697,7 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   // 라우트 등록 (구체적인 경로를 먼저 등록)
   app.openapi(FortuneTellingRoute, FortuneTelling);
   app.openapi(SajuAnalysisWithGeminiRoute, SajuAnalysisWithGemini);
+  app.openapi(SajuCompatibilityAnalysisRoute, SajuCompatibilityAnalysis);
   app.openapi(SajuChatRoute, SajuChat);
   app.openapi(SajuChatListRoute, SajuChatList);
 

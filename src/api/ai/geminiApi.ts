@@ -142,10 +142,19 @@ function buildGeminiPayload(body: SajuAnalysisRequest): any {
 
   // 2. 사주 데이터가 있으면 첫 번째 메시지로 추가
   if (body.sajuData) {
-    contents.push({
-      role: "user",
-      parts: [{ text: `사주 데이터: ${JSON.stringify(body.sajuData, null, 2)}` }],
-    });
+    // 궁합 분석용 데이터인지 확인 (person1, person2 구조)
+    if (body.sajuData.person1 && body.sajuData.person2) {
+      contents.push({
+        role: "user",
+        parts: [{ text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람 (${body.sajuData.person1.name}):\n${JSON.stringify(body.sajuData.person1.sajuData, null, 2)}\n\n두 번째 사람 (${body.sajuData.person2.name}):\n${JSON.stringify(body.sajuData.person2.sajuData, null, 2)}` }],
+      });
+    } else {
+      // 일반 개인 사주 데이터
+      contents.push({
+        role: "user",
+        parts: [{ text: `사주 데이터: ${JSON.stringify(body.sajuData, null, 2)}` }],
+      });
+    }
   }
 
   // 3. 기존 대화 기록 추가
@@ -329,6 +338,217 @@ export async function SajuAnalysisWithGemini(
     return c.json(
       {
         error: "An error occurred while processing your request.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * Gemini AI를 활용한 궁합 분석 API
+ */
+export async function SajuCompatibilityAnalysis(
+  c: Context
+): Promise<Response> {
+  const user = await getUserFromToken(c);
+  if (!user) {
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
+  }
+
+  // 포인트 검증 (궁합 분석 비용: 1500포인트)
+  const pointValidation = await usePoints(
+    c.env.DB,
+    user.id,
+    1500,
+    "궁합 분석 서비스 이용",
+    `compatibility_analysis_${Date.now()}`
+  );
+
+  if (!pointValidation.success) {
+    return c.json({ 
+      error: "포인트가 부족합니다.", 
+      details: pointValidation.message,
+      data: pointValidation.data
+    }, 402);
+  }
+
+  try {
+    const body: SajuAnalysisRequest = await c.req.json();
+    const model = body.model || "gemini-2.5-flash";
+
+    // 궁합 데이터 검증
+    if (!body.sajuData || !body.sajuData.person1 || !body.sajuData.person2) {
+      return c.json({ 
+        error: "궁합 분석을 위해서는 두 사람의 사주 데이터가 필요합니다.",
+        details: "sajuData에 person1과 person2가 포함되어야 합니다."
+      }, 400);
+    }
+
+    // 1. 궁합 분석용 시스템 프롬프트 설정
+    const compatibilitySystemPrompt = body.systemPrompt;
+
+    // 2. 궁합 분석용 페이로드 생성
+    const contents: Content[] = [];
+    
+    // 궁합 데이터 추가
+    contents.push({
+      role: "user",
+      parts: [{ 
+        text: `궁합 분석용 사주 데이터:
+
+첫 번째 사람 (${body.sajuData.person1.정보.생년월일.이름}):
+${JSON.stringify(body.sajuData.person1, null, 2)}
+
+두 번째 사람 (${body.sajuData.person2.정보.생년월일.이름}):
+${JSON.stringify(body.sajuData.person2, null, 2)}` 
+      }],
+    });
+
+    // 기존 대화 기록 추가
+    if (body.conversationHistory && body.conversationHistory.length > 0) {
+      contents.push(...body.conversationHistory);
+    }
+
+    // 현재 사용자 프롬프트와 시스템 프롬프트를 합쳐서 추가
+    const combinedPrompt = `${compatibilitySystemPrompt}\n\n${body.userPrompt}`;
+    contents.push({
+      role: "user",
+      parts: [{ text: combinedPrompt }],
+    });
+
+    // 3. Gemini API 요청 페이로드 생성
+    const geminiPayload: any = {
+      model: model,
+      contents,
+      ...(body.generationConfig || {
+        temperature: 0.4,
+        topP: 0.4,
+        topK: 40,
+        maxOutputTokens: 6000,
+      }),
+      safetySettings: body.safetySettings || [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE",
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE",
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE",
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE",
+        },
+      ],
+    };
+
+    if (body.tools) {
+      geminiPayload.tools = body.tools;
+    }
+    if (body.toolConfig) {
+      geminiPayload.toolConfig = body.toolConfig;
+    }
+
+    // 4. Google GenAI SDK 초기화
+    const ai = new GoogleGenAI({
+      apiKey: c.env.GOOGLE_GEMINI_API_KEY
+    });
+
+    // 5. Gemini API 호출
+    if (body.stream) {
+      // 스트리밍 응답
+      const streamingResp = await ai.models.generateContentStream(geminiPayload);
+      
+      // ReadableStream 생성
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of streamingResp) {
+              if (chunk.text) {
+                // SSE 형식으로 데이터 전송
+                const data = `data: ${JSON.stringify({ text: chunk.text })}\n\n`;
+                controller.enqueue(new TextEncoder().encode(data));
+              } else {
+                // 메타데이터나 다른 정보도 전송
+                const data = `data: ${JSON.stringify(chunk)}\n\n`;
+                controller.enqueue(new TextEncoder().encode(data));
+              }
+            }
+            // 스트림 종료
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            controller.close();
+          } catch (error) {
+            console.error("궁합 분석 스트리밍 오류:", error);
+            controller.error(error);
+          }
+        }
+      });
+
+      const headers = new Headers();
+      headers.set("Content-Type", "text/event-stream; charset=utf-8");
+      headers.set("Cache-Control", "no-cache");
+      headers.set("Connection", "keep-alive");
+      headers.set("X-AI-Model", model);
+      headers.set("X-Points-Deducted", "1500");
+      headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
+      if (pointValidation.data) {
+        headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
+      }
+
+      return new Response(stream, {
+        status: 200,
+        headers: headers,
+      });
+    } else {
+      // 일반 응답
+      const result = await ai.models.generateContent(geminiPayload);
+      const text = result.text || "죄송합니다. 궁합 분석을 생성할 수 없습니다.";
+
+      // 응답 형식
+      const response = {
+        answer: text,
+        metadata: {
+          model_used: model,
+          timestamp: new Date().toISOString(),
+          stream_enabled: false,
+          response_type: "compatibility_analysis",
+          person1_name: body.sajuData.person1.name,
+          person2_name: body.sajuData.person2.name,
+        },
+        points: {
+          deducted: 1500,
+          remaining: pointValidation.remainingPoints,
+          message: pointValidation.message
+        },
+        data: pointValidation.data
+      };
+
+      return c.json(response, 200);
+    }
+  } catch (error) {
+    console.error("Gemini 궁합 분석 API 오류:", error);
+    
+    // API 호출 실패 시 포인트 환불
+    try {
+      await refundPoints(
+        c.env.DB,
+        user.id,
+        1500,
+        "궁합 분석 서비스 실패로 인한 포인트 환불",
+        `compatibility_analysis_refund_${Date.now()}`
+      );
+    } catch (refundError) {
+      console.error("포인트 환불 실패:", refundError);
+    }
+    
+    return c.json(
+      {
+        error: "An error occurred while processing your compatibility analysis request.",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       500
