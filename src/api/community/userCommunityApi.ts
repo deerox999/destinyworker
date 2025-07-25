@@ -2,6 +2,7 @@ import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
 import { deleteImagesFromR2, deleteR2Object, extractR2ImageUrls } from '../user/r2Api';
+import { addPoints, deductPoints } from "../../common/paymentUtils";
 
 export const userCommunityApi = {
   // 커뮤니티 전체 데이터 조회
@@ -656,6 +657,27 @@ export const userCommunityApi = {
         }
       }
 
+      // 로그인한 사용자의 경우 포인트 증가 (익명 게시글 제외)
+      if (!isAnonymous && authorId) {
+        try {
+          const pointResult = await addPoints(
+            c.env.DB,
+            authorId,
+            300, // 게시글 작성 시 300포인트 증가
+            "커뮤니티 게시글 작성",
+            `post_${post.id}`
+          );
+          
+          if (pointResult.success) {
+            console.log(`게시글 작성 포인트 증가 성공: 사용자 ${authorId}, ${pointResult.message}`);
+          } else {
+            console.error(`게시글 작성 포인트 증가 실패: ${pointResult.message}`);
+          }
+        } catch (error) {
+          console.error('게시글 작성 포인트 증가 중 오류:', error);
+        }
+      }
+
       await prisma.$disconnect();
 
       return c.json({
@@ -866,6 +888,27 @@ export const userCommunityApi = {
         where: { id: parseInt(id) },
         data: { isDeleted: true }
       });
+
+      // 로그인한 사용자의 경우 포인트 차감 (익명 게시글 제외)
+      if (post.authorId) {
+        try {
+          const pointResult = await deductPoints(
+            c.env.DB,
+            post.authorId,
+            300, // 게시글 삭제 시 300포인트 차감
+            "커뮤니티 게시글 삭제",
+            `post_${post.id}`
+          );
+          
+          if (pointResult.success) {
+            console.log(`게시글 삭제 포인트 차감 성공: 사용자 ${post.authorId}, ${pointResult.message}`);
+          } else {
+            console.error(`게시글 삭제 포인트 차감 실패: ${pointResult.message}`);
+          }
+        } catch (error) {
+          console.error('게시글 삭제 포인트 차감 중 오류:', error);
+        }
+      }
 
       await prisma.$disconnect();
 
@@ -1123,6 +1166,27 @@ export const userCommunityApi = {
         data: { commentCount: { increment: 1 } }
       });
 
+      // 로그인한 사용자의 경우 포인트 증가 (익명 댓글 제외)
+      if (!isAnonymous && authorId) {
+        try {
+          const pointResult = await addPoints(
+            c.env.DB,
+            authorId,
+            50, // 댓글 작성 시 50포인트 증가
+            "커뮤니티 댓글 작성",
+            `comment_${comment.id}`
+          );
+          
+          if (pointResult.success) {
+            console.log(`댓글 작성 포인트 증가 성공: 사용자 ${authorId}, ${pointResult.message}`);
+          } else {
+            console.error(`댓글 작성 포인트 증가 실패: ${pointResult.message}`);
+          }
+        } catch (error) {
+          console.error('댓글 작성 포인트 증가 중 오류:', error);
+        }
+      }
+
       await prisma.$disconnect();
 
       return c.json({
@@ -1290,6 +1354,27 @@ export const userCommunityApi = {
         where: { id: comment.postId },
         data: { commentCount: { decrement: 1 } }
       });
+
+      // 로그인한 사용자의 경우 포인트 차감 (익명 댓글 제외)
+      if (comment.authorId) {
+        try {
+          const pointResult = await deductPoints(
+            c.env.DB,
+            comment.authorId,
+            50, // 댓글 삭제 시 50포인트 차감
+            "커뮤니티 댓글 삭제",
+            `comment_${comment.id}`
+          );
+          
+          if (pointResult.success) {
+            console.log(`댓글 삭제 포인트 차감 성공: 사용자 ${comment.authorId}, ${pointResult.message}`);
+          } else {
+            console.error(`댓글 삭제 포인트 차감 실패: ${pointResult.message}`);
+          }
+        } catch (error) {
+          console.error('댓글 삭제 포인트 차감 중 오류:', error);
+        }
+      }
 
       await prisma.$disconnect();
 
