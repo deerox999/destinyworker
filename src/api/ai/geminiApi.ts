@@ -209,6 +209,54 @@ function buildGeminiPayload(body: SajuAnalysisRequest): any {
   return payload;
 }
 
+// 재시도 로직 함수
+async function retryGeminiCall(ai: GoogleGenAI, payload: any, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      
+      const result = await ai.models.generateContent(payload);
+      
+      clearTimeout(timeoutId);
+      return result;
+    } catch (error) {
+      console.error(`Gemini API 호출 실패 (시도 ${attempt}/${maxRetries}):`, error);
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // 지수 백오프로 재시도
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+}
+
+// 스트리밍 재시도 로직 함수
+async function retryGeminiStreamCall(ai: GoogleGenAI, payload: any, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      
+      const result = await ai.models.generateContentStream(payload);
+      
+      clearTimeout(timeoutId);
+      return result;
+    } catch (error) {
+      console.error(`Gemini 스트리밍 API 호출 실패 (시도 ${attempt}/${maxRetries}):`, error);
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // 지수 백오프로 재시도
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+}
+
 /**
  * Gemini AI를 활용한 상세 사주 풀이 API (단순화된 버전)
  */
@@ -252,7 +300,11 @@ export async function SajuAnalysisWithGemini(
     // 3. Gemini API 호출
     if (body.stream) {
       // 스트리밍 응답
-      const streamingResp = await ai.models.generateContentStream(geminiPayload);
+      const streamingResp = await retryGeminiStreamCall(ai, geminiPayload);
+      
+      if (!streamingResp) {
+        throw new Error("스트리밍 응답을 받을 수 없습니다.");
+      }
       
       // ReadableStream 생성
       const stream = new ReadableStream({
@@ -268,13 +320,25 @@ export async function SajuAnalysisWithGemini(
                 const data = `data: ${JSON.stringify(chunk)}\n\n`;
                 controller.enqueue(new TextEncoder().encode(data));
               }
+              
+              // 연결 유지를 위한 heartbeat
+              if (Math.random() < 0.1) { // 10% 확률로 heartbeat 전송
+                const heartbeat = `data: ${JSON.stringify({ type: "heartbeat", timestamp: Date.now() })}\n\n`;
+                controller.enqueue(new TextEncoder().encode(heartbeat));
+              }
             }
             // 스트림 종료
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
             controller.close();
           } catch (error) {
             console.error("스트리밍 오류:", error);
-            controller.error(error);
+            // 에러 정보를 클라이언트에 전송
+            const errorData = `data: ${JSON.stringify({ 
+              type: "error", 
+              message: error instanceof Error ? error.message : "Unknown error" 
+            })}\n\n`;
+            controller.enqueue(new TextEncoder().encode(errorData));
+            controller.close();
           }
         }
       });
@@ -286,6 +350,9 @@ export async function SajuAnalysisWithGemini(
       headers.set("X-AI-Model", model);
       headers.set("X-Points-Deducted", "1000");
       headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
+      // 타임아웃 정보 추가
+      headers.set("X-Timeout-Seconds", "45");
+      headers.set("X-Connection-Keep-Alive", "true");
       // 구조화된 데이터를 JSON으로 헤더에 추가
       if (pointValidation.data) {
         headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
@@ -297,7 +364,12 @@ export async function SajuAnalysisWithGemini(
       });
     } else {
       // 일반 응답
-      const result = await ai.models.generateContent(geminiPayload);
+      const result = await retryGeminiCall(ai, geminiPayload);
+      
+      if (!result) {
+        throw new Error("AI 응답을 받을 수 없습니다.");
+      }
+      
       const text = result.text || "죄송합니다. 답변을 생성할 수 없습니다.";
 
       // 응답 형식
@@ -462,7 +534,11 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
     // 5. Gemini API 호출
     if (body.stream) {
       // 스트리밍 응답
-      const streamingResp = await ai.models.generateContentStream(geminiPayload);
+      const streamingResp = await retryGeminiStreamCall(ai, geminiPayload);
+      
+      if (!streamingResp) {
+        throw new Error("궁합 분석 스트리밍 응답을 받을 수 없습니다.");
+      }
       
       // ReadableStream 생성
       const stream = new ReadableStream({
@@ -478,13 +554,25 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
                 const data = `data: ${JSON.stringify(chunk)}\n\n`;
                 controller.enqueue(new TextEncoder().encode(data));
               }
+              
+              // 연결 유지를 위한 heartbeat
+              if (Math.random() < 0.1) { // 10% 확률로 heartbeat 전송
+                const heartbeat = `data: ${JSON.stringify({ type: "heartbeat", timestamp: Date.now() })}\n\n`;
+                controller.enqueue(new TextEncoder().encode(heartbeat));
+              }
             }
             // 스트림 종료
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
             controller.close();
           } catch (error) {
             console.error("궁합 분석 스트리밍 오류:", error);
-            controller.error(error);
+            // 에러 정보를 클라이언트에 전송
+            const errorData = `data: ${JSON.stringify({ 
+              type: "error", 
+              message: error instanceof Error ? error.message : "Unknown error" 
+            })}\n\n`;
+            controller.enqueue(new TextEncoder().encode(errorData));
+            controller.close();
           }
         }
       });
@@ -496,6 +584,9 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       headers.set("X-AI-Model", model);
       headers.set("X-Points-Deducted", "1500");
       headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
+      // 타임아웃 정보 추가
+      headers.set("X-Timeout-Seconds", "45");
+      headers.set("X-Connection-Keep-Alive", "true");
       if (pointValidation.data) {
         headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
       }
@@ -506,7 +597,12 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       });
     } else {
       // 일반 응답
-      const result = await ai.models.generateContent(geminiPayload);
+      const result = await retryGeminiCall(ai, geminiPayload);
+      
+      if (!result) {
+        throw new Error("궁합 분석 응답을 받을 수 없습니다.");
+      }
+      
       const text = result.text || "죄송합니다. 궁합 분석을 생성할 수 없습니다.";
 
       // 응답 형식
