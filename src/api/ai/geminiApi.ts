@@ -786,6 +786,9 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
               if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
                 title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
               }
+              if (body.sajuData.person2 && body.sajuData.person2.정보 && body.sajuData.person2.정보.생년월일 && body.sajuData.person2.정보.생년월일.이름) {
+                title += ` & ${body.sajuData.person2.정보.생년월일.이름}님`;
+              }
             }
 
             const saveResult = await saveSajuAnalysis(
@@ -879,6 +882,9 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       if (body.sajuData) {
         if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
           title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+        }
+        if (body.sajuData.person2 && body.sajuData.person2.정보 && body.sajuData.person2.정보.생년월일 && body.sajuData.person2.정보.생년월일.이름) {
+          title += ` & ${body.sajuData.person2.정보.생년월일.이름}님`;
         }
       }
 
