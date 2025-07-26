@@ -4,7 +4,6 @@
   "name": "destinyworker",
   "upload_source_maps": true,
   "limits": {
-    "cpu_ms": 50000,
     "memory_mb": 128
   },
   "d1_databases": [
