@@ -405,6 +405,8 @@ model SajuAnalysis {
   modelUsed       String   @map("model_used") /// 사용된 AI 모델
   pointsSpent     Int      @map("points_spent") /// 사용된 포인트
   isFavorite      Boolean  @default(false) @map("is_favorite") /// 즐겨찾기 여부
+  i18n            String?  /// 언어 설정 (ko, en, ja, zh, vi 등)
+  timezone        String?  /// 시간대 설정 (Asia/Seoul, America/New_York 등)
   createdAt       DateTime @default(now()) @map("created_at") /// 분석 생성 시간
   updatedAt       DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
   

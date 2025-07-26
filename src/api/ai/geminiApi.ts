@@ -255,16 +255,7 @@ async function saveSajuAnalysis(
       }
     }
 
-    console.log("사주 분석 결과 저장 시작:", {
-      userId,
-      analysisType,
-      title,
-      userPrompt: userPrompt.substring(0, 100) + "...",
-      aiResponse: aiResponse.substring(0, 100) + "...",
-      modelUsed,
-      pointsSpent,
-      birthDataSaved: !!birthData
-    });
+
 
     // 시간대 변환을 위한 현재 시간 생성
     const now = new Date();
@@ -308,10 +299,7 @@ async function saveSajuAnalysis(
       timezone || 'Asia/Seoul'
     ).run();
 
-    console.log("사주 분석 결과 저장 성공:", {
-      analysisId: result.meta.last_row_id,
-      changes: result.meta.changes
-    });
+
 
     return {
       success: true,
@@ -499,7 +487,6 @@ export async function SajuAnalysisWithGemini(
 
             if (saveResult.success) {
               analysisId = saveResult.analysisId;
-              console.log("스트리밍 응답 저장 성공:", { analysisId });
             } else {
               console.error("스트리밍 응답 저장 실패:", saveResult.error);
             }
@@ -792,12 +779,6 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
             }
             
             // 스트리밍 완료 후 DB에 저장
-            console.log("궁합 분석 스트리밍 완료, 저장 시도:", {
-              userId: user.id,
-              hasSajuData: !!body.sajuData,
-              responseLength: fullResponse.length,
-              model
-            });
 
             // 제목 생성: "[분석유형] 이름님" 형식
             let title = `[${analysisType}]`;
@@ -824,7 +805,6 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
 
             if (saveResult.success) {
               analysisId = saveResult.analysisId;
-              console.log("궁합 분석 스트리밍 응답 저장 성공:", { analysisId });
             } else {
               console.error("궁합 분석 스트리밍 응답 저장 실패:", saveResult.error);
             }
@@ -893,15 +873,6 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       };
 
       // 결과를 DB에 저장
-      console.log("궁합 분석 저장 시도 전 데이터 확인:", {
-        userId: user.id,
-        hasSajuData: !!body.sajuData,
-        sajuDataType: typeof body.sajuData,
-        userPrompt: body.userPrompt?.substring(0, 50) + "...",
-        systemPrompt: body.systemPrompt?.substring(0, 50) + "...",
-        textLength: text.length,
-        model
-      });
 
       // 제목 생성: "[분석유형] 이름님" 형식
       let title = `[${analysisType}]`;
@@ -1002,8 +973,8 @@ export async function getSajuAnalysisList(
       query += ` AND is_favorite = 0`;
     }
 
-    // 정렬 및 페이징
-    query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    // 정렬 및 페이징 (즐겨찾기 우선, 그 다음 최신순)
+    query += ` ORDER BY is_favorite DESC, created_at DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
     // 총 개수 조회
@@ -1039,12 +1010,7 @@ export async function getSajuAnalysisList(
       is_favorite: Boolean(analysis.is_favorite)
     }));
 
-    console.log("분석 목록 조회 결과:", {
-      userId: user.id,
-      totalCount: total,
-      processedCount: processedAnalyses.length,
-      sampleFavorite: processedAnalyses[0]?.is_favorite
-    });
+
 
     return c.json({
       analyses: processedAnalyses,
@@ -1195,12 +1161,6 @@ export async function toggleSajuAnalysisFavorite(
 
     // SQLite boolean 값을 JavaScript boolean으로 변환
     const currentFavoriteState = Boolean(current.is_favorite);
-    console.log("현재 즐겨찾기 상태:", {
-      analysisId,
-      userId: user.id,
-      rawValue: current.is_favorite,
-      booleanValue: currentFavoriteState
-    });
 
     // 즐겨찾기 상태 토글
     const newFavoriteState = !currentFavoriteState;
