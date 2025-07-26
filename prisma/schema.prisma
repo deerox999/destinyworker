@@ -2,7 +2,6 @@
   삭제할 때는 수동외엔 방법이 없음
   npx wrangler d1 execute destiny --remote --command "DROP TABLE IF EXISTS comments;"
   추가할 떄는 npm run db:migrate:remote
-  수정할 떄는 npm run db:migrate:force
 */
 generator client {
   provider = "prisma-client-js"
@@ -396,7 +395,8 @@ model PostTag {
 model SajuAnalysis {
   id              Int      @id @default(autoincrement()) /// 분석 고유 ID
   userId          Int      @map("user_id") /// 분석 요청한 사용자 ID
-  analysisType    String   @map("analysis_type") /// 분석 유형 ('individual', 'compatibility')
+  analysisType    String   @map("analysis_type") /// 프론트에서 정의한 분석 유형 (자유로운 값)
+  type            String   @map("type") /// 표준화된 분석 유형 ('individual', 'compatibility')
   title           String   /// 분석 제목 (사용자가 설정)
   sajuData        String   /// 사주 데이터 (JSON 문자열)
   userPrompt      String   @map("user_prompt") /// 사용자 질문
@@ -407,6 +407,8 @@ model SajuAnalysis {
   isFavorite      Boolean  @default(false) @map("is_favorite") /// 즐겨찾기 여부
   i18n            String?  /// 언어 설정 (ko, en, ja, zh, vi 등)
   timezone        String?  /// 시간대 설정 (Asia/Seoul, America/New_York 등)
+  analysisStartedAt DateTime? @map("analysis_started_at") /// 분석 시작 시간
+  analysisCompletedAt DateTime? @map("analysis_completed_at") /// 분석 완료 시간
   createdAt       DateTime @default(now()) @map("created_at") /// 분석 생성 시간
   updatedAt       DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
   

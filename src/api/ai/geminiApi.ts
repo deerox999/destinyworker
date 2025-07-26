@@ -230,6 +230,7 @@ async function saveSajuAnalysis(
   db: any,
   userId: number,
   analysisType: string,
+  type: string,
   title: string,
   sajuData: any,
   userPrompt: string,
@@ -238,7 +239,9 @@ async function saveSajuAnalysis(
   modelUsed: string,
   pointsSpent: number,
   i18n?: string,
-  timezone?: string
+  timezone?: string,
+  analysisStartedAt?: Date,
+  analysisCompletedAt?: Date
 ) {
   try {
     // sajuData에서 생년월일 정보만 추출
@@ -255,37 +258,43 @@ async function saveSajuAnalysis(
       }
     }
 
-
+    // 시간대 변환을 위한 함수
+    function convertToUserTimezone(date: Date, timezone: string): string {
+      try {
+        const userTime = new Date(date.toLocaleString("en-US", { timeZone: timezone }));
+        return userTime.toISOString();
+      } catch (error) {
+        console.error("시간대 변환 오류:", error);
+        return date.toISOString();
+      }
+    }
 
     // 시간대 변환을 위한 현재 시간 생성
     const now = new Date();
-    let createdAt, updatedAt;
+    let createdAt, updatedAt, startedAt, completedAt;
     
     if (timezone) {
-      try {
-        // 사용자 시간대로 변환
-        const userTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
-        createdAt = userTime.toISOString();
-        updatedAt = userTime.toISOString();
-      } catch (error) {
-        console.error("시간대 변환 오류:", error);
-        createdAt = now.toISOString();
-        updatedAt = now.toISOString();
-      }
+      createdAt = convertToUserTimezone(now, timezone);
+      updatedAt = convertToUserTimezone(now, timezone);
+      startedAt = analysisStartedAt ? convertToUserTimezone(analysisStartedAt, timezone) : null;
+      completedAt = analysisCompletedAt ? convertToUserTimezone(analysisCompletedAt, timezone) : null;
     } else {
       createdAt = now.toISOString();
       updatedAt = now.toISOString();
+      startedAt = analysisStartedAt ? analysisStartedAt.toISOString() : null;
+      completedAt = analysisCompletedAt ? analysisCompletedAt.toISOString() : null;
     }
 
     const result = await db.prepare(`
       INSERT INTO saju_analyses (
-        user_id, analysis_type, title, sajuData, user_prompt, 
+        user_id, analysis_type, type, title, sajuData, user_prompt, 
         system_prompt, ai_response, model_used, points_spent, 
-        created_at, updated_at, i18n, timezone
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, updated_at, i18n, timezone, analysis_started_at, analysis_completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       userId,
       analysisType,
+      type,
       title,
       JSON.stringify(birthData),
       userPrompt,
@@ -296,7 +305,9 @@ async function saveSajuAnalysis(
       createdAt,
       updatedAt,
       i18n || 'ko',
-      timezone || 'Asia/Seoul'
+      timezone || 'Asia/Seoul',
+      startedAt,
+      completedAt
     ).run();
 
 
@@ -402,9 +413,13 @@ export async function SajuAnalysisWithGemini(
   try {
     const body: SajuAnalysisRequest = await c.req.json();
     const model = body.model || "gemini-2.5-pro";
-    const analysisType = body.analysisType || 'general'; // 기본값을 general로 설정
+    const analysisType = body.analysisType || 'general'; // 프론트에서 정의한 분석 유형
+    const type = 'individual'; // 표준화된 분석 유형
     const i18n = body.i18n || 'ko'; // 기본 언어는 한국어
     const timezone = body.timezone || 'Asia/Seoul'; // 기본 시간대는 한국
+
+    // 분석 시작 시간 기록
+    const analysisStartedAt = new Date();
 
     // 1. Gemini API 요청 페이로드 생성
     const geminiPayload = buildGeminiPayload(body);
@@ -460,6 +475,9 @@ export async function SajuAnalysisWithGemini(
               model
             });
 
+            // 분석 완료 시간 기록
+            const analysisCompletedAt = new Date();
+
             // 제목 생성: "[분석유형] 이름님" 형식
             let title = `[${analysisType}]`;
             if (body.sajuData) {
@@ -474,6 +492,7 @@ export async function SajuAnalysisWithGemini(
               c.env.DB,
               user.id,
               analysisType,
+              type,
               title,
               body.sajuData || {},
               body.userPrompt,
@@ -482,7 +501,9 @@ export async function SajuAnalysisWithGemini(
               model,
               1000,
               i18n,
-              timezone
+              timezone,
+              analysisStartedAt,
+              analysisCompletedAt
             );
 
             if (saveResult.success) {
@@ -536,6 +557,9 @@ export async function SajuAnalysisWithGemini(
       
       const text = result.text || "죄송합니다. 답변을 생성할 수 없습니다.";
 
+      // 분석 완료 시간 기록
+      const analysisCompletedAt = new Date();
+
       // 응답 형식
       const response = {
         answer: text,
@@ -544,6 +568,7 @@ export async function SajuAnalysisWithGemini(
           timestamp: new Date().toISOString(),
           stream_enabled: false,
           response_type: "text",
+          analysis_duration_ms: analysisCompletedAt.getTime() - analysisStartedAt.getTime(),
         },
         points: {
           deducted: 1000,
@@ -561,7 +586,8 @@ export async function SajuAnalysisWithGemini(
         userPrompt: body.userPrompt?.substring(0, 50) + "...",
         systemPrompt: body.systemPrompt?.substring(0, 50) + "...",
         textLength: text.length,
-        model
+        model,
+        analysisDuration: analysisCompletedAt.getTime() - analysisStartedAt.getTime()
       });
 
       // 제목 생성: "[분석유형] 이름님" 형식
@@ -578,6 +604,7 @@ export async function SajuAnalysisWithGemini(
         c.env.DB,
         user.id,
         analysisType,
+        type,
         title,
         body.sajuData || {},
         body.userPrompt,
@@ -586,7 +613,9 @@ export async function SajuAnalysisWithGemini(
         model,
         1000,
         i18n,
-        timezone
+        timezone,
+        analysisStartedAt,
+        analysisCompletedAt
       );
 
       if (saveResult.success) {
@@ -654,9 +683,13 @@ export async function SajuCompatibilityAnalysis(
   try {
     const body: SajuAnalysisRequest = await c.req.json();
     const model = body.model || "gemini-2.5-flash";
-    const analysisType = body.analysisType || 'compatibility'; // 궁합 분석의 기본값
+    const analysisType = body.analysisType || 'compatibility'; // 프론트에서 정의한 분석 유형
+    const type = 'compatibility'; // 표준화된 분석 유형
     const i18n = body.i18n || 'ko'; // 기본 언어는 한국어
     const timezone = body.timezone || 'Asia/Seoul'; // 기본 시간대는 한국
+
+    // 분석 시작 시간 기록
+    const analysisStartedAt = new Date();
 
     // 궁합 데이터 검증
     if (!body.sajuData || !body.sajuData.person1 || !body.sajuData.person2) {
@@ -780,6 +813,9 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
             
             // 스트리밍 완료 후 DB에 저장
 
+            // 분석 완료 시간 기록
+            const analysisCompletedAt = new Date();
+
             // 제목 생성: "[분석유형] 이름님" 형식
             let title = `[${analysisType}]`;
             if (body.sajuData) {
@@ -795,6 +831,7 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
               c.env.DB,
               user.id,
               analysisType,
+              type,
               title,
               body.sajuData || {},
               body.userPrompt,
@@ -803,7 +840,9 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
               model,
               1500,
               i18n,
-              timezone
+              timezone,
+              analysisStartedAt,
+              analysisCompletedAt
             );
 
             if (saveResult.success) {
@@ -856,6 +895,9 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       
       const text = result.text || "죄송합니다. 궁합 분석을 생성할 수 없습니다.";
 
+      // 분석 완료 시간 기록
+      const analysisCompletedAt = new Date();
+
       // 응답 형식
       const response = {
         answer: text,
@@ -866,6 +908,7 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
           response_type: "compatibility_analysis",
           person1_name: body.sajuData.person1.name,
           person2_name: body.sajuData.person2.name,
+          analysis_duration_ms: analysisCompletedAt.getTime() - analysisStartedAt.getTime(),
         },
         points: {
           deducted: 1500,
@@ -892,6 +935,7 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
         c.env.DB,
         user.id,
         analysisType,
+        type,
         title,
         body.sajuData || {},
         body.userPrompt,
@@ -900,7 +944,9 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
         model,
         1500,
         i18n,
-        timezone
+        timezone,
+        analysisStartedAt,
+        analysisCompletedAt
       );
 
       if (saveResult.success) {
@@ -960,16 +1006,17 @@ export async function getSajuAnalysisList(
     // 기본 쿼리
     let query = `
       SELECT 
-        id, analysis_type, title, user_prompt, ai_response, 
-        model_used, points_spent, is_favorite, created_at, updated_at
+        id, analysis_type, type, title, user_prompt, ai_response, 
+        model_used, points_spent, is_favorite, created_at, updated_at,
+        analysis_started_at, analysis_completed_at
       FROM saju_analyses 
       WHERE user_id = ?
     `;
     const params: any[] = [user.id];
 
-    // 필터 조건 추가
+    // 필터 조건 추가 (type 필드 사용)
     if (analysisType) {
-      query += ` AND analysis_type = ?`;
+      query += ` AND type = ?`;
       params.push(analysisType);
     }
     
@@ -992,7 +1039,7 @@ export async function getSajuAnalysisList(
     const countParams: any[] = [user.id];
 
     if (analysisType) {
-      countQuery += ` AND analysis_type = ?`;
+      countQuery += ` AND type = ?`;
       countParams.push(analysisType);
     }
     
@@ -1010,11 +1057,22 @@ export async function getSajuAnalysisList(
     const total = totalCount?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
-    // SQLite boolean 값을 JavaScript boolean으로 변환
-    const processedAnalyses = (analyses.results || []).map((analysis: any) => ({
-      ...analysis,
-      is_favorite: Boolean(analysis.is_favorite)
-    }));
+    // SQLite boolean 값을 JavaScript boolean으로 변환하고 분석 시간 정보 추가
+    const processedAnalyses = (analyses.results || []).map((analysis: any) => {
+      // 분석 소요 시간 계산
+      let analysisDuration = null;
+      if (analysis.analysis_started_at && analysis.analysis_completed_at) {
+        const startTime = new Date(analysis.analysis_started_at);
+        const endTime = new Date(analysis.analysis_completed_at);
+        analysisDuration = endTime.getTime() - startTime.getTime();
+      }
+
+      return {
+        ...analysis,
+        is_favorite: Boolean(analysis.is_favorite),
+        analysis_duration_ms: analysisDuration
+      };
+    });
 
 
 
@@ -1061,9 +1119,10 @@ export async function getSajuAnalysisDetail(
 
     const analysis = await c.env.DB.prepare(`
       SELECT 
-        id, analysis_type, title, sajuData, user_prompt, 
+        id, analysis_type, type, title, sajuData, user_prompt, 
         system_prompt, ai_response, model_used, points_spent, 
-        is_favorite, created_at, updated_at, i18n, timezone
+        is_favorite, created_at, updated_at, i18n, timezone,
+        analysis_started_at, analysis_completed_at
       FROM saju_analyses 
       WHERE id = ? AND user_id = ?
     `).bind(analysisId, user.id).first();
@@ -1109,9 +1168,18 @@ export async function getSajuAnalysisDetail(
       }
     }
 
+    // 분석 소요 시간 계산
+    let analysisDuration = null;
+    if (analysis.analysis_started_at && analysis.analysis_completed_at) {
+      const startTime = new Date(analysis.analysis_started_at);
+      const endTime = new Date(analysis.analysis_completed_at);
+      analysisDuration = endTime.getTime() - startTime.getTime();
+    }
+
     return c.json({
       id: analysis.id,
       analysis_type: analysis.analysis_type,
+      type: analysis.type,
       title: analysis.title,
       user_prompt: analysis.user_prompt,
       system_prompt: analysis.system_prompt,
@@ -1121,6 +1189,9 @@ export async function getSajuAnalysisDetail(
       is_favorite: Boolean(analysis.is_favorite),
       created_at: formatDateTime(analysis.created_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko'),
       updated_at: formatDateTime(analysis.updated_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko'),
+      analysis_started_at: analysis.analysis_started_at ? formatDateTime(analysis.analysis_started_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko') : null,
+      analysis_completed_at: analysis.analysis_completed_at ? formatDateTime(analysis.analysis_completed_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko') : null,
+      analysis_duration_ms: analysisDuration,
       saju_data: sajuData,
       i18n: analysis.i18n,
       timezone: analysis.timezone
