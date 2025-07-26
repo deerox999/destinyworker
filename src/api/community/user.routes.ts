@@ -782,22 +782,18 @@ export function createUserCommunityRouter(): OpenAPIHono {
             example: 1,
           }),
       }),
-      body: {
-        content: {
-          "application/json": {
-            schema: z
-              .object({
-                password: z
-                  .string()
-                  .min(4)
-                  .max(20)
-                  .optional()
-                  .openapi({ example: "1234" }),
-              })
-              .openapi({ type: "object" }),
-          },
-        },
-      },
+      query: z.object({
+        password: z
+          .string()
+          .min(4)
+          .max(20)
+          .optional()
+          .openapi({
+            param: { name: "password", in: "query" },
+            description: "익명 게시글 삭제 시 필요한 비밀번호",
+            example: "1234",
+          }),
+      }),
     },
     responses: {
       200: {
@@ -1121,22 +1117,18 @@ export function createUserCommunityRouter(): OpenAPIHono {
             example: 1,
           }),
       }),
-      body: {
-        content: {
-          "application/json": {
-            schema: z
-              .object({
-                password: z
-                  .string()
-                  .min(4)
-                  .max(20)
-                  .optional()
-                  .openapi({ example: "1234" }),
-              })
-              .openapi({ type: "object" }),
-          },
-        },
-      },
+      query: z.object({
+        password: z
+          .string()
+          .min(4)
+          .max(20)
+          .optional()
+          .openapi({
+            param: { name: "password", in: "query" },
+            description: "익명 댓글 삭제 시 필요한 비밀번호",
+            example: "1234",
+          }),
+      }),
     },
     responses: {
       200: {

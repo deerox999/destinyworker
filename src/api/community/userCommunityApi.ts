@@ -677,18 +677,12 @@ export const userCommunityApi = {
             );
             
             if (pointResult.success) {
-              console.log(`순수 텍스트 게시글 작성 포인트 증가 성공: 사용자 ${authorId}, 글자수 ${textLength}, ${pointResult.message}`);
+              // 포인트 증가 성공
             } else {
               console.error(`순수 텍스트 게시글 작성 포인트 증가 실패: ${pointResult.message}`);
             }
           } catch (error) {
             console.error('순수 텍스트 게시글 작성 포인트 증가 중 오류:', error);
-          }
-        } else {
-          if (hasImages) {
-            console.log(`이미지가 포함된 게시글이므로 포인트 증가 없음: 사용자 ${authorId}, 게시글 ID ${post.id}`);
-          } else {
-            console.log(`글자수가 부족하여 포인트 증가 없음: 사용자 ${authorId}, 게시글 ID ${post.id}, 글자수 ${textLength}/100`);
           }
         }
       }
@@ -777,14 +771,11 @@ export const userCommunityApi = {
           const deletedImages = oldImages.filter(oldImg => !newImages.includes(oldImg));
           
           if (deletedImages.length > 0) {
-            console.log(`게시글 수정 시 삭제된 이미지 ${deletedImages.length}개 발견`);
-            
             // 삭제된 이미지들을 R2에서 삭제
             for (const imageUrl of deletedImages) {
               try {
                 const filePath = imageUrl.replace(c.env.R2_PUBLIC_URL + '/', '');
                 await deleteR2Object(filePath, c.env);
-                console.log(`삭제된 이미지 R2에서 제거 완료: ${filePath}`);
               } catch (error) {
                 console.error(`삭제된 이미지 R2 제거 실패: ${imageUrl}`, error);
               }
@@ -856,8 +847,9 @@ export const userCommunityApi = {
   async deletePost(c: Context) {
     try {
       const { id } = c.req.param();
-      const body = await c.req.json();
-      const { password } = body;
+      
+      // query parameter에서 password 확인
+      const { password } = c.req.query();
 
       const prisma = createPrismaClient(c.env.DB);
 
@@ -892,7 +884,6 @@ export const userCommunityApi = {
       if (post.content && post.content.includes(c.env.R2_PUBLIC_URL)) {
         try {
           await deleteImagesFromR2(post.content, c.env);
-          console.log('게시글 삭제 시 R2 이미지 삭제 완료');
         } catch (error) {
           console.error('게시글 삭제 시 R2 이미지 삭제 실패:', error);
         }
@@ -924,18 +915,12 @@ export const userCommunityApi = {
             );
             
             if (pointResult.success) {
-              console.log(`순수 텍스트 게시글 삭제 포인트 차감 성공: 사용자 ${post.authorId}, 글자수 ${textLength}, ${pointResult.message}`);
+              // 포인트 차감 성공
             } else {
               console.error(`순수 텍스트 게시글 삭제 포인트 차감 실패: ${pointResult.message}`);
             }
           } catch (error) {
             console.error('순수 텍스트 게시글 삭제 포인트 차감 중 오류:', error);
-          }
-        } else {
-          if (hasImages) {
-            console.log(`이미지가 포함된 게시글 삭제이므로 포인트 차감 없음: 사용자 ${post.authorId}, 게시글 ID ${post.id}`);
-          } else {
-            console.log(`글자수가 부족하여 포인트 차감 없음: 사용자 ${post.authorId}, 게시글 ID ${post.id}, 글자수 ${textLength}/100`);
           }
         }
       }
@@ -1028,17 +1013,13 @@ export const userCommunityApi = {
             );
             
             if (pointResult.success) {
-              // console.log(`게시글 추천 포인트 지급 성공: 작성자 ${post.authorId}, 추천자 ${user.id}, ${pointResult.message}`);
+              // 포인트 지급 성공
             } else {
               console.error(`게시글 추천 포인트 지급 실패: ${pointResult.message}`);
             }
           } catch (error) {
             console.error('게시글 추천 포인트 지급 중 오류:', error);
           }
-        } else if (!post.authorId) {
-          // console.log(`익명 게시글이므로 포인트 지급 없음: 게시글 ID ${post.id}, 추천자 ${user.id}`);
-        } else if (post.authorId === user.id) {
-          // console.log(`자신의 게시글을 추천했으므로 포인트 지급 없음: 사용자 ${user.id}, 게시글 ID ${post.id}`);
         }
 
         await prisma.$disconnect();
@@ -1238,15 +1219,13 @@ export const userCommunityApi = {
             );
             
             if (pointResult.success) {
-              console.log(`댓글 작성 포인트 증가 성공: 사용자 ${authorId}, 글자수 ${textLength}, ${pointResult.message}`);
+              // 포인트 증가 성공
             } else {
               console.error(`댓글 작성 포인트 증가 실패: ${pointResult.message}`);
             }
           } catch (error) {
             console.error('댓글 작성 포인트 증가 중 오류:', error);
           }
-        } else {
-          console.log(`댓글 글자수가 부족하여 포인트 증가 없음: 사용자 ${authorId}, 댓글 ID ${comment.id}, 글자수 ${textLength}/20`);
         }
       }
 
@@ -1318,14 +1297,11 @@ export const userCommunityApi = {
           const deletedImages = oldImages.filter(oldImg => !newImages.includes(oldImg));
           
           if (deletedImages.length > 0) {
-            console.log(`댓글 수정 시 삭제된 이미지 ${deletedImages.length}개 발견`);
-            
             // 삭제된 이미지들을 R2에서 삭제
             for (const imageUrl of deletedImages) {
               try {
                 const filePath = imageUrl.replace(c.env.R2_PUBLIC_URL + '/', '');
                 await deleteR2Object(filePath, c.env);
-                console.log(`삭제된 이미지 R2에서 제거 완료: ${filePath}`);
               } catch (error) {
                 console.error(`삭제된 이미지 R2 제거 실패: ${imageUrl}`, error);
               }
@@ -1364,8 +1340,9 @@ export const userCommunityApi = {
   async deleteComment(c: Context) {
     try {
       const { id } = c.req.param();
-      const body = await c.req.json();
-      const { password } = body;
+      
+      // query parameter에서 password 확인
+      const { password } = c.req.query();
 
       const prisma = createPrismaClient(c.env.DB);
 
@@ -1400,7 +1377,6 @@ export const userCommunityApi = {
       if (comment.content && comment.content.includes(c.env.R2_PUBLIC_URL)) {
         try {
           await deleteImagesFromR2(comment.content, c.env);
-          console.log('댓글 삭제 시 R2 이미지 삭제 완료');
         } catch (error) {
           console.error('댓글 삭제 시 R2 이미지 삭제 실패:', error);
         }
@@ -1435,15 +1411,13 @@ export const userCommunityApi = {
             );
             
             if (pointResult.success) {
-              console.log(`댓글 삭제 포인트 차감 성공: 사용자 ${comment.authorId}, 글자수 ${textLength}, ${pointResult.message}`);
+              // 포인트 차감 성공
             } else {
               console.error(`댓글 삭제 포인트 차감 실패: ${pointResult.message}`);
             }
           } catch (error) {
             console.error('댓글 삭제 포인트 차감 중 오류:', error);
           }
-        } else {
-          console.log(`댓글 글자수가 부족하여 포인트 차감 없음: 사용자 ${comment.authorId}, 댓글 ID ${comment.id}, 글자수 ${textLength}/20`);
         }
       }
 
@@ -1525,17 +1499,13 @@ export const userCommunityApi = {
             );
             
             if (pointResult.success) {
-              // console.log(`댓글 추천 포인트 지급 성공: 작성자 ${comment.authorId}, 추천자 ${user.id}, ${pointResult.message}`);
+              // 포인트 지급 성공
             } else {
               console.error(`댓글 추천 포인트 지급 실패: ${pointResult.message}`);
             }
           } catch (error) {
             console.error('댓글 추천 포인트 지급 중 오류:', error);
           }
-        } else if (!comment.authorId) {
-          // console.log(`익명 댓글이므로 포인트 지급 없음: 댓글 ID ${comment.id}, 추천자 ${user.id}`);
-        } else if (comment.authorId === user.id) {
-          // console.log(`자신의 댓글을 추천했으므로 포인트 지급 없음: 사용자 ${user.id}, 댓글 ID ${comment.id}`);
         }
 
         await prisma.$disconnect();
