@@ -448,14 +448,6 @@ export async function SajuAnalysisWithGemini(
                 controller.enqueue(new TextEncoder().encode(heartbeat));
               }
             }
-            
-            // 스트리밍 완료 후 DB에 저장
-            console.log("스트리밍 완료, 저장 시도:", {
-              userId: user.id,
-              hasSajuData: !!body.sajuData,
-              responseLength: fullResponse.length,
-              model
-            });
 
             // 분석 완료 시간 기록
             const analysisCompletedAt = new Date();
@@ -558,18 +550,6 @@ export async function SajuAnalysisWithGemini(
         },
         data: pointValidation.data // 구조화된 데이터 추가
       };
-
-      // 결과를 DB에 저장
-      console.log("저장 시도 전 데이터 확인:", {
-        userId: user.id,
-        hasSajuData: !!body.sajuData,
-        sajuDataType: typeof body.sajuData,
-        userPrompt: body.userPrompt?.substring(0, 50) + "...",
-        systemPrompt: body.systemPrompt?.substring(0, 50) + "...",
-        textLength: text.length,
-        model,
-        analysisDuration: analysisCompletedAt.getTime() - analysisStartedAt.getTime()
-      });
 
       // 제목 생성: "[분석유형] 이름님" 형식
       let title = `[${analysisType}]`;
