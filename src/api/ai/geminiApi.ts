@@ -15,6 +15,9 @@ interface SajuAnalysisRequest {
   systemPrompt?: string; // systemInstruction을 간편하게 설정하기 위한 필드
   conversationHistory?: Content[]; // 프론트에서 관리하는 전체 대화 기록
   sajuData?: SajuData; // 사주 정보 (첫 대화에서만 전송)
+  analysisType?: string;
+  i18n?: string; // 언어 설정 (ko, en, ja, zh, vi 등)
+  timezone?: string; // 시간대 (Asia/Seoul, America/New_York 등)
   stream?: boolean; // 스트리밍 응답 여부
   generationConfig?: GenerationConfig; // 생성 관련 고급 설정
   safetySettings?: SafetySetting[]; // 안전 관련 고급 설정
@@ -136,9 +139,20 @@ interface GenerationConfig {
 function buildGeminiPayload(body: SajuAnalysisRequest): any {
   const contents: Content[] = [];
 
-  // 1. 시스템 프롬프트 구성
-  const systemPrompt = body.systemPrompt || 
+  // 1. 시스템 프롬프트 구성 (언어 설정 반영)
+  let systemPrompt = body.systemPrompt || 
     "당신은 전문 사주명리학자입니다. 사용자의 사주 정보를 바탕으로 상세하고 친절하게 운세를 분석해주세요.";
+  
+  // 언어별 기본 시스템 프롬프트 설정
+  if (body.i18n && body.i18n !== 'ko') {
+    const languagePrompts: { [key: string]: string } = {
+      'en': "You are a professional fortune teller and astrologer. Please provide detailed and friendly fortune analysis based on the user's birth chart information.",
+      'ja': "あなたは専門の占い師・占星術師です。ユーザーの生年月日情報に基づいて、詳細で親切な運勢分析を提供してください。",
+      'zh': "您是一位专业的算命师和占星师。请根据用户的生辰八字信息提供详细而友好的运势分析。",
+      'vi': "Bạn là một nhà chiêm tinh và thầy bói chuyên nghiệp. Vui lòng cung cấp phân tích vận mệnh chi tiết và thân thiện dựa trên thông tin lá số tử vi của người dùng."
+    };
+    systemPrompt = body.systemPrompt || languagePrompts[body.i18n] || systemPrompt;
+  }
 
   // 2. 사주 데이터가 있으면 첫 번째 메시지로 추가
   if (body.sajuData) {
@@ -207,6 +221,118 @@ function buildGeminiPayload(body: SajuAnalysisRequest): any {
   }
 
   return payload;
+}
+
+/**
+ * 사주 분석 결과를 DB에 저장하는 함수
+ */
+async function saveSajuAnalysis(
+  db: any,
+  userId: number,
+  analysisType: string,
+  title: string,
+  sajuData: any,
+  userPrompt: string,
+  systemPrompt: string | undefined,
+  aiResponse: string,
+  modelUsed: string,
+  pointsSpent: number,
+  i18n?: string,
+  timezone?: string
+) {
+  try {
+    // sajuData에서 생년월일 정보만 추출
+    let birthData = null;
+    if (sajuData) {
+      if (sajuData.정보 && sajuData.정보.생년월일) {
+        birthData = sajuData.정보.생년월일;
+      } else if (sajuData.person1 && sajuData.person1.정보 && sajuData.person1.정보.생년월일) {
+        // 궁합 분석의 경우 두 사람의 생년월일 정보
+        birthData = {
+          person1: sajuData.person1.정보.생년월일,
+          person2: sajuData.person2?.정보?.생년월일 || null
+        };
+      }
+    }
+
+    console.log("사주 분석 결과 저장 시작:", {
+      userId,
+      analysisType,
+      title,
+      userPrompt: userPrompt.substring(0, 100) + "...",
+      aiResponse: aiResponse.substring(0, 100) + "...",
+      modelUsed,
+      pointsSpent,
+      birthDataSaved: !!birthData
+    });
+
+    // 시간대 변환을 위한 현재 시간 생성
+    const now = new Date();
+    let createdAt, updatedAt;
+    
+    if (timezone) {
+      try {
+        // 사용자 시간대로 변환
+        const userTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
+        createdAt = userTime.toISOString();
+        updatedAt = userTime.toISOString();
+      } catch (error) {
+        console.error("시간대 변환 오류:", error);
+        createdAt = now.toISOString();
+        updatedAt = now.toISOString();
+      }
+    } else {
+      createdAt = now.toISOString();
+      updatedAt = now.toISOString();
+    }
+
+    const result = await db.prepare(`
+      INSERT INTO saju_analyses (
+        user_id, analysis_type, title, sajuData, user_prompt, 
+        system_prompt, ai_response, model_used, points_spent, 
+        created_at, updated_at, i18n, timezone
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      userId,
+      analysisType,
+      title,
+      JSON.stringify(birthData),
+      userPrompt,
+      systemPrompt || null,
+      aiResponse,
+      modelUsed,
+      pointsSpent,
+      createdAt,
+      updatedAt,
+      i18n || 'ko',
+      timezone || 'Asia/Seoul'
+    ).run();
+
+    console.log("사주 분석 결과 저장 성공:", {
+      analysisId: result.meta.last_row_id,
+      changes: result.meta.changes
+    });
+
+    return {
+      success: true,
+      analysisId: result.meta.last_row_id
+    };
+  } catch (error) {
+    console.error("사주 분석 결과 저장 실패:", error);
+    console.error("저장 시도한 데이터:", {
+      userId,
+      analysisType,
+      title,
+      userPromptLength: userPrompt.length,
+      aiResponseLength: aiResponse.length,
+      modelUsed,
+      pointsSpent
+    });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
+    };
+  }
 }
 
 // 재시도 로직 함수
@@ -288,6 +414,9 @@ export async function SajuAnalysisWithGemini(
   try {
     const body: SajuAnalysisRequest = await c.req.json();
     const model = body.model || "gemini-2.5-pro";
+    const analysisType = body.analysisType || 'general'; // 기본값을 general로 설정
+    const i18n = body.i18n || 'ko'; // 기본 언어는 한국어
+    const timezone = body.timezone || 'Asia/Seoul'; // 기본 시간대는 한국
 
     // 1. Gemini API 요청 페이로드 생성
     const geminiPayload = buildGeminiPayload(body);
@@ -306,12 +435,19 @@ export async function SajuAnalysisWithGemini(
         throw new Error("스트리밍 응답을 받을 수 없습니다.");
       }
       
+      // 스트리밍 응답을 수집하기 위한 변수
+      let fullResponse = "";
+      let analysisId: number | null = null;
+
       // ReadableStream 생성
       const stream = new ReadableStream({
         async start(controller) {
           try {
             for await (const chunk of streamingResp) {
               if (chunk.text) {
+                // 전체 응답 수집
+                fullResponse += chunk.text;
+                
                 // SSE 형식으로 데이터 전송
                 const data = `data: ${JSON.stringify({ text: chunk.text })}\n\n`;
                 controller.enqueue(new TextEncoder().encode(data));
@@ -327,6 +463,47 @@ export async function SajuAnalysisWithGemini(
                 controller.enqueue(new TextEncoder().encode(heartbeat));
               }
             }
+            
+            // 스트리밍 완료 후 DB에 저장
+            console.log("스트리밍 완료, 저장 시도:", {
+              userId: user.id,
+              hasSajuData: !!body.sajuData,
+              responseLength: fullResponse.length,
+              model
+            });
+
+            // 제목 생성: "[분석유형] 이름님" 형식
+            let title = `[${analysisType}]`;
+            if (body.sajuData) {
+              if (body.sajuData.정보 && body.sajuData.정보.생년월일 && body.sajuData.정보.생년월일.이름) {
+                title += ` ${body.sajuData.정보.생년월일.이름}님`;
+              } else if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+                title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+              }
+            }
+
+            const saveResult = await saveSajuAnalysis(
+              c.env.DB,
+              user.id,
+              analysisType,
+              title,
+              body.sajuData || {},
+              body.userPrompt,
+              body.systemPrompt,
+              fullResponse,
+              model,
+              1000,
+              i18n,
+              timezone
+            );
+
+            if (saveResult.success) {
+              analysisId = saveResult.analysisId;
+              console.log("스트리밍 응답 저장 성공:", { analysisId });
+            } else {
+              console.error("스트리밍 응답 저장 실패:", saveResult.error);
+            }
+
             // 스트림 종료
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
             controller.close();
@@ -389,6 +566,48 @@ export async function SajuAnalysisWithGemini(
         data: pointValidation.data // 구조화된 데이터 추가
       };
 
+      // 결과를 DB에 저장
+      console.log("저장 시도 전 데이터 확인:", {
+        userId: user.id,
+        hasSajuData: !!body.sajuData,
+        sajuDataType: typeof body.sajuData,
+        userPrompt: body.userPrompt?.substring(0, 50) + "...",
+        systemPrompt: body.systemPrompt?.substring(0, 50) + "...",
+        textLength: text.length,
+        model
+      });
+
+      // 제목 생성: "[분석유형] 이름님" 형식
+      let title = `[${analysisType}]`;
+      if (body.sajuData) {
+        if (body.sajuData.정보 && body.sajuData.정보.생년월일 && body.sajuData.정보.생년월일.이름) {
+          title += ` ${body.sajuData.정보.생년월일.이름}님`;
+        } else if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+          title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+        }
+      }
+
+      const saveResult = await saveSajuAnalysis(
+        c.env.DB,
+        user.id,
+        analysisType,
+        title,
+        body.sajuData || {},
+        body.userPrompt,
+        body.systemPrompt,
+        text,
+        model,
+        1000,
+        i18n,
+        timezone
+      );
+
+      if (saveResult.success) {
+        (response as any).analysis_id = saveResult.analysisId;
+      } else {
+        console.error("사주 분석 결과 저장 실패:", saveResult.error);
+      }
+
       return c.json(response, 200);
     }
   } catch (error) {
@@ -448,6 +667,9 @@ export async function SajuCompatibilityAnalysis(
   try {
     const body: SajuAnalysisRequest = await c.req.json();
     const model = body.model || "gemini-2.5-flash";
+    const analysisType = body.analysisType || 'compatibility'; // 궁합 분석의 기본값
+    const i18n = body.i18n || 'ko'; // 기본 언어는 한국어
+    const timezone = body.timezone || 'Asia/Seoul'; // 기본 시간대는 한국
 
     // 궁합 데이터 검증
     if (!body.sajuData || !body.sajuData.person1 || !body.sajuData.person2) {
@@ -540,12 +762,19 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
         throw new Error("궁합 분석 스트리밍 응답을 받을 수 없습니다.");
       }
       
+      // 스트리밍 응답을 수집하기 위한 변수
+      let fullResponse = "";
+      let analysisId: number | null = null;
+
       // ReadableStream 생성
       const stream = new ReadableStream({
         async start(controller) {
           try {
             for await (const chunk of streamingResp) {
               if (chunk.text) {
+                // 전체 응답 수집
+                fullResponse += chunk.text;
+                
                 // SSE 형식으로 데이터 전송
                 const data = `data: ${JSON.stringify({ text: chunk.text })}\n\n`;
                 controller.enqueue(new TextEncoder().encode(data));
@@ -561,6 +790,45 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
                 controller.enqueue(new TextEncoder().encode(heartbeat));
               }
             }
+            
+            // 스트리밍 완료 후 DB에 저장
+            console.log("궁합 분석 스트리밍 완료, 저장 시도:", {
+              userId: user.id,
+              hasSajuData: !!body.sajuData,
+              responseLength: fullResponse.length,
+              model
+            });
+
+            // 제목 생성: "[분석유형] 이름님" 형식
+            let title = `[${analysisType}]`;
+            if (body.sajuData) {
+              if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+                title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+              }
+            }
+
+            const saveResult = await saveSajuAnalysis(
+              c.env.DB,
+              user.id,
+              analysisType,
+              title,
+              body.sajuData || {},
+              body.userPrompt,
+              body.systemPrompt,
+              fullResponse,
+              model,
+              1500,
+              i18n,
+              timezone
+            );
+
+            if (saveResult.success) {
+              analysisId = saveResult.analysisId;
+              console.log("궁합 분석 스트리밍 응답 저장 성공:", { analysisId });
+            } else {
+              console.error("궁합 분석 스트리밍 응답 저장 실패:", saveResult.error);
+            }
+
             // 스트림 종료
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
             controller.close();
@@ -624,6 +892,46 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
         data: pointValidation.data
       };
 
+      // 결과를 DB에 저장
+      console.log("궁합 분석 저장 시도 전 데이터 확인:", {
+        userId: user.id,
+        hasSajuData: !!body.sajuData,
+        sajuDataType: typeof body.sajuData,
+        userPrompt: body.userPrompt?.substring(0, 50) + "...",
+        systemPrompt: body.systemPrompt?.substring(0, 50) + "...",
+        textLength: text.length,
+        model
+      });
+
+      // 제목 생성: "[분석유형] 이름님" 형식
+      let title = `[${analysisType}]`;
+      if (body.sajuData) {
+        if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+          title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+        }
+      }
+
+      const saveResult = await saveSajuAnalysis(
+        c.env.DB,
+        user.id,
+        analysisType,
+        title,
+        body.sajuData || {},
+        body.userPrompt,
+        body.systemPrompt,
+        text,
+        model,
+        1500,
+        i18n,
+        timezone
+      );
+
+      if (saveResult.success) {
+        (response as any).analysis_id = saveResult.analysisId;
+      } else {
+        console.error("궁합 분석 결과 저장 실패:", saveResult.error);
+      }
+
       return c.json(response, 200);
     }
   } catch (error) {
@@ -645,6 +953,374 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
     return c.json(
       {
         error: "An error occurred while processing your compatibility analysis request.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 사용자의 사주 분석 결과 목록을 조회하는 API
+ */
+export async function getSajuAnalysisList(
+  c: Context
+): Promise<Response> {
+  const user = await getUserFromToken(c);
+  if (!user) {
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
+  }
+
+  try {
+    const { searchParams } = new URL(c.req.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const analysisType = searchParams.get('type'); // 'individual', 'compatibility', 또는 null (전체)
+    const isFavorite = searchParams.get('favorite'); // 'true', 'false', 또는 null (전체)
+    
+    const offset = (page - 1) * limit;
+
+    // 기본 쿼리
+    let query = `
+      SELECT 
+        id, analysis_type, title, user_prompt, ai_response, 
+        model_used, points_spent, is_favorite, created_at, updated_at
+      FROM saju_analyses 
+      WHERE user_id = ?
+    `;
+    const params: any[] = [user.id];
+
+    // 필터 조건 추가
+    if (analysisType) {
+      query += ` AND analysis_type = ?`;
+      params.push(analysisType);
+    }
+    
+    if (isFavorite === 'true') {
+      query += ` AND is_favorite = 1`;
+    } else if (isFavorite === 'false') {
+      query += ` AND is_favorite = 0`;
+    }
+
+    // 정렬 및 페이징
+    query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+
+    // 총 개수 조회
+    let countQuery = `
+      SELECT COUNT(*) as total 
+      FROM saju_analyses 
+      WHERE user_id = ?
+    `;
+    const countParams: any[] = [user.id];
+
+    if (analysisType) {
+      countQuery += ` AND analysis_type = ?`;
+      countParams.push(analysisType);
+    }
+    
+    if (isFavorite === 'true') {
+      countQuery += ` AND is_favorite = 1`;
+    } else if (isFavorite === 'false') {
+      countQuery += ` AND is_favorite = 0`;
+    }
+
+    const [analyses, totalCount] = await Promise.all([
+      c.env.DB.prepare(query).bind(...params).all(),
+      c.env.DB.prepare(countQuery).bind(...countParams).first()
+    ]);
+
+    const total = totalCount?.total || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // SQLite boolean 값을 JavaScript boolean으로 변환
+    const processedAnalyses = (analyses.results || []).map((analysis: any) => ({
+      ...analysis,
+      is_favorite: Boolean(analysis.is_favorite)
+    }));
+
+    console.log("분석 목록 조회 결과:", {
+      userId: user.id,
+      totalCount: total,
+      processedCount: processedAnalyses.length,
+      sampleFavorite: processedAnalyses[0]?.is_favorite
+    });
+
+    return c.json({
+      analyses: processedAnalyses,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    }, 200);
+
+  } catch (error) {
+    console.error("사주 분석 목록 조회 오류:", error);
+    return c.json(
+      {
+        error: "사주 분석 목록을 조회하는 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 특정 사주 분석 결과를 조회하는 API
+ */
+export async function getSajuAnalysisDetail(
+  c: Context
+): Promise<Response> {
+  const user = await getUserFromToken(c);
+  if (!user) {
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
+  }
+
+  try {
+    const analysisId = c.req.param('id');
+    if (!analysisId) {
+      return c.json({ error: "분석 ID가 필요합니다." }, 400);
+    }
+
+    const analysis = await c.env.DB.prepare(`
+      SELECT 
+        id, analysis_type, title, sajuData, user_prompt, 
+        system_prompt, ai_response, model_used, points_spent, 
+        is_favorite, created_at, updated_at, i18n, timezone
+      FROM saju_analyses 
+      WHERE id = ? AND user_id = ?
+    `).bind(analysisId, user.id).first();
+
+    if (!analysis) {
+      return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
+    }
+
+    // 사주 데이터를 JSON으로 파싱
+    let sajuData = null;
+    try {
+      sajuData = JSON.parse(analysis.sajuData);
+    } catch (e) {
+      console.error("사주 데이터 파싱 오류:", e);
+    }
+
+    // 시간대 변환을 위한 함수
+    function formatDateTime(dateTimeStr: string, timezone: string, i18n: string): string {
+      try {
+        const date = new Date(dateTimeStr);
+        const options: Intl.DateTimeFormatOptions = {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          timeZone: timezone
+        };
+        
+        const localeMap: { [key: string]: string } = {
+          'ko': 'ko-KR',
+          'en': 'en-US',
+          'ja': 'ja-JP',
+          'zh': 'zh-CN',
+          'vi': 'vi-VN'
+        };
+        
+        return date.toLocaleString(localeMap[i18n] || 'ko-KR', options);
+      } catch (error) {
+        console.error("날짜 포맷 오류:", error);
+        return dateTimeStr;
+      }
+    }
+
+    return c.json({
+      id: analysis.id,
+      analysis_type: analysis.analysis_type,
+      title: analysis.title,
+      user_prompt: analysis.user_prompt,
+      system_prompt: analysis.system_prompt,
+      ai_response: analysis.ai_response,
+      model_used: analysis.model_used,
+      points_spent: analysis.points_spent,
+      is_favorite: Boolean(analysis.is_favorite),
+      created_at: formatDateTime(analysis.created_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko'),
+      updated_at: formatDateTime(analysis.updated_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko'),
+      saju_data: sajuData,
+      i18n: analysis.i18n,
+      timezone: analysis.timezone
+    }, 200);
+
+  } catch (error) {
+    console.error("사주 분석 상세 조회 오류:", error);
+    return c.json(
+      {
+        error: "사주 분석 결과를 조회하는 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 사주 분석 결과의 즐겨찾기 상태를 토글하는 API
+ */
+export async function toggleSajuAnalysisFavorite(
+  c: Context
+): Promise<Response> {
+  const user = await getUserFromToken(c);
+  if (!user) {
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
+  }
+
+  try {
+    const analysisId = c.req.param('id');
+    if (!analysisId) {
+      return c.json({ error: "분석 ID가 필요합니다." }, 400);
+    }
+
+    // 현재 즐겨찾기 상태 확인
+    const current = await c.env.DB.prepare(`
+      SELECT is_favorite FROM saju_analyses 
+      WHERE id = ? AND user_id = ?
+    `).bind(analysisId, user.id).first();
+
+    if (!current) {
+      return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
+    }
+
+    // SQLite boolean 값을 JavaScript boolean으로 변환
+    const currentFavoriteState = Boolean(current.is_favorite);
+    console.log("현재 즐겨찾기 상태:", {
+      analysisId,
+      userId: user.id,
+      rawValue: current.is_favorite,
+      booleanValue: currentFavoriteState
+    });
+
+    // 즐겨찾기 상태 토글
+    const newFavoriteState = !currentFavoriteState;
+    
+    await c.env.DB.prepare(`
+      UPDATE saju_analyses 
+      SET is_favorite = ?, updated_at = datetime('now')
+      WHERE id = ? AND user_id = ?
+    `).bind(newFavoriteState ? 1 : 0, analysisId, user.id).run();
+
+    return c.json({
+      success: true,
+      is_favorite: newFavoriteState,
+      message: newFavoriteState ? "즐겨찾기에 추가되었습니다." : "즐겨찾기에서 제거되었습니다."
+    }, 200);
+
+  } catch (error) {
+    console.error("즐겨찾기 토글 오류:", error);
+    return c.json(
+      {
+        error: "즐겨찾기 상태를 변경하는 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 사주 분석 결과의 제목을 수정하는 API
+ */
+export async function updateSajuAnalysisTitle(
+  c: Context
+): Promise<Response> {
+  const user = await getUserFromToken(c);
+  if (!user) {
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
+  }
+
+  try {
+    const analysisId = c.req.param('id');
+    if (!analysisId) {
+      return c.json({ error: "분석 ID가 필요합니다." }, 400);
+    }
+
+    const body = await c.req.json();
+    const { title } = body;
+
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      return c.json({ error: "유효한 제목이 필요합니다." }, 400);
+    }
+
+    if (title.length > 100) {
+      return c.json({ error: "제목은 100자를 초과할 수 없습니다." }, 400);
+    }
+
+    const result = await c.env.DB.prepare(`
+      UPDATE saju_analyses 
+      SET title = ?, updated_at = datetime('now')
+      WHERE id = ? AND user_id = ?
+    `).bind(title.trim(), analysisId, user.id).run();
+
+    if (result.meta.changes === 0) {
+      return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
+    }
+
+    return c.json({
+      success: true,
+      title: title.trim(),
+      message: "제목이 수정되었습니다."
+    }, 200);
+
+  } catch (error) {
+    console.error("제목 수정 오류:", error);
+    return c.json(
+      {
+        error: "제목을 수정하는 중 오류가 발생했습니다.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 사주 분석 결과를 삭제하는 API
+ */
+export async function deleteSajuAnalysis(
+  c: Context
+): Promise<Response> {
+  const user = await getUserFromToken(c);
+  if (!user) {
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
+  }
+
+  try {
+    const analysisId = c.req.param('id');
+    if (!analysisId) {
+      return c.json({ error: "분석 ID가 필요합니다." }, 400);
+    }
+
+    const result = await c.env.DB.prepare(`
+      DELETE FROM saju_analyses 
+      WHERE id = ? AND user_id = ?
+    `).bind(analysisId, user.id).run();
+
+    if (result.meta.changes === 0) {
+      return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
+    }
+
+    return c.json({
+      success: true,
+      message: "분석 결과가 삭제되었습니다."
+    }, 200);
+
+  } catch (error) {
+    console.error("분석 결과 삭제 오류:", error);
+    return c.json(
+      {
+        error: "분석 결과를 삭제하는 중 오류가 발생했습니다.",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       500

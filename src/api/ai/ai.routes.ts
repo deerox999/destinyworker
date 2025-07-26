@@ -1,6 +1,14 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { FortuneTelling } from "./DestinyTellerApi";
-import { SajuAnalysisWithGemini, SajuCompatibilityAnalysis } from "./geminiApi";
+import { 
+  SajuAnalysisWithGemini, 
+  SajuCompatibilityAnalysis,
+  getSajuAnalysisList,
+  getSajuAnalysisDetail,
+  toggleSajuAnalysisFavorite,
+  updateSajuAnalysisTitle,
+  deleteSajuAnalysis
+} from "./geminiApi";
 import {
   RagAddDocuments,
   RagDelete,
@@ -103,6 +111,18 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
     }),
     sajuData: SajuDataSchema.optional().openapi({
       description: "사주 정보 (첫 대화에서만 전송)",
+    }),
+    analysisType: z.string().optional().openapi({
+      description: "분석 유형 (프론트엔드에서 관리)",
+      example: "career",
+    }),
+    i18n: z.string().optional().openapi({
+      description: "언어 설정",
+      example: "ko",
+    }),
+    timezone: z.string().optional().openapi({
+      description: "시간대 설정",
+      example: "Asia/Seoul",
     }),
     generationConfig: z
       .object({
@@ -694,6 +714,196 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
     },
   });
 
+  // 사주 분석 결과 관련 라우트들
+  const SajuAnalysisListRoute = createRoute({
+    method: "get",
+    path: "/saju-analyses",
+    summary: "사주 분석 결과 목록 조회",
+    description: "사용자의 사주 분석 결과 목록을 페이지네이션과 필터링과 함께 조회합니다.",
+    tags: ["AI - 사주 분석 결과"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      query: z.object({
+        page: z.coerce.number().int().min(1).default(1).optional(),
+        limit: z.coerce.number().int().min(1).max(50).default(10).optional(),
+        type: z.string().optional(),
+        favorite: z.enum(["true", "false"]).optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description: "분석 결과 목록 조회 성공",
+        content: {
+          "application/json": {
+            schema: z.object({
+              analyses: z.array(z.object({
+                id: z.number().int(),
+                analysis_type: z.string(),
+                title: z.string(),
+                user_prompt: z.string(),
+                ai_response: z.string(),
+                model_used: z.string(),
+                points_spent: z.number().int(),
+                is_favorite: z.boolean(),
+                created_at: z.string(),
+                updated_at: z.string(),
+                i18n: z.string().optional(),
+                timezone: z.string().optional(),
+              })),
+              pagination: PaginationResponseSchema,
+            }),
+          },
+        },
+      },
+      401: { description: "인증 실패" },
+      500: { description: "서버 오류" },
+    },
+  });
+
+  const SajuAnalysisDetailRoute = createRoute({
+    method: "get",
+    path: "/saju-analyses/{id}",
+    summary: "사주 분석 결과 상세 조회",
+    description: "특정 사주 분석 결과의 상세 정보를 조회합니다.",
+    tags: ["AI - 사주 분석 결과"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: z.object({
+        id: z.coerce.number().int().positive(),
+      }),
+    },
+    responses: {
+      200: {
+        description: "분석 결과 상세 조회 성공",
+        content: {
+          "application/json": {
+            schema: z.object({
+              id: z.number().int(),
+              analysis_type: z.string(),
+              title: z.string(),
+              saju_data: z.any(),
+              user_prompt: z.string(),
+              system_prompt: z.string().nullable(),
+              ai_response: z.string(),
+              model_used: z.string(),
+              points_spent: z.number().int(),
+              is_favorite: z.boolean(),
+              created_at: z.string(),
+              updated_at: z.string(),
+              i18n: z.string().optional(),
+              timezone: z.string().optional(),
+            }),
+          },
+        },
+      },
+      401: { description: "인증 실패" },
+      404: { description: "분석 결과를 찾을 수 없음" },
+      500: { description: "서버 오류" },
+    },
+  });
+
+  const SajuAnalysisFavoriteRoute = createRoute({
+    method: "patch",
+    path: "/saju-analyses/{id}/favorite",
+    summary: "사주 분석 결과 즐겨찾기 토글",
+    description: "사주 분석 결과의 즐겨찾기 상태를 토글합니다.",
+    tags: ["AI - 사주 분석 결과"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: z.object({
+        id: z.coerce.number().int().positive(),
+      }),
+    },
+    responses: {
+      200: {
+        description: "즐겨찾기 토글 성공",
+        content: {
+          "application/json": {
+            schema: z.object({
+              success: z.boolean(),
+              is_favorite: z.boolean(),
+              message: z.string(),
+            }),
+          },
+        },
+      },
+      401: { description: "인증 실패" },
+      404: { description: "분석 결과를 찾을 수 없음" },
+      500: { description: "서버 오류" },
+    },
+  });
+
+  const SajuAnalysisTitleRoute = createRoute({
+    method: "patch",
+    path: "/saju-analyses/{id}/title",
+    summary: "사주 분석 결과 제목 수정",
+    description: "사주 분석 결과의 제목을 수정합니다.",
+    tags: ["AI - 사주 분석 결과"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: z.object({
+        id: z.coerce.number().int().positive(),
+      }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              title: z.string().min(1).max(100),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "제목 수정 성공",
+        content: {
+          "application/json": {
+            schema: z.object({
+              success: z.boolean(),
+              title: z.string(),
+              message: z.string(),
+            }),
+          },
+        },
+      },
+      400: { description: "잘못된 요청" },
+      401: { description: "인증 실패" },
+      404: { description: "분석 결과를 찾을 수 없음" },
+      500: { description: "서버 오류" },
+    },
+  });
+
+  const SajuAnalysisDeleteRoute = createRoute({
+    method: "delete",
+    path: "/saju-analyses/{id}",
+    summary: "사주 분석 결과 삭제",
+    description: "사주 분석 결과를 삭제합니다.",
+    tags: ["AI - 사주 분석 결과"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: z.object({
+        id: z.coerce.number().int().positive(),
+      }),
+    },
+    responses: {
+      200: {
+        description: "삭제 성공",
+        content: {
+          "application/json": {
+            schema: z.object({
+              success: z.boolean(),
+              message: z.string(),
+            }),
+          },
+        },
+      },
+      401: { description: "인증 실패" },
+      404: { description: "분석 결과를 찾을 수 없음" },
+      500: { description: "서버 오류" },
+    },
+  });
+
   // 라우트 등록 (구체적인 경로를 먼저 등록)
   app.openapi(FortuneTellingRoute, FortuneTelling);
   app.openapi(SajuAnalysisWithGeminiRoute, SajuAnalysisWithGemini);
@@ -711,5 +921,10 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   app.openapi(SajuChatContinueRoute, SajuChat);
   app.openapi(SajuChatFullRoute, SajuChatFull);
   app.openapi(SajuChatDeleteRoute, SajuChatDelete);
+  app.openapi(SajuAnalysisListRoute, getSajuAnalysisList);
+  app.openapi(SajuAnalysisDetailRoute, getSajuAnalysisDetail);
+  app.openapi(SajuAnalysisFavoriteRoute, toggleSajuAnalysisFavorite);
+  app.openapi(SajuAnalysisTitleRoute, updateSajuAnalysisTitle);
+  app.openapi(SajuAnalysisDeleteRoute, deleteSajuAnalysis);
   return app;
 }

@@ -36,6 +36,7 @@ model User {
   aiUsageLogs AiUsageLog[] /// 관계: 한 사용자는 여러 AI 사용 기록을 가질 수 있음
   pushSubscriptions PushSubscription[] /// 관계: 한 사용자는 여러 푸시 구독을 가질 수 있음
   pointTransactions PointTransaction[] /// 관계: 한 사용자는 여러 포인트 거래 기록을 가질 수 있음
+  sajuAnalyses SajuAnalysis[] /// 관계: 한 사용자는 여러 사주 분석 결과를 가질 수 있음
   
   // 커뮤니티 관련 관계들
   posts        Post[]        /// 사용자가 작성한 게시글들
@@ -389,4 +390,28 @@ model PostTag {
   
   @@unique([postId, tagId]) /// 같은 게시글과 태그의 중복 연결 방지
   @@map("post_tags")
+} 
+
+/// 사주 분석 결과 테이블 - 사용자의 사주 분석 결과 저장
+model SajuAnalysis {
+  id              Int      @id @default(autoincrement()) /// 분석 고유 ID
+  userId          Int      @map("user_id") /// 분석 요청한 사용자 ID
+  analysisType    String   @map("analysis_type") /// 분석 유형 ('individual', 'compatibility')
+  title           String   /// 분석 제목 (사용자가 설정)
+  sajuData        String   /// 사주 데이터 (JSON 문자열)
+  userPrompt      String   @map("user_prompt") /// 사용자 질문
+  systemPrompt    String?  @map("system_prompt") /// 시스템 프롬프트
+  aiResponse      String   @map("ai_response") /// AI 응답 내용
+  modelUsed       String   @map("model_used") /// 사용된 AI 모델
+  pointsSpent     Int      @map("points_spent") /// 사용된 포인트
+  isFavorite      Boolean  @default(false) @map("is_favorite") /// 즐겨찾기 여부
+  createdAt       DateTime @default(now()) @map("created_at") /// 분석 생성 시간
+  updatedAt       DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 분석은 하나의 사용자에 속함
+  
+  @@index([userId, createdAt]) /// 사용자별 최신 분석 조회를 위한 인덱스
+  @@index([userId, isFavorite]) /// 즐겨찾기 조회를 위한 인덱스
+  @@map("saju_analyses")
 } 

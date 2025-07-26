@@ -24,7 +24,7 @@ app.use(
       "https://destiny-91f.pages.dev",
     ],
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     maxAge: 86400, // Access-Control-Max-Age
   })
 );
