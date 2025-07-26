@@ -258,32 +258,12 @@ async function saveSajuAnalysis(
       }
     }
 
-    // 시간대 변환을 위한 함수
-    function convertToUserTimezone(date: Date, timezone: string): string {
-      try {
-        const userTime = new Date(date.toLocaleString("en-US", { timeZone: timezone }));
-        return userTime.toISOString();
-      } catch (error) {
-        console.error("시간대 변환 오류:", error);
-        return date.toISOString();
-      }
-    }
-
-    // 시간대 변환을 위한 현재 시간 생성
+    // 시간은 UTC로 저장하고 프론트엔드에서 처리
     const now = new Date();
-    let createdAt, updatedAt, startedAt, completedAt;
-    
-    if (timezone) {
-      createdAt = convertToUserTimezone(now, timezone);
-      updatedAt = convertToUserTimezone(now, timezone);
-      startedAt = analysisStartedAt ? convertToUserTimezone(analysisStartedAt, timezone) : null;
-      completedAt = analysisCompletedAt ? convertToUserTimezone(analysisCompletedAt, timezone) : null;
-    } else {
-      createdAt = now.toISOString();
-      updatedAt = now.toISOString();
-      startedAt = analysisStartedAt ? analysisStartedAt.toISOString() : null;
-      completedAt = analysisCompletedAt ? analysisCompletedAt.toISOString() : null;
-    }
+    const createdAt = now.toISOString();
+    const updatedAt = now.toISOString();
+    const startedAt = analysisStartedAt ? analysisStartedAt.toISOString() : null;
+    const completedAt = analysisCompletedAt ? analysisCompletedAt.toISOString() : null;
 
     const result = await db.prepare(`
       INSERT INTO saju_analyses (
@@ -333,6 +313,8 @@ async function saveSajuAnalysis(
     };
   }
 }
+
+
 
 // 재시도 로직 함수
 async function retryGeminiCall(ai: GoogleGenAI, payload: any, maxRetries = 3) {
@@ -568,7 +550,6 @@ export async function SajuAnalysisWithGemini(
           timestamp: new Date().toISOString(),
           stream_enabled: false,
           response_type: "text",
-          analysis_duration_ms: analysisCompletedAt.getTime() - analysisStartedAt.getTime(),
         },
         points: {
           deducted: 1000,
@@ -908,7 +889,6 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
           response_type: "compatibility_analysis",
           person1_name: body.sajuData.person1.name,
           person2_name: body.sajuData.person2.name,
-          analysis_duration_ms: analysisCompletedAt.getTime() - analysisStartedAt.getTime(),
         },
         points: {
           deducted: 1500,
@@ -1007,8 +987,7 @@ export async function getSajuAnalysisList(
     let query = `
       SELECT 
         id, analysis_type, type, title, user_prompt, ai_response, 
-        model_used, points_spent, is_favorite, created_at, updated_at,
-        analysis_started_at, analysis_completed_at
+        model_used, points_spent, is_favorite, created_at, analysis_started_at, analysis_completed_at
       FROM saju_analyses 
       WHERE user_id = ?
     `;
@@ -1057,22 +1036,11 @@ export async function getSajuAnalysisList(
     const total = totalCount?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
-    // SQLite boolean 값을 JavaScript boolean으로 변환하고 분석 시간 정보 추가
-    const processedAnalyses = (analyses.results || []).map((analysis: any) => {
-      // 분석 소요 시간 계산
-      let analysisDuration = null;
-      if (analysis.analysis_started_at && analysis.analysis_completed_at) {
-        const startTime = new Date(analysis.analysis_started_at);
-        const endTime = new Date(analysis.analysis_completed_at);
-        analysisDuration = endTime.getTime() - startTime.getTime();
-      }
-
-      return {
-        ...analysis,
-        is_favorite: Boolean(analysis.is_favorite),
-        analysis_duration_ms: analysisDuration
-      };
-    });
+    // SQLite boolean 값을 JavaScript boolean으로 변환
+    const processedAnalyses = (analyses.results || []).map((analysis: any) => ({
+      ...analysis,
+      is_favorite: Boolean(analysis.is_favorite)
+    }));
 
 
 
@@ -1121,8 +1089,7 @@ export async function getSajuAnalysisDetail(
       SELECT 
         id, analysis_type, type, title, sajuData, user_prompt, 
         system_prompt, ai_response, model_used, points_spent, 
-        is_favorite, created_at, updated_at, i18n, timezone,
-        analysis_started_at, analysis_completed_at
+        is_favorite, i18n, timezone, analysis_started_at, analysis_completed_at
       FROM saju_analyses 
       WHERE id = ? AND user_id = ?
     `).bind(analysisId, user.id).first();
@@ -1139,43 +1106,6 @@ export async function getSajuAnalysisDetail(
       console.error("사주 데이터 파싱 오류:", e);
     }
 
-    // 시간대 변환을 위한 함수
-    function formatDateTime(dateTimeStr: string, timezone: string, i18n: string): string {
-      try {
-        const date = new Date(dateTimeStr);
-        const options: Intl.DateTimeFormatOptions = {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          timeZone: timezone
-        };
-        
-        const localeMap: { [key: string]: string } = {
-          'ko': 'ko-KR',
-          'en': 'en-US',
-          'ja': 'ja-JP',
-          'zh': 'zh-CN',
-          'vi': 'vi-VN'
-        };
-        
-        return date.toLocaleString(localeMap[i18n] || 'ko-KR', options);
-      } catch (error) {
-        console.error("날짜 포맷 오류:", error);
-        return dateTimeStr;
-      }
-    }
-
-    // 분석 소요 시간 계산
-    let analysisDuration = null;
-    if (analysis.analysis_started_at && analysis.analysis_completed_at) {
-      const startTime = new Date(analysis.analysis_started_at);
-      const endTime = new Date(analysis.analysis_completed_at);
-      analysisDuration = endTime.getTime() - startTime.getTime();
-    }
-
     return c.json({
       id: analysis.id,
       analysis_type: analysis.analysis_type,
@@ -1187,11 +1117,8 @@ export async function getSajuAnalysisDetail(
       model_used: analysis.model_used,
       points_spent: analysis.points_spent,
       is_favorite: Boolean(analysis.is_favorite),
-      created_at: formatDateTime(analysis.created_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko'),
-      updated_at: formatDateTime(analysis.updated_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko'),
-      analysis_started_at: analysis.analysis_started_at ? formatDateTime(analysis.analysis_started_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko') : null,
-      analysis_completed_at: analysis.analysis_completed_at ? formatDateTime(analysis.analysis_completed_at, analysis.timezone || 'Asia/Seoul', analysis.i18n || 'ko') : null,
-      analysis_duration_ms: analysisDuration,
+      analysis_started_at: analysis.analysis_started_at,
+      analysis_completed_at: analysis.analysis_completed_at,
       saju_data: sajuData,
       i18n: analysis.i18n,
       timezone: analysis.timezone
