@@ -1,6 +1,7 @@
 import { Context } from "hono";
 import { paginate } from "../../common/paginationUtils";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
+import { addPoints, deductPoints, getUserPoints, getPointTransactions } from "../../common/paymentUtils";
 
 // 영어 -> 한글 필드 변환 (사주 프로필용)
 const toKoreanFields = (profile: any) => ({
@@ -51,6 +52,7 @@ export async function getUsers(c: Context): Promise<any> {
           name: true,
           picture: true,
           role: true,
+          point: true,
           createdAt: true,
           updatedAt: true,
           _count: {
@@ -76,6 +78,7 @@ export async function getUsers(c: Context): Promise<any> {
         name: user.name,
         picture: user.picture,
         role: user.role,
+        point: user.point,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         profileCount: user._count.sajuProfiles,
@@ -115,7 +118,7 @@ export async function getUserProfiles(
 
     const prisma = createPrismaClient(c.env.DB);
 
-    // 사용자 존재 여부 확인
+    // 사용자 존재 여부 확인 (포인트 포함)
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -124,6 +127,7 @@ export async function getUserProfiles(
         name: true,
         picture: true,
         role: true,
+        point: true,
         createdAt: true,
       },
     });
@@ -149,6 +153,7 @@ export async function getUserProfiles(
         name: user.name,
         picture: user.picture,
         role: user.role,
+        point: user.point,
         createdAt: user.createdAt,
       },
       profiles: profiles.map(toKoreanFields),
@@ -724,5 +729,195 @@ export async function getAiUsageStatsForModel(
     );
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+/**
+ * 관리자가 사용자에게 포인트를 추가합니다.
+ */
+export async function addUserPoints(
+  c: Context
+): Promise<Response> {
+  try {
+    // 관리자 권한 체크
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const userId = Number(c.req.param("userId"));
+    if (!userId) {
+      return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
+    }
+
+    const body = await c.req.json();
+    const { amount, description } = body;
+
+    if (!amount || amount <= 0) {
+      return c.json({ error: "유효한 포인트 금액을 입력해주세요." }, 400);
+    }
+
+    if (!description) {
+      return c.json({ error: "포인트 추가 사유를 입력해주세요." }, 400);
+    }
+
+    const result = await addPoints(
+      c.env.DB,
+      userId,
+      amount,
+      `관리자 포인트 추가: ${description}`,
+      `admin_add_${Date.now()}`
+    );
+
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: result.message,
+        newPoints: result.newPoints,
+      });
+    } else {
+      return c.json({ error: result.message }, 400);
+    }
+  } catch (error) {
+    return c.json(
+      {
+        error: "포인트 추가 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 관리자가 사용자의 포인트를 차감합니다.
+ */
+export async function deductUserPoints(
+  c: Context
+): Promise<Response> {
+  try {
+    // 관리자 권한 체크
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const userId = Number(c.req.param("userId"));
+    if (!userId) {
+      return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
+    }
+
+    const body = await c.req.json();
+    const { amount, description } = body;
+
+    if (!amount || amount <= 0) {
+      return c.json({ error: "유효한 포인트 금액을 입력해주세요." }, 400);
+    }
+
+    if (!description) {
+      return c.json({ error: "포인트 차감 사유를 입력해주세요." }, 400);
+    }
+
+    const result = await deductPoints(
+      c.env.DB,
+      userId,
+      amount,
+      `관리자 포인트 차감: ${description}`,
+      `admin_deduct_${Date.now()}`
+    );
+
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: result.message,
+        remainingPoints: result.remainingPoints,
+      });
+    } else {
+      return c.json({ error: result.message }, 400);
+    }
+  } catch (error) {
+    return c.json(
+      {
+        error: "포인트 차감 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 관리자가 사용자의 현재 포인트를 조회합니다.
+ */
+export async function getUserCurrentPoints(
+  c: Context
+): Promise<Response> {
+  try {
+    // 관리자 권한 체크
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const userId = Number(c.req.param("userId"));
+    if (!userId) {
+      return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
+    }
+
+    const currentPoints = await getUserPoints(c.env.DB, userId);
+
+    return c.json({
+      success: true,
+      userId,
+      currentPoints,
+    });
+  } catch (error) {
+    return c.json(
+      {
+        error: "포인트 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 관리자가 사용자의 포인트 거래 내역을 조회합니다.
+ */
+export async function getUserPointTransactions(
+  c: Context
+): Promise<Response> {
+  try {
+    // 관리자 권한 체크
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const userId = Number(c.req.param("userId"));
+    if (!userId) {
+      return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
+    }
+
+    const page = parseInt(c.req.query("page") || "1");
+    const limit = parseInt(c.req.query("limit") || "20");
+    const offset = (page - 1) * limit;
+
+    const transactions = await getPointTransactions(c.env.DB, userId, limit, offset);
+
+    return c.json({
+      success: true,
+      userId,
+      transactions,
+      pagination: {
+        currentPage: page,
+        pageSize: limit,
+      },
+    });
+  } catch (error) {
+    return c.json(
+      {
+        error: "포인트 거래 내역 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
   }
 }

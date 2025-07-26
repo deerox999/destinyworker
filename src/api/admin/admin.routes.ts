@@ -8,6 +8,10 @@ import {
   getLoginHistory,
   getUserProfiles,
   getUsers,
+  addUserPoints,
+  deductUserPoints,
+  getUserCurrentPoints,
+  getUserPointTransactions,
 } from "./adminApi";
 
 import { MiddlewareHandler } from "hono";
@@ -93,6 +97,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                   name: z.string().openapi({ example: "홍길동" }),
                   picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
                   role: z.string().openapi({ example: "user" }),
+                  point: z.number().int().openapi({ example: 1000 }),
                   createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
                   updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
                   profileCount: z.number().int().openapi({ example: 2 }),
@@ -128,6 +133,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                 name: z.string().openapi({ example: "홍길동" }),
                 picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
                 role: z.string().openapi({ example: "user" }),
+                point: z.number().int().openapi({ example: 1000 }),
                 createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
               }).openapi({ type: 'object' }),
               profiles: z.array(z.any().openapi({ type: 'object' })).openapi({ example: [], type: 'array' }), // toKoreanFields 스키마가 복잡하므로 any로 처리
@@ -370,6 +376,154 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
     },
   });
 
+  // 포인트 관련 스키마
+  const PointAmountSchema = z.object({
+    amount: z.number().int().positive().openapi({
+      description: "포인트 금액",
+      example: 1000,
+    }),
+    description: z.string().min(1).openapi({
+      description: "포인트 추가/차감 사유",
+      example: "이벤트 보상",
+    }),
+  });
+
+  const addUserPointsRoute = createRoute({
+    method: "post",
+    path: "/users/{userId}/points/add",
+    summary: "[Admin] 사용자 포인트 추가",
+    description: "관리자가 특정 사용자에게 포인트를 추가합니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: UserIdParamSchema,
+      body: {
+        content: {
+          "application/json": {
+            schema: PointAmountSchema,
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "포인트 추가 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              message: z.string().openapi({ example: "포인트가 성공적으로 증가되었습니다." }),
+              newPoints: z.number().int().openapi({ example: 2000 }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      400: { description: "잘못된 요청 (금액 또는 사유 누락)" },
+      403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
+  const deductUserPointsRoute = createRoute({
+    method: "post",
+    path: "/users/{userId}/points/deduct",
+    summary: "[Admin] 사용자 포인트 차감",
+    description: "관리자가 특정 사용자의 포인트를 차감합니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: UserIdParamSchema,
+      body: {
+        content: {
+          "application/json": {
+            schema: PointAmountSchema,
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "포인트 차감 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              message: z.string().openapi({ example: "포인트가 성공적으로 차감되었습니다." }),
+              remainingPoints: z.number().int().openapi({ example: 500 }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      400: { description: "잘못된 요청 또는 포인트 부족" },
+      403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
+  const getUserCurrentPointsRoute = createRoute({
+    method: "get",
+    path: "/users/{userId}/points",
+    summary: "[Admin] 사용자 현재 포인트 조회",
+    description: "관리자가 특정 사용자의 현재 포인트를 조회합니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: UserIdParamSchema,
+    },
+    responses: {
+      200: {
+        description: "포인트 조회 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              userId: z.number().int().openapi({ example: 1 }),
+              currentPoints: z.number().int().openapi({ example: 1000 }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      400: { description: "잘못된 사용자 ID입니다." },
+      403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
+  const getUserPointTransactionsRoute = createRoute({
+    method: "get",
+    path: "/users/{userId}/points/transactions",
+    summary: "[Admin] 사용자 포인트 거래 내역 조회",
+    description: "관리자가 특정 사용자의 포인트 거래 내역을 페이지네이션하여 조회합니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: UserIdParamSchema,
+      query: PaginationQuerySchema,
+    },
+    responses: {
+      200: {
+        description: "거래 내역 조회 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              userId: z.number().int().openapi({ example: 1 }),
+              transactions: z.array(
+                z.object({
+                  id: z.number().int().openapi({ example: 1 }),
+                  amount: z.number().int().openapi({ example: 1000 }),
+                  description: z.string().openapi({ example: "관리자 포인트 추가: 이벤트 보상" }),
+                  type: z.string().openapi({ example: "CREDIT" }),
+                  reference: z.string().nullable().openapi({ example: "admin_add_1234567890" }),
+                  created_at: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                }).openapi({ type: 'object' })
+              ),
+              pagination: z.object({
+                currentPage: z.number().int().openapi({ example: 1 }),
+                pageSize: z.number().int().openapi({ example: 20 }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      400: { description: "잘못된 사용자 ID입니다." },
+      403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
   // 라우트 등록
   app.openapi(getAdminStatsRoute, (c) => getAdminStats(c));
   app.openapi(getUsersRoute, (c) => getUsers(c)); // 안됨
@@ -379,5 +533,12 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   app.openapi(getAiUsageStatsForModelRoute, (c) => getAiUsageStatsForModel(c)); // 안됨
   app.openapi(getAiUsageStatsByUserRoute, (c) => getAiUsageStatsByUser(c)); // 안됨
   app.openapi(getAiUsageLogsForUserRoute, (c) => getAiUsageLogsForUser(c)); // 안됨
+  
+  // 포인트 관련 라우트
+  app.openapi(addUserPointsRoute, (c) => addUserPoints(c));
+  app.openapi(deductUserPointsRoute, (c) => deductUserPoints(c));
+  app.openapi(getUserCurrentPointsRoute, (c) => getUserCurrentPoints(c));
+  app.openapi(getUserPointTransactionsRoute, (c) => getUserPointTransactions(c));
+  
   return app;
 }

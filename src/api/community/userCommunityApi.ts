@@ -1016,6 +1016,31 @@ export const userCommunityApi = {
           data: { likeCount: { increment: 1 } }
         });
 
+        // 게시글 작성자에게 포인트 지급 (익명 게시글 제외, 자신이 추천한 경우 제외)
+        if (post.authorId && post.authorId !== user.id) {
+          try {
+            const pointResult = await addPoints(
+              c.env.DB,
+              post.authorId,
+              100, // 게시글 추천 받을 시 100포인트 증가
+              "게시글 추천 받음",
+              `post_like_${post.id}_${user.id}`
+            );
+            
+            if (pointResult.success) {
+              // console.log(`게시글 추천 포인트 지급 성공: 작성자 ${post.authorId}, 추천자 ${user.id}, ${pointResult.message}`);
+            } else {
+              console.error(`게시글 추천 포인트 지급 실패: ${pointResult.message}`);
+            }
+          } catch (error) {
+            console.error('게시글 추천 포인트 지급 중 오류:', error);
+          }
+        } else if (!post.authorId) {
+          // console.log(`익명 게시글이므로 포인트 지급 없음: 게시글 ID ${post.id}, 추천자 ${user.id}`);
+        } else if (post.authorId === user.id) {
+          // console.log(`자신의 게시글을 추천했으므로 포인트 지급 없음: 사용자 ${user.id}, 게시글 ID ${post.id}`);
+        }
+
         await prisma.$disconnect();
 
         return c.json({
@@ -1487,6 +1512,31 @@ export const userCommunityApi = {
             userId: user.id
           }
         });
+
+        // 댓글 작성자에게 포인트 지급 (익명 댓글 제외, 자신이 추천한 경우 제외)
+        if (comment.authorId && comment.authorId !== user.id) {
+          try {
+            const pointResult = await addPoints(
+              c.env.DB,
+              comment.authorId,
+              50, // 댓글 추천 받을 시 50포인트 증가
+              "댓글 추천 받음",
+              `comment_like_${comment.id}_${user.id}`
+            );
+            
+            if (pointResult.success) {
+              // console.log(`댓글 추천 포인트 지급 성공: 작성자 ${comment.authorId}, 추천자 ${user.id}, ${pointResult.message}`);
+            } else {
+              console.error(`댓글 추천 포인트 지급 실패: ${pointResult.message}`);
+            }
+          } catch (error) {
+            console.error('댓글 추천 포인트 지급 중 오류:', error);
+          }
+        } else if (!comment.authorId) {
+          // console.log(`익명 댓글이므로 포인트 지급 없음: 댓글 ID ${comment.id}, 추천자 ${user.id}`);
+        } else if (comment.authorId === user.id) {
+          // console.log(`자신의 댓글을 추천했으므로 포인트 지급 없음: 사용자 ${user.id}, 댓글 ID ${comment.id}`);
+        }
 
         await prisma.$disconnect();
 
