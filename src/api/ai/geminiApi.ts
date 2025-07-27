@@ -7,7 +7,7 @@ import { usePoints, refundPoints, updatePointTransactionAnalysisId } from "../..
 const POINT_COSTS = {
   SAJU_ANALYSIS: 1000,
   COMPATIBILITY_ANALYSIS: 1500,
-  YEARLY_FORTUNE: 0, // 무료 서비스
+  YEARLY_FORTUNE: 200, // 연간운세 서비스
 } as const;
 
 // Gemini API와 통신하기 위한 환경 변수 확장
@@ -992,7 +992,24 @@ export async function YearlyFortuneAnalysis(
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
 
-  // 무료 서비스이므로 포인트 검증/차감 없음
+  // 포인트 검증 (연간운세 비용: 200포인트)
+  const reference = `yearly_fortune_analysis_${Date.now()}`;
+  const pointValidation = await usePoints(
+    c.env.DB,
+    user.id,
+    POINT_COSTS.YEARLY_FORTUNE,
+    "연간운세 분석 서비스 이용",
+    reference,
+    undefined // analysisId는 나중에 설정
+  );
+
+  if (!pointValidation.success) {
+    return c.json({ 
+      error: "포인트가 부족합니다.", 
+      details: pointValidation.message,
+      data: pointValidation.data
+    }, 402);
+  }
 
   try {
     const body: SajuAnalysisRequest = await c.req.json();
@@ -1076,7 +1093,7 @@ export async function YearlyFortuneAnalysis(
               body.systemPrompt,
               fullResponse,
               model,
-              0, // 무료 서비스이므로 포인트 차감 없음
+              200, // 연간운세 서비스 비용
               i18n,
               timezone,
               analysisStartedAt,
@@ -1085,6 +1102,16 @@ export async function YearlyFortuneAnalysis(
 
             if (saveResult.success) {
               analysisId = saveResult.analysisId;
+              
+              // 포인트 거래에 analysis_id 연결
+              if (analysisId) {
+                await updatePointTransactionAnalysisId(
+                  c.env.DB,
+                  user.id,
+                  reference,
+                  analysisId
+                );
+              }
             } else {
               console.error("연간운세 스트리밍 응답 저장 실패:", saveResult.error);
             }
@@ -1110,12 +1137,17 @@ export async function YearlyFortuneAnalysis(
       headers.set("Cache-Control", "no-cache");
       headers.set("Connection", "keep-alive");
       headers.set("X-AI-Model", model);
-      headers.set("X-Points-Deducted", "0"); // 무료 서비스
-      headers.set("X-Service-Type", "free");
+      headers.set("X-Points-Deducted", "200"); // 연간운세 서비스
+      headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
+      headers.set("X-Service-Type", "paid");
       headers.set("X-Fortune-Type", fortuneType);
       // 타임아웃 정보 추가
       headers.set("X-Timeout-Seconds", "120"); // 45에서 120으로 변경
       headers.set("X-Connection-Keep-Alive", "true");
+      // 구조화된 데이터를 JSON으로 헤더에 추가
+      if (pointValidation.data) {
+        headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
+      }
 
       return new Response(stream, {
         status: 200,
@@ -1142,14 +1174,15 @@ export async function YearlyFortuneAnalysis(
           timestamp: new Date().toISOString(),
           stream_enabled: false,
           response_type: "yearly_fortune",
-          service_type: "free",
+          service_type: "paid",
           fortune_type: fortuneType
         },
         points: {
-          deducted: 0,
-          remaining: null, // 무료 서비스이므로 포인트 정보 없음
-          message: "무료 서비스입니다."
-        }
+          deducted: 200,
+          remaining: pointValidation.remainingPoints,
+          message: pointValidation.message
+        },
+        data: pointValidation.data
       };
 
       // 제목 생성: "[운세유형] 이름님" 형식
@@ -1173,7 +1206,7 @@ export async function YearlyFortuneAnalysis(
         body.systemPrompt,
         text,
         model,
-        0, // 무료 서비스이므로 포인트 차감 없음
+        200, // 연간운세 서비스 비용
         i18n,
         timezone,
         analysisStartedAt,
@@ -1182,6 +1215,16 @@ export async function YearlyFortuneAnalysis(
 
       if (saveResult.success) {
         (response as any).analysis_id = saveResult.analysisId;
+        
+        // 포인트 거래에 analysis_id 연결
+        if (saveResult.analysisId) {
+          await updatePointTransactionAnalysisId(
+            c.env.DB,
+            user.id,
+            reference,
+            saveResult.analysisId
+          );
+        }
       } else {
         console.error("연간운세 분석 결과 저장 실패:", saveResult.error);
       }
@@ -1190,6 +1233,21 @@ export async function YearlyFortuneAnalysis(
     }
   } catch (error) {
     console.error("Gemini 연간운세 분석 API 오류:", error);
+    
+    // API 호출 실패 시 포인트 환불 (실제 차감된 포인트만)
+    if (pointValidation.success && pointValidation.data && !pointValidation.data.isAdmin) {
+      try {
+        await refundPoints(
+          c.env.DB,
+          user.id,
+          POINT_COSTS.YEARLY_FORTUNE,
+          "연간운세 분석 서비스 실패로 인한 포인트 환불",
+          `yearly_fortune_analysis_refund_${Date.now()}`
+        );
+      } catch (refundError) {
+        console.error("포인트 환불 실패:", refundError);
+      }
+    }
     
     return c.json(
       {
