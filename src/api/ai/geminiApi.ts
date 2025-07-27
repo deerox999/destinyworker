@@ -23,6 +23,7 @@ interface SajuAnalysisRequest {
   safetySettings?: SafetySetting[]; // 안전 관련 고급 설정
   tools?: Tool[]; // 함수 호출 기능
   toolConfig?: ToolConfig;
+  fortuneType?: string; // 'this_year', 'next_year', 'both'
 }
 
 // 사주 정보 타입 정의 (방대한 계산된 데이터이므로 any로 처리)
@@ -940,6 +941,240 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       },
       500
     );
+  }
+}
+
+/**
+ * 올해운세/내년운세 분석 API (무료 서비스)
+ */
+export async function YearlyFortuneAnalysis(
+  c: Context
+): Promise<Response> {
+  const user = await getUserFromToken(c);
+  if (!user) {
+    return c.json({ error: "Unauthorized: Invalid token" }, 401);
+  }
+
+  try {
+    const body: SajuAnalysisRequest = await c.req.json();
+    const model = "gemini-2.5-flash"; // 하드코딩
+    const analysisType = body.analysisType || 'yearly_fortune'; // 프론트에서 정의한 분석 유형
+    const fortuneType = body.fortuneType || 'this_year'; // 'this_year', 'next_year', 'both'
+    const type = 'yearly_fortune'; // 표준화된 분석 유형
+    const i18n = body.i18n || 'ko'; // 기본 언어는 한국어
+    const timezone = body.timezone || 'Asia/Seoul'; // 기본 시간대는 한국
+
+    // 분석 시작 시간 기록
+    const analysisStartedAt = new Date();
+
+    // 1. Gemini API 요청 페이로드 생성
+    const geminiPayload = buildGeminiPayload(body);
+
+    // 2. Google GenAI SDK 초기화
+    const ai = new GoogleGenAI({
+      apiKey: c.env.GOOGLE_GEMINI_API_KEY
+    });
+
+    // 3. Gemini API 호출
+    if (body.stream) {
+      // 스트리밍 응답
+      const streamingResp = await retryGeminiStreamCall(ai, geminiPayload);
+      
+      if (!streamingResp) {
+        throw new Error("스트리밍 응답을 받을 수 없습니다.");
+      }
+      
+      // 스트리밍 응답을 수집하기 위한 변수
+      let fullResponse = "";
+      let analysisId: number | null = null;
+
+      // ReadableStream 생성
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of streamingResp) {
+              if (chunk.text) {
+                // 전체 응답 수집
+                fullResponse += chunk.text;
+                
+                // SSE 형식으로 데이터 전송
+                const data = `data: ${JSON.stringify({ text: chunk.text })}\n\n`;
+                controller.enqueue(new TextEncoder().encode(data));
+              } else {
+                // 메타데이터나 다른 정보도 전송
+                const data = `data: ${JSON.stringify(chunk)}\n\n`;
+                controller.enqueue(new TextEncoder().encode(data));
+              }
+              
+              // 연결 유지를 위한 heartbeat
+              if (Math.random() < 0.1) { // 10% 확률로 heartbeat 전송
+                const heartbeat = `data: ${JSON.stringify({ type: "heartbeat", timestamp: Date.now() })}\n\n`;
+                controller.enqueue(new TextEncoder().encode(heartbeat));
+              }
+            }
+
+            // 분석 완료 시간 기록
+            const analysisCompletedAt = new Date();
+
+            // 제목 생성: "[운세유형] 이름님" 형식
+            let title = `[${getFortuneTypeTitle(fortuneType)}]`;
+            if (body.sajuData) {
+              if (body.sajuData.정보 && body.sajuData.정보.생년월일 && body.sajuData.정보.생년월일.이름) {
+                title += ` ${body.sajuData.정보.생년월일.이름}님`;
+              } else if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+                title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+              }
+            }
+
+            const saveResult = await saveSajuAnalysis(
+              c.env.DB,
+              user.id,
+              analysisType,
+              type,
+              title,
+              body.sajuData || {},
+              body.userPrompt,
+              body.systemPrompt,
+              fullResponse,
+              model,
+              0, // 무료 서비스이므로 포인트 차감 없음
+              i18n,
+              timezone,
+              analysisStartedAt,
+              analysisCompletedAt
+            );
+
+            if (saveResult.success) {
+              analysisId = saveResult.analysisId;
+            } else {
+              console.error("연간운세 스트리밍 응답 저장 실패:", saveResult.error);
+            }
+
+            // 스트림 종료
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            controller.close();
+          } catch (error) {
+            console.error("연간운세 스트리밍 오류:", error);
+            // 에러 정보를 클라이언트에 전송
+            const errorData = `data: ${JSON.stringify({ 
+              type: "error", 
+              message: error instanceof Error ? error.message : "Unknown error" 
+            })}\n\n`;
+            controller.enqueue(new TextEncoder().encode(errorData));
+            controller.close();
+          }
+        }
+      });
+
+      const headers = new Headers();
+      headers.set("Content-Type", "text/event-stream; charset=utf-8");
+      headers.set("Cache-Control", "no-cache");
+      headers.set("Connection", "keep-alive");
+      headers.set("X-AI-Model", model);
+      headers.set("X-Points-Deducted", "0"); // 무료 서비스
+      headers.set("X-Service-Type", "free");
+      headers.set("X-Fortune-Type", fortuneType);
+      // 타임아웃 정보 추가
+      headers.set("X-Timeout-Seconds", "45");
+      headers.set("X-Connection-Keep-Alive", "true");
+
+      return new Response(stream, {
+        status: 200,
+        headers: headers,
+      });
+    } else {
+      // 일반 응답
+      const result = await retryGeminiCall(ai, geminiPayload);
+      
+      if (!result) {
+        throw new Error("AI 응답을 받을 수 없습니다.");
+      }
+      
+      const text = result.text || "죄송합니다. 연간운세를 생성할 수 없습니다.";
+
+      // 분석 완료 시간 기록
+      const analysisCompletedAt = new Date();
+
+      // 응답 형식
+      const response = {
+        answer: text,
+        metadata: {
+          model_used: model,
+          timestamp: new Date().toISOString(),
+          stream_enabled: false,
+          response_type: "yearly_fortune",
+          service_type: "free",
+          fortune_type: fortuneType
+        },
+        points: {
+          deducted: 0,
+          remaining: null, // 무료 서비스이므로 포인트 정보 없음
+          message: "무료 서비스입니다."
+        }
+      };
+
+      // 제목 생성: "[운세유형] 이름님" 형식
+      let title = `[${getFortuneTypeTitle(fortuneType)}]`;
+      if (body.sajuData) {
+        if (body.sajuData.정보 && body.sajuData.정보.생년월일 && body.sajuData.정보.생년월일.이름) {
+          title += ` ${body.sajuData.정보.생년월일.이름}님`;
+        } else if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+          title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+        }
+      }
+
+      const saveResult = await saveSajuAnalysis(
+        c.env.DB,
+        user.id,
+        analysisType,
+        type,
+        title,
+        body.sajuData || {},
+        body.userPrompt,
+        body.systemPrompt,
+        text,
+        model,
+        0, // 무료 서비스이므로 포인트 차감 없음
+        i18n,
+        timezone,
+        analysisStartedAt,
+        analysisCompletedAt
+      );
+
+      if (saveResult.success) {
+        (response as any).analysis_id = saveResult.analysisId;
+      } else {
+        console.error("연간운세 분석 결과 저장 실패:", saveResult.error);
+      }
+
+      return c.json(response, 200);
+    }
+  } catch (error) {
+    console.error("Gemini 연간운세 분석 API 오류:", error);
+    
+    return c.json(
+      {
+        error: "An error occurred while processing your yearly fortune analysis request.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 운세 유형에 따른 제목 생성 헬퍼 함수
+ */
+function getFortuneTypeTitle(fortuneType: string): string {
+  switch (fortuneType) {
+    case 'this_year':
+      return '올해운세';
+    case 'next_year':
+      return '내년운세';
+    case 'both':
+      return '연간운세';
+    default:
+      return '연간운세';
   }
 }
 
