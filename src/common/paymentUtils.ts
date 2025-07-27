@@ -297,22 +297,6 @@ export async function usePoints(
     };
   }
 
-  // admin 사용자는 포인트 차감 없이 통과
-  if (user.role === 'admin') {
-    return {
-      success: true,
-      message: "관리자 계정으로 포인트 차감 없이 서비스를 이용합니다.",
-      remainingPoints: user.point,
-      data: {
-        current: user.point,
-        required: requiredPoints,
-        remaining: user.point,
-        shortage: 0,
-        isAdmin: true,
-      },
-    };
-  }
-
   // 먼저 검증
   const validation = await validatePoints(db, userId, requiredPoints);
   if (!validation.isValid) {
