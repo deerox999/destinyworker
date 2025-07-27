@@ -329,7 +329,8 @@ async function retryGeminiCall(ai: GoogleGenAI, payload: any, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      // 45초에서 120초로 증가
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
       
       const result = await ai.models.generateContent(payload);
       
@@ -353,7 +354,8 @@ async function retryGeminiStreamCall(ai: GoogleGenAI, payload: any, maxRetries =
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      // 45초에서 120초로 증가
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
       
       const result = await ai.models.generateContentStream(payload);
       
@@ -530,7 +532,7 @@ export async function SajuAnalysisWithGemini(
       headers.set("X-Points-Deducted", "1000");
       headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
       // 타임아웃 정보 추가
-      headers.set("X-Timeout-Seconds", "45");
+      headers.set("X-Timeout-Seconds", "120"); // 45에서 120으로 변경
       headers.set("X-Connection-Keep-Alive", "true");
       // 구조화된 데이터를 JSON으로 헤더에 추가
       if (pointValidation.data) {
@@ -870,7 +872,7 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       headers.set("X-Points-Deducted", "1500");
       headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
       // 타임아웃 정보 추가
-      headers.set("X-Timeout-Seconds", "45");
+      headers.set("X-Timeout-Seconds", "120"); // 45에서 120으로 변경
       headers.set("X-Connection-Keep-Alive", "true");
       if (pointValidation.data) {
         headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
@@ -1112,7 +1114,7 @@ export async function YearlyFortuneAnalysis(
       headers.set("X-Service-Type", "free");
       headers.set("X-Fortune-Type", fortuneType);
       // 타임아웃 정보 추가
-      headers.set("X-Timeout-Seconds", "45");
+      headers.set("X-Timeout-Seconds", "120"); // 45에서 120으로 변경
       headers.set("X-Connection-Keep-Alive", "true");
 
       return new Response(stream, {
