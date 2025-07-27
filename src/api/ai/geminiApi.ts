@@ -329,8 +329,8 @@ async function retryGeminiCall(ai: GoogleGenAI, payload: any, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      // 45초에서 120초로 증가
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      // 3분(180초) 타임아웃으로 설정
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
       
       const result = await ai.models.generateContent(payload);
       
@@ -349,30 +349,7 @@ async function retryGeminiCall(ai: GoogleGenAI, payload: any, maxRetries = 3) {
   }
 }
 
-// 스트리밍 재시도 로직 함수
-async function retryGeminiStreamCall(ai: GoogleGenAI, payload: any, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const controller = new AbortController();
-      // 45초에서 120초로 증가
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-      
-      const result = await ai.models.generateContentStream(payload);
-      
-      clearTimeout(timeoutId);
-      return result;
-    } catch (error) {
-      console.error(`Gemini 스트리밍 API 호출 실패 (시도 ${attempt}/${maxRetries}):`, error);
-      
-      if (attempt === maxRetries) {
-        throw error;
-      }
-      
-      // 지수 백오프로 재시도
-      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-    }
-  }
-}
+
 
 /**
  * Gemini AI를 활용한 상세 사주 풀이 API (단순화된 버전)
@@ -425,8 +402,8 @@ export async function SajuAnalysisWithGemini(
 
     // 3. Gemini API 호출
     if (body.stream) {
-      // 스트리밍 응답
-      const streamingResp = await retryGeminiStreamCall(ai, geminiPayload);
+      // 스트리밍 응답 (재시도 없이 직접 호출)
+      const streamingResp = await ai.models.generateContentStream(geminiPayload);
       
       if (!streamingResp) {
         throw new Error("스트리밍 응답을 받을 수 없습니다.");
@@ -436,11 +413,40 @@ export async function SajuAnalysisWithGemini(
       let fullResponse = "";
       let analysisId: number | null = null;
 
-      // ReadableStream 생성
+      // ReadableStream 생성 (연결 끊김 감지 및 안전한 저장 로직 포함)
       const stream = new ReadableStream({
         async start(controller) {
+          let isConnectionClosed = false;
+          let hasSaved = false;
+          
+          // 연결 끊김 감지를 위한 AbortController
+          const abortController = new AbortController();
+          
+          // 연결 끊김 감지 함수
+          const checkConnection = () => {
+            try {
+              // 연결 상태 확인 (브라우저가 연결을 끊으면 에러 발생)
+              if (controller.desiredSize === null) {
+                isConnectionClosed = true;
+                console.log("클라이언트 연결이 끊어졌습니다.");
+                abortController.abort();
+              }
+            } catch (error) {
+              isConnectionClosed = true;
+              console.log("연결 상태 확인 중 에러:", error);
+              abortController.abort();
+            }
+          };
+
           try {
             for await (const chunk of streamingResp) {
+              // 연결 끊김 확인
+              checkConnection();
+              if (isConnectionClosed) {
+                console.log("연결이 끊어져서 스트리밍을 중단합니다.");
+                break;
+              }
+
               if (chunk.text) {
                 // 전체 응답 수집
                 fullResponse += chunk.text;
@@ -454,73 +460,137 @@ export async function SajuAnalysisWithGemini(
                 controller.enqueue(new TextEncoder().encode(data));
               }
               
-              // 연결 유지를 위한 heartbeat
-              if (Math.random() < 0.1) { // 10% 확률로 heartbeat 전송
+              // 연결 유지를 위한 heartbeat (더 자주 전송)
+              if (Math.random() < 0.3) { // 30% 확률로 heartbeat 전송 (더 자주)
                 const heartbeat = `data: ${JSON.stringify({ type: "heartbeat", timestamp: Date.now() })}\n\n`;
                 controller.enqueue(new TextEncoder().encode(heartbeat));
               }
             }
 
-            // 분석 완료 시간 기록
-            const analysisCompletedAt = new Date();
-
-            // 제목 생성: "[분석유형] 이름님" 형식
-            let title = `[${analysisType}]`;
-            if (body.sajuData) {
-              if (body.sajuData.정보 && body.sajuData.정보.생년월일 && body.sajuData.정보.생년월일.이름) {
-                title += ` ${body.sajuData.정보.생년월일.이름}님`;
-              } else if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
-                title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
-              }
-            }
-
-            const saveResult = await saveSajuAnalysis(
-              c.env.DB,
-              user.id,
-              analysisType,
-              type,
-              title,
-              body.sajuData || {},
-              body.userPrompt,
-              body.systemPrompt,
-              fullResponse,
-              model,
-              1000,
-              i18n,
-              timezone,
-              analysisStartedAt,
-              analysisCompletedAt
-            );
-
-            if (saveResult.success) {
-              analysisId = saveResult.analysisId;
+            // 스트리밍 완료 후 저장 로직 (연결이 끊어지지 않았을 때만)
+            if (!isConnectionClosed && fullResponse.length > 0) {
+              console.log("스트리밍 완료, 분석 결과를 저장합니다.");
               
-              // 포인트 거래에 analysis_id 연결
-              if (analysisId) {
-                await updatePointTransactionAnalysisId(
+              // 분석 완료 시간 기록
+              const analysisCompletedAt = new Date();
+
+              // 제목 생성: "[분석유형] 이름님" 형식
+              let title = `[${analysisType}]`;
+              if (body.sajuData) {
+                if (body.sajuData.정보 && body.sajuData.정보.생년월일 && body.sajuData.정보.생년월일.이름) {
+                  title += ` ${body.sajuData.정보.생년월일.이름}님`;
+                } else if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+                  title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+                }
+              }
+
+              try {
+                const saveResult = await saveSajuAnalysis(
                   c.env.DB,
                   user.id,
-                  reference,
-                  analysisId
+                  analysisType,
+                  type,
+                  title,
+                  body.sajuData || {},
+                  body.userPrompt,
+                  body.systemPrompt,
+                  fullResponse,
+                  model,
+                  1000,
+                  i18n,
+                  timezone,
+                  analysisStartedAt,
+                  analysisCompletedAt
                 );
+
+                if (saveResult.success) {
+                  analysisId = saveResult.analysisId;
+                  hasSaved = true;
+                  
+                  // 포인트 거래에 analysis_id 연결
+                  if (analysisId) {
+                    await updatePointTransactionAnalysisId(
+                      c.env.DB,
+                      user.id,
+                      reference,
+                      analysisId
+                    );
+                  }
+                  
+                  console.log("분석 결과 저장 완료:", analysisId);
+                } else {
+                  console.error("스트리밍 응답 저장 실패:", saveResult.error);
+                }
+              } catch (saveError) {
+                console.error("저장 중 에러:", saveError);
               }
-            } else {
-              console.error("스트리밍 응답 저장 실패:", saveResult.error);
+            } else if (isConnectionClosed) {
+              console.log("연결이 끊어져서 저장을 건너뜁니다.");
+              
+              // 연결이 끊어진 경우 포인트 환불
+              try {
+                await refundPoints(
+                  c.env.DB,
+                  user.id,
+                  POINT_COSTS.SAJU_ANALYSIS,
+                  "연결 끊김으로 인한 포인트 환불",
+                  reference
+                );
+                console.log("연결 끊김으로 인한 포인트 환불 완료");
+              } catch (refundError) {
+                console.error("포인트 환불 실패:", refundError);
+              }
             }
 
             // 스트림 종료
-            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            if (!isConnectionClosed) {
+              controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            }
             controller.close();
           } catch (error) {
             console.error("스트리밍 오류:", error);
-            // 에러 정보를 클라이언트에 전송
-            const errorData = `data: ${JSON.stringify({ 
-              type: "error", 
-              message: error instanceof Error ? error.message : "Unknown error" 
-            })}\n\n`;
-            controller.enqueue(new TextEncoder().encode(errorData));
+            
+            // 에러 발생 시 포인트 환불
+            if (!hasSaved) {
+              try {
+                await refundPoints(
+                  c.env.DB,
+                  user.id,
+                  POINT_COSTS.SAJU_ANALYSIS,
+                  "스트리밍 오류로 인한 포인트 환불",
+                  reference
+                );
+                console.log("스트리밍 오류로 인한 포인트 환불 완료");
+              } catch (refundError) {
+                console.error("포인트 환불 실패:", refundError);
+              }
+            }
+            
+            // 에러 정보를 클라이언트에 전송 (연결이 유지된 경우에만)
+            if (!isConnectionClosed) {
+              const errorData = `data: ${JSON.stringify({ 
+                type: "error", 
+                message: error instanceof Error ? error.message : "Unknown error" 
+              })}\n\n`;
+              controller.enqueue(new TextEncoder().encode(errorData));
+            }
             controller.close();
           }
+        },
+        
+        // 연결 끊김 감지를 위한 cancel 핸들러
+        cancel() {
+          console.log("클라이언트가 연결을 취소했습니다.");
+          // 포인트 환불
+          refundPoints(
+            c.env.DB,
+            user.id,
+            POINT_COSTS.SAJU_ANALYSIS,
+            "클라이언트 연결 취소로 인한 포인트 환불",
+            reference
+          ).catch(error => {
+            console.error("연결 취소 시 포인트 환불 실패:", error);
+          });
         }
       });
 
@@ -532,7 +602,7 @@ export async function SajuAnalysisWithGemini(
       headers.set("X-Points-Deducted", "1000");
       headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
       // 타임아웃 정보 추가
-      headers.set("X-Timeout-Seconds", "120"); // 45에서 120으로 변경
+      headers.set("X-Timeout-Seconds", "180"); // 3분(180초)으로 설정
       headers.set("X-Connection-Keep-Alive", "true");
       // 구조화된 데이터를 JSON으로 헤더에 추가
       if (pointValidation.data) {
@@ -772,8 +842,8 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
 
     // 5. Gemini API 호출
     if (body.stream) {
-      // 스트리밍 응답
-      const streamingResp = await retryGeminiStreamCall(ai, geminiPayload);
+      // 스트리밍 응답 (재시도 없이 직접 호출)
+      const streamingResp = await ai.models.generateContentStream(geminiPayload);
       
       if (!streamingResp) {
         throw new Error("궁합 분석 스트리밍 응답을 받을 수 없습니다.");
@@ -783,11 +853,40 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       let fullResponse = "";
       let analysisId: number | null = null;
 
-      // ReadableStream 생성
+      // ReadableStream 생성 (연결 끊김 감지 및 안전한 저장 로직 포함)
       const stream = new ReadableStream({
         async start(controller) {
+          let isConnectionClosed = false;
+          let hasSaved = false;
+          
+          // 연결 끊김 감지를 위한 AbortController
+          const abortController = new AbortController();
+          
+          // 연결 끊김 감지 함수
+          const checkConnection = () => {
+            try {
+              // 연결 상태 확인 (브라우저가 연결을 끊으면 에러 발생)
+              if (controller.desiredSize === null) {
+                isConnectionClosed = true;
+                console.log("클라이언트 연결이 끊어졌습니다.");
+                abortController.abort();
+              }
+            } catch (error) {
+              isConnectionClosed = true;
+              console.log("연결 상태 확인 중 에러:", error);
+              abortController.abort();
+            }
+          };
+
           try {
             for await (const chunk of streamingResp) {
+              // 연결 끊김 확인
+              checkConnection();
+              if (isConnectionClosed) {
+                console.log("연결이 끊어져서 스트리밍을 중단합니다.");
+                break;
+              }
+
               if (chunk.text) {
                 // 전체 응답 수집
                 fullResponse += chunk.text;
@@ -801,66 +900,138 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
                 controller.enqueue(new TextEncoder().encode(data));
               }
               
-              // 연결 유지를 위한 heartbeat
-              if (Math.random() < 0.1) { // 10% 확률로 heartbeat 전송
+              // 연결 유지를 위한 heartbeat (더 자주 전송)
+              if (Math.random() < 0.3) { // 30% 확률로 heartbeat 전송 (더 자주)
                 const heartbeat = `data: ${JSON.stringify({ type: "heartbeat", timestamp: Date.now() })}\n\n`;
                 controller.enqueue(new TextEncoder().encode(heartbeat));
               }
             }
             
-            // 스트리밍 완료 후 DB에 저장
+            // 스트리밍 완료 후 저장 로직 (연결이 끊어지지 않았을 때만)
+            if (!isConnectionClosed && fullResponse.length > 0) {
+              console.log("궁합 분석 스트리밍 완료, 분석 결과를 저장합니다.");
+              
+              // 분석 완료 시간 기록
+              const analysisCompletedAt = new Date();
 
-            // 분석 완료 시간 기록
-            const analysisCompletedAt = new Date();
-
-            // 제목 생성: "[분석유형] 이름님" 형식
-            let title = `[${analysisType}]`;
-            if (body.sajuData) {
-              if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
-                title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+              // 제목 생성: "[분석유형] 이름님" 형식
+              let title = `[${analysisType}]`;
+              if (body.sajuData) {
+                if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+                  title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+                }
+                if (body.sajuData.person2 && body.sajuData.person2.정보 && body.sajuData.person2.정보.생년월일 && body.sajuData.person2.정보.생년월일.이름) {
+                  title += ` & ${body.sajuData.person2.정보.생년월일.이름}님`;
+                }
               }
-              if (body.sajuData.person2 && body.sajuData.person2.정보 && body.sajuData.person2.정보.생년월일 && body.sajuData.person2.정보.생년월일.이름) {
-                title += ` & ${body.sajuData.person2.정보.생년월일.이름}님`;
+
+              try {
+                const saveResult = await saveSajuAnalysis(
+                  c.env.DB,
+                  user.id,
+                  analysisType,
+                  type,
+                  title,
+                  body.sajuData || {},
+                  body.userPrompt,
+                  body.systemPrompt,
+                  fullResponse,
+                  model,
+                  1500,
+                  i18n,
+                  timezone,
+                  analysisStartedAt,
+                  analysisCompletedAt
+                );
+
+                if (saveResult.success) {
+                  analysisId = saveResult.analysisId;
+                  hasSaved = true;
+                  
+                  // 포인트 거래에 analysis_id 연결
+                  if (analysisId) {
+                    await updatePointTransactionAnalysisId(
+                      c.env.DB,
+                      user.id,
+                      reference,
+                      analysisId
+                    );
+                  }
+                  
+                  console.log("궁합 분석 결과 저장 완료:", analysisId);
+                } else {
+                  console.error("궁합 분석 스트리밍 응답 저장 실패:", saveResult.error);
+                }
+              } catch (saveError) {
+                console.error("궁합 분석 저장 중 에러:", saveError);
               }
-            }
-
-            const saveResult = await saveSajuAnalysis(
-              c.env.DB,
-              user.id,
-              analysisType,
-              type,
-              title,
-              body.sajuData || {},
-              body.userPrompt,
-              body.systemPrompt,
-              fullResponse,
-              model,
-              1500,
-              i18n,
-              timezone,
-              analysisStartedAt,
-              analysisCompletedAt
-            );
-
-            if (saveResult.success) {
-              analysisId = saveResult.analysisId;
-            } else {
-              console.error("궁합 분석 스트리밍 응답 저장 실패:", saveResult.error);
+            } else if (isConnectionClosed) {
+              console.log("연결이 끊어져서 궁합 분석 저장을 건너뜁니다.");
+              
+              // 연결이 끊어진 경우 포인트 환불
+              try {
+                await refundPoints(
+                  c.env.DB,
+                  user.id,
+                  POINT_COSTS.COMPATIBILITY_ANALYSIS,
+                  "연결 끊김으로 인한 포인트 환불",
+                  reference
+                );
+                console.log("연결 끊김으로 인한 포인트 환불 완료");
+              } catch (refundError) {
+                console.error("포인트 환불 실패:", refundError);
+              }
             }
 
             // 스트림 종료
-            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            if (!isConnectionClosed) {
+              controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            }
             controller.close();
           } catch (error) {
             console.error("궁합 분석 스트리밍 오류:", error);
-            // 에러 정보를 클라이언트에 전송
-            const errorData = `data: ${JSON.stringify({ 
-              type: "error", 
-              message: error instanceof Error ? error.message : "Unknown error" 
-            })}\n\n`;
-            controller.enqueue(new TextEncoder().encode(errorData));
+            
+            // 에러 발생 시 포인트 환불
+            if (!hasSaved) {
+              try {
+                await refundPoints(
+                  c.env.DB,
+                  user.id,
+                  POINT_COSTS.COMPATIBILITY_ANALYSIS,
+                  "스트리밍 오류로 인한 포인트 환불",
+                  reference
+                );
+                console.log("스트리밍 오류로 인한 포인트 환불 완료");
+              } catch (refundError) {
+                console.error("포인트 환불 실패:", refundError);
+              }
+            }
+            
+            // 에러 정보를 클라이언트에 전송 (연결이 유지된 경우에만)
+            if (!isConnectionClosed) {
+              const errorData = `data: ${JSON.stringify({ 
+                type: "error", 
+                message: error instanceof Error ? error.message : "Unknown error" 
+              })}\n\n`;
+              controller.enqueue(new TextEncoder().encode(errorData));
+            }
             controller.close();
           }
+        },
+        
+        // 연결 끊김 감지를 위한 cancel 핸들러
+        cancel() {
+          console.log("클라이언트가 궁합 분석 연결을 취소했습니다.");
+          // 포인트 환불
+          refundPoints(
+            c.env.DB,
+            user.id,
+            POINT_COSTS.COMPATIBILITY_ANALYSIS,
+            "클라이언트 연결 취소로 인한 포인트 환불",
+            reference
+          ).catch(error => {
+            console.error("연결 취소 시 포인트 환불 실패:", error);
+          });
         }
       });
 
@@ -872,7 +1043,7 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
       headers.set("X-Points-Deducted", "1500");
       headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
       // 타임아웃 정보 추가
-      headers.set("X-Timeout-Seconds", "120"); // 45에서 120으로 변경
+      headers.set("X-Timeout-Seconds", "180"); // 3분(180초)으로 설정
       headers.set("X-Connection-Keep-Alive", "true");
       if (pointValidation.data) {
         headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
@@ -1033,8 +1204,8 @@ export async function YearlyFortuneAnalysis(
 
     // 3. Gemini API 호출
     if (body.stream) {
-      // 스트리밍 응답
-      const streamingResp = await retryGeminiStreamCall(ai, geminiPayload);
+      // 스트리밍 응답 (재시도 없이 직접 호출)
+      const streamingResp = await ai.models.generateContentStream(geminiPayload);
       
       if (!streamingResp) {
         throw new Error("스트리밍 응답을 받을 수 없습니다.");
@@ -1044,11 +1215,40 @@ export async function YearlyFortuneAnalysis(
       let fullResponse = "";
       let analysisId: number | null = null;
 
-      // ReadableStream 생성
+      // ReadableStream 생성 (연결 끊김 감지 및 안전한 저장 로직 포함)
       const stream = new ReadableStream({
         async start(controller) {
+          let isConnectionClosed = false;
+          let hasSaved = false;
+          
+          // 연결 끊김 감지를 위한 AbortController
+          const abortController = new AbortController();
+          
+          // 연결 끊김 감지 함수
+          const checkConnection = () => {
+            try {
+              // 연결 상태 확인 (브라우저가 연결을 끊으면 에러 발생)
+              if (controller.desiredSize === null) {
+                isConnectionClosed = true;
+                console.log("클라이언트 연결이 끊어졌습니다.");
+                abortController.abort();
+              }
+            } catch (error) {
+              isConnectionClosed = true;
+              console.log("연결 상태 확인 중 에러:", error);
+              abortController.abort();
+            }
+          };
+
           try {
             for await (const chunk of streamingResp) {
+              // 연결 끊김 확인
+              checkConnection();
+              if (isConnectionClosed) {
+                console.log("연결이 끊어져서 스트리밍을 중단합니다.");
+                break;
+              }
+
               if (chunk.text) {
                 // 전체 응답 수집
                 fullResponse += chunk.text;
@@ -1062,73 +1262,137 @@ export async function YearlyFortuneAnalysis(
                 controller.enqueue(new TextEncoder().encode(data));
               }
               
-              // 연결 유지를 위한 heartbeat
-              if (Math.random() < 0.1) { // 10% 확률로 heartbeat 전송
+              // 연결 유지를 위한 heartbeat (더 자주 전송)
+              if (Math.random() < 0.3) { // 30% 확률로 heartbeat 전송 (더 자주)
                 const heartbeat = `data: ${JSON.stringify({ type: "heartbeat", timestamp: Date.now() })}\n\n`;
                 controller.enqueue(new TextEncoder().encode(heartbeat));
               }
             }
 
-            // 분석 완료 시간 기록
-            const analysisCompletedAt = new Date();
-
-            // 제목 생성: "[운세유형] 이름님" 형식
-            let title = `[${getFortuneTypeTitle(fortuneType)}]`;
-            if (body.sajuData) {
-              if (body.sajuData.정보 && body.sajuData.정보.생년월일 && body.sajuData.정보.생년월일.이름) {
-                title += ` ${body.sajuData.정보.생년월일.이름}님`;
-              } else if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
-                title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
-              }
-            }
-
-            const saveResult = await saveSajuAnalysis(
-              c.env.DB,
-              user.id,
-              analysisType,
-              type,
-              title,
-              body.sajuData || {},
-              body.userPrompt,
-              body.systemPrompt,
-              fullResponse,
-              model,
-              200, // 연간운세 서비스 비용
-              i18n,
-              timezone,
-              analysisStartedAt,
-              analysisCompletedAt
-            );
-
-            if (saveResult.success) {
-              analysisId = saveResult.analysisId;
+            // 스트리밍 완료 후 저장 로직 (연결이 끊어지지 않았을 때만)
+            if (!isConnectionClosed && fullResponse.length > 0) {
+              console.log("연간운세 스트리밍 완료, 분석 결과를 저장합니다.");
               
-              // 포인트 거래에 analysis_id 연결
-              if (analysisId) {
-                await updatePointTransactionAnalysisId(
+              // 분석 완료 시간 기록
+              const analysisCompletedAt = new Date();
+
+              // 제목 생성: "[운세유형] 이름님" 형식
+              let title = `[${getFortuneTypeTitle(fortuneType)}]`;
+              if (body.sajuData) {
+                if (body.sajuData.정보 && body.sajuData.정보.생년월일 && body.sajuData.정보.생년월일.이름) {
+                  title += ` ${body.sajuData.정보.생년월일.이름}님`;
+                } else if (body.sajuData.person1 && body.sajuData.person1.정보 && body.sajuData.person1.정보.생년월일 && body.sajuData.person1.정보.생년월일.이름) {
+                  title += ` ${body.sajuData.person1.정보.생년월일.이름}님`;
+                }
+              }
+
+              try {
+                const saveResult = await saveSajuAnalysis(
                   c.env.DB,
                   user.id,
-                  reference,
-                  analysisId
+                  analysisType,
+                  type,
+                  title,
+                  body.sajuData || {},
+                  body.userPrompt,
+                  body.systemPrompt,
+                  fullResponse,
+                  model,
+                  200, // 연간운세 서비스 비용
+                  i18n,
+                  timezone,
+                  analysisStartedAt,
+                  analysisCompletedAt
                 );
+
+                if (saveResult.success) {
+                  analysisId = saveResult.analysisId;
+                  hasSaved = true;
+                  
+                  // 포인트 거래에 analysis_id 연결
+                  if (analysisId) {
+                    await updatePointTransactionAnalysisId(
+                      c.env.DB,
+                      user.id,
+                      reference,
+                      analysisId
+                    );
+                  }
+                  
+                  console.log("연간운세 분석 결과 저장 완료:", analysisId);
+                } else {
+                  console.error("연간운세 스트리밍 응답 저장 실패:", saveResult.error);
+                }
+              } catch (saveError) {
+                console.error("연간운세 저장 중 에러:", saveError);
               }
-            } else {
-              console.error("연간운세 스트리밍 응답 저장 실패:", saveResult.error);
+            } else if (isConnectionClosed) {
+              console.log("연결이 끊어져서 연간운세 저장을 건너뜁니다.");
+              
+              // 연결이 끊어진 경우 포인트 환불
+              try {
+                await refundPoints(
+                  c.env.DB,
+                  user.id,
+                  POINT_COSTS.YEARLY_FORTUNE,
+                  "연결 끊김으로 인한 포인트 환불",
+                  reference
+                );
+                console.log("연결 끊김으로 인한 포인트 환불 완료");
+              } catch (refundError) {
+                console.error("포인트 환불 실패:", refundError);
+              }
             }
 
             // 스트림 종료
-            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            if (!isConnectionClosed) {
+              controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            }
             controller.close();
           } catch (error) {
             console.error("연간운세 스트리밍 오류:", error);
-            // 에러 정보를 클라이언트에 전송
-            const errorData = `data: ${JSON.stringify({ 
-              type: "error", 
-              message: error instanceof Error ? error.message : "Unknown error" 
-            })}\n\n`;
-            controller.enqueue(new TextEncoder().encode(errorData));
+            
+            // 에러 발생 시 포인트 환불
+            if (!hasSaved) {
+              try {
+                await refundPoints(
+                  c.env.DB,
+                  user.id,
+                  POINT_COSTS.YEARLY_FORTUNE,
+                  "스트리밍 오류로 인한 포인트 환불",
+                  reference
+                );
+                console.log("스트리밍 오류로 인한 포인트 환불 완료");
+              } catch (refundError) {
+                console.error("포인트 환불 실패:", refundError);
+              }
+            }
+            
+            // 에러 정보를 클라이언트에 전송 (연결이 유지된 경우에만)
+            if (!isConnectionClosed) {
+              const errorData = `data: ${JSON.stringify({ 
+                type: "error", 
+                message: error instanceof Error ? error.message : "Unknown error" 
+              })}\n\n`;
+              controller.enqueue(new TextEncoder().encode(errorData));
+            }
             controller.close();
           }
+        },
+        
+        // 연결 끊김 감지를 위한 cancel 핸들러
+        cancel() {
+          console.log("클라이언트가 연간운세 연결을 취소했습니다.");
+          // 포인트 환불
+          refundPoints(
+            c.env.DB,
+            user.id,
+            POINT_COSTS.YEARLY_FORTUNE,
+            "클라이언트 연결 취소로 인한 포인트 환불",
+            reference
+          ).catch(error => {
+            console.error("연결 취소 시 포인트 환불 실패:", error);
+          });
         }
       });
 
@@ -1142,7 +1406,7 @@ export async function YearlyFortuneAnalysis(
       headers.set("X-Service-Type", "paid");
       headers.set("X-Fortune-Type", fortuneType);
       // 타임아웃 정보 추가
-      headers.set("X-Timeout-Seconds", "120"); // 45에서 120으로 변경
+      headers.set("X-Timeout-Seconds", "180"); // 3분(180초)으로 설정
       headers.set("X-Connection-Keep-Alive", "true");
       // 구조화된 데이터를 JSON으로 헤더에 추가
       if (pointValidation.data) {

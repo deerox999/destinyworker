@@ -3,6 +3,10 @@
   "main": "src/index.ts",
   "name": "destinyworker",
   "upload_source_maps": true,
+  "limits": {
+    "cpu_ms": 30000,
+    "memory_mb": 128
+  },
   "d1_databases": [
     {
       "binding": "DB",
