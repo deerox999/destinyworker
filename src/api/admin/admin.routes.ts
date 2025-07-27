@@ -12,6 +12,8 @@ import {
   deductUserPoints,
   getUserCurrentPoints,
   getUserPointTransactions,
+  getUserAnalysisTransactions,
+  getAnalysisById,
 } from "./adminApi";
 
 import { MiddlewareHandler } from "hono";
@@ -509,6 +511,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                   type: z.string().openapi({ example: "CREDIT" }),
                   reference: z.string().nullable().openapi({ example: "admin_add_1234567890" }),
                   created_at: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                  analysis_id: z.number().int().nullable().openapi({ example: 1234567890, description: "분석 결과 ID (분석 거래인 경우)" }),
                 }).openapi({ type: 'object' })
               ),
               pagination: z.object({
@@ -521,6 +524,110 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
       },
       400: { description: "잘못된 사용자 ID입니다." },
       403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
+  const getUserAnalysisTransactionsRoute = createRoute({
+    method: "get",
+    path: "/users/{userId}/analysis-transactions",
+    summary: "[Admin] 사용자 분석 결과가 있는 포인트 거래 내역 조회",
+    description: "관리자가 특정 사용자의 분석 결과가 있는 포인트 거래 내역만 조회합니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: UserIdParamSchema,
+      query: PaginationQuerySchema,
+    },
+    responses: {
+      200: {
+        description: "분석 거래 내역 조회 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              userId: z.number().int().openapi({ example: 1 }),
+              transactions: z.array(
+                z.object({
+                  id: z.number().int().openapi({ example: 1 }),
+                  amount: z.number().int().openapi({ example: -1000 }),
+                  description: z.string().openapi({ example: "사주 분석: 일반 분석" }),
+                  type: z.string().openapi({ example: "DEBIT" }),
+                  reference: z.string().nullable().openapi({ example: "saju_analysis_1234567890" }),
+                  created_at: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                  analysis: z.object({
+                    id: z.number().int().openapi({ example: 1 }),
+                    analysis_type: z.string().openapi({ example: "general" }),
+                    type: z.string().openapi({ example: "individual" }),
+                    title: z.string().openapi({ example: "[일반] 사주 분석" }),
+                  }).openapi({ type: 'object' }),
+                }).openapi({ type: 'object' })
+              ),
+              pagination: z.object({
+                currentPage: z.number().int().openapi({ example: 1 }),
+                pageSize: z.number().int().openapi({ example: 20 }),
+                total: z.number().int().openapi({ example: 50 }),
+                totalPages: z.number().int().openapi({ example: 3 }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      400: { description: "잘못된 사용자 ID입니다." },
+      403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
+  const getAnalysisByTransactionRoute = createRoute({
+    method: "get",
+    path: "/analyses/{analysisId}",
+    summary: "[Admin] 분석 결과 상세 조회",
+    description: "관리자가 특정 분석 결과의 상세 정보를 조회합니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: z.object({
+        analysisId: z.coerce.number().int().positive().openapi({
+          param: {
+            name: "analysisId",
+            in: "path",
+          },
+          description: "분석 결과 ID",
+          example: 1234567890,
+        }),
+      }).openapi({ type: 'object' }),
+    },
+    responses: {
+      200: {
+        description: "분석 결과 조회 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              analysis: z.object({
+                id: z.number().int().openapi({ example: 1 }),
+                analysis_type: z.string().openapi({ example: "general" }),
+                type: z.string().openapi({ example: "individual" }),
+                title: z.string().openapi({ example: "[일반] 사주 분석" }),
+                user_prompt: z.string().openapi({ example: "나의 사주를 분석해주세요" }),
+                system_prompt: z.string().nullable().openapi({ example: "당신은 전문 사주 상담사입니다" }),
+                ai_response: z.string().openapi({ example: "당신의 사주를 분석한 결과..." }),
+                model_used: z.string().openapi({ example: "gemini-2.0-flash-exp" }),
+                points_spent: z.number().int().openapi({ example: 1000 }),
+                is_favorite: z.boolean().openapi({ example: false }),
+                analysis_started_at: z.string().datetime().nullable().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                analysis_completed_at: z.string().datetime().nullable().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                saju_data: z.any().openapi({ type: 'object' }),
+                i18n: z.string().optional().openapi({ example: "ko" }),
+                timezone: z.string().optional().openapi({ example: "Asia/Seoul" }),
+                created_at: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                updated_at: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+              }).nullable().openapi({ type: 'object' }),
+              message: z.string().optional().openapi({ example: "이 거래는 분석 결과와 연결되지 않았습니다." }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      400: { description: "잘못된 분석 ID입니다." },
+      403: { description: "관리자 권한이 필요합니다." },
+      404: { description: "분석 결과를 찾을 수 없습니다." },
     },
   });
 
@@ -539,6 +646,8 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   app.openapi(deductUserPointsRoute, (c) => deductUserPoints(c));
   app.openapi(getUserCurrentPointsRoute, (c) => getUserCurrentPoints(c));
   app.openapi(getUserPointTransactionsRoute, (c) => getUserPointTransactions(c));
+  app.openapi(getUserAnalysisTransactionsRoute, (c) => getUserAnalysisTransactions(c));
+  app.openapi(getAnalysisByTransactionRoute, (c) => getAnalysisById(c));
   
   return app;
 }

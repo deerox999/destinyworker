@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { Context } from "hono";
 import { getUserFromToken } from "../../common/utils";
-import { usePoints, refundPoints } from "../../common/paymentUtils";
+import { usePoints, refundPoints, updatePointTransactionAnalysisId } from "../../common/paymentUtils";
 
 // 포인트 상수 정의
 const POINT_COSTS = {
@@ -384,12 +384,14 @@ export async function SajuAnalysisWithGemini(
   }
 
   // 포인트 검증 (사주 분석 비용: 1000포인트)
+  const reference = `saju_analysis_${Date.now()}`;
   const pointValidation = await usePoints(
     c.env.DB,
     user.id,
     POINT_COSTS.SAJU_ANALYSIS,
     "사주 분석 서비스 이용",
-    `saju_analysis_${Date.now()}`
+    reference,
+    undefined // analysisId는 나중에 설정
   );
 
   if (!pointValidation.success) {
@@ -490,6 +492,16 @@ export async function SajuAnalysisWithGemini(
 
             if (saveResult.success) {
               analysisId = saveResult.analysisId;
+              
+              // 포인트 거래에 analysis_id 연결
+              if (analysisId) {
+                await updatePointTransactionAnalysisId(
+                  c.env.DB,
+                  user.id,
+                  reference,
+                  analysisId
+                );
+              }
             } else {
               console.error("스트리밍 응답 저장 실패:", saveResult.error);
             }
@@ -589,6 +601,16 @@ export async function SajuAnalysisWithGemini(
 
       if (saveResult.success) {
         (response as any).analysis_id = saveResult.analysisId;
+        
+        // 포인트 거래에 analysis_id 연결
+        if (saveResult.analysisId) {
+          await updatePointTransactionAnalysisId(
+            c.env.DB,
+            user.id,
+            reference,
+            saveResult.analysisId
+          );
+        }
       } else {
         console.error("사주 분석 결과 저장 실패:", saveResult.error);
       }
@@ -635,12 +657,14 @@ export async function SajuCompatibilityAnalysis(
   }
 
   // 포인트 검증 (궁합 분석 비용: 1500포인트)
+  const reference = `compatibility_analysis_${Date.now()}`;
   const pointValidation = await usePoints(
     c.env.DB,
     user.id,
     POINT_COSTS.COMPATIBILITY_ANALYSIS,
     "궁합 분석 서비스 이용",
-    `compatibility_analysis_${Date.now()}`
+    reference,
+    undefined // analysisId는 나중에 설정
   );
 
   if (!pointValidation.success) {

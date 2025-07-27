@@ -7,6 +7,7 @@ export interface PointTransaction {
   description: string;
   type: "DEBIT" | "CREDIT"; // DEBIT: 차감, CREDIT: 증가
   reference?: string; // 참조 정보 (예: 사주 분석 ID)
+  analysisId?: number; // 분석 결과 ID (새로 추가)
 }
 
 export interface PointValidationResult {
@@ -32,8 +33,8 @@ async function savePointTransaction(
 ): Promise<boolean> {
   try {
     const stmt = db.prepare(`
-      INSERT INTO point_transactions (user_id, amount, description, type, reference, created_at) 
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO point_transactions (user_id, amount, description, type, reference, analysis_id, created_at) 
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
 
     await stmt
@@ -42,7 +43,8 @@ async function savePointTransaction(
         transaction.amount,
         transaction.description,
         transaction.type,
-        transaction.reference || null
+        transaction.reference || null,
+        transaction.analysisId || null
       )
       .run();
 
@@ -117,7 +119,8 @@ export async function deductPoints(
   userId: number,
   amount: number,
   description: string,
-  reference?: string
+  reference?: string,
+  analysisId?: number
 ): Promise<{ success: boolean; message: string; remainingPoints?: number }> {
   try {
     // 포인트 검증
@@ -152,6 +155,7 @@ export async function deductPoints(
       description,
       type: "DEBIT",
       reference,
+      analysisId,
     };
 
     await savePointTransaction(db, transaction);
@@ -179,7 +183,8 @@ export async function addPoints(
   userId: number,
   amount: number,
   description: string,
-  reference?: string
+  reference?: string,
+  analysisId?: number
 ): Promise<{ success: boolean; message: string; newPoints?: number }> {
   try {
     // 포인트 증가
@@ -205,6 +210,7 @@ export async function addPoints(
       description,
       type: "CREDIT",
       reference,
+      analysisId,
     };
 
     await savePointTransaction(db, transaction);
@@ -239,12 +245,13 @@ export async function getPointTransactions(
     description: string;
     type: string;
     reference?: string;
+    analysis_id?: number;
     created_at: string;
   }>
 > {
   try {
     const stmt = db.prepare(`
-      SELECT id, amount, description, type, reference, created_at 
+      SELECT id, amount, description, type, reference, analysis_id, created_at 
       FROM point_transactions 
       WHERE user_id = ? 
       ORDER BY created_at DESC 
@@ -265,7 +272,8 @@ export async function usePoints(
   userId: number,
   requiredPoints: number,
   description: string,
-  reference?: string
+  reference?: string,
+  analysisId?: number
 ): Promise<{ 
   success: boolean; 
   message: string; 
@@ -316,7 +324,7 @@ export async function usePoints(
   }
 
   // 차감 실행
-  const result = await deductPoints(db, userId, requiredPoints, description, reference);
+  const result = await deductPoints(db, userId, requiredPoints, description, reference, analysisId);
   
   // 차감 성공 시 data 추가
   if (result.success && result.remainingPoints !== undefined) {
@@ -340,7 +348,32 @@ export async function refundPoints(
   userId: number,
   amount: number,
   description: string,
-  reference?: string
+  reference?: string,
+  analysisId?: number
 ): Promise<{ success: boolean; message: string; newPoints?: number }> {
-  return await addPoints(db, userId, amount, description, reference);
+  return await addPoints(db, userId, amount, description, reference, analysisId);
+}
+
+/**
+ * 포인트 거래의 analysis_id를 업데이트합니다.
+ */
+export async function updatePointTransactionAnalysisId(
+  db: any,
+  userId: number,
+  reference: string,
+  analysisId: number
+): Promise<boolean> {
+  try {
+    const stmt = db.prepare(`
+      UPDATE point_transactions 
+      SET analysis_id = ? 
+      WHERE user_id = ? AND reference = ? AND analysis_id IS NULL
+    `);
+
+    const result = await stmt.bind(analysisId, userId, reference).run();
+    return result.changes > 0;
+  } catch (error) {
+    console.error("Update point transaction analysis_id error:", error);
+    return false;
+  }
 }

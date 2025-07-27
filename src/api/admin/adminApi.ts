@@ -902,10 +902,13 @@ export async function getUserPointTransactions(
 
     const transactions = await getPointTransactions(c.env.DB, userId, limit, offset);
 
+    // analysis_id 컬럼이 이미 있으므로 그대로 사용
+    const transactionsWithAnalysisId = transactions;
+
     return c.json({
       success: true,
       userId,
-      transactions,
+      transactions: transactionsWithAnalysisId,
       pagination: {
         currentPage: page,
         pageSize: limit,
@@ -915,6 +918,189 @@ export async function getUserPointTransactions(
     return c.json(
       {
         error: "포인트 거래 내역 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 관리자가 사용자의 분석 결과가 있는 포인트 거래 내역만 조회합니다.
+ */
+export async function getUserAnalysisTransactions(
+  c: Context
+): Promise<Response> {
+  try {
+    // 관리자 권한 체크
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const userId = Number(c.req.param("userId"));
+    if (!userId) {
+      return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
+    }
+
+    const page = parseInt(c.req.query("page") || "1");
+    const limit = parseInt(c.req.query("limit") || "20");
+    const offset = (page - 1) * limit;
+
+    // 분석 결과가 있는 거래만 조회
+    const query = `
+      SELECT 
+        pt.id, pt.user_id, pt.amount, pt.description, pt.type, pt.reference, pt.created_at,
+        sa.id as analysis_id, sa.analysis_type, sa.type as analysis_type_detail, sa.title
+      FROM point_transactions pt
+      LEFT JOIN saju_analyses sa ON (
+        CASE 
+          WHEN pt.reference LIKE 'saju_analysis_%' THEN CAST(SUBSTR(pt.reference, 14) AS INTEGER)
+          WHEN pt.reference LIKE 'compatibility_analysis_%' THEN CAST(SUBSTR(pt.reference, 22) AS INTEGER)
+          WHEN pt.reference LIKE 'yearly_fortune_analysis_%' THEN CAST(SUBSTR(pt.reference, 25) AS INTEGER)
+          ELSE NULL
+        END = sa.id
+      )
+      WHERE pt.user_id = ? 
+        AND pt.reference IS NOT NULL
+        AND (
+          pt.reference LIKE 'saju_analysis_%' OR
+          pt.reference LIKE 'compatibility_analysis_%' OR
+          pt.reference LIKE 'yearly_fortune_analysis_%'
+        )
+        AND sa.id IS NOT NULL
+      ORDER BY pt.created_at DESC 
+      LIMIT ? OFFSET ?
+    `;
+
+    const transactions = await c.env.DB.prepare(query).bind(userId, limit, offset).all();
+
+    // 총 개수 조회
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM point_transactions pt
+      LEFT JOIN saju_analyses sa ON (
+        CASE 
+          WHEN pt.reference LIKE 'saju_analysis_%' THEN CAST(SUBSTR(pt.reference, 14) AS INTEGER)
+          WHEN pt.reference LIKE 'compatibility_analysis_%' THEN CAST(SUBSTR(pt.reference, 22) AS INTEGER)
+          WHEN pt.reference LIKE 'yearly_fortune_analysis_%' THEN CAST(SUBSTR(pt.reference, 25) AS INTEGER)
+          ELSE NULL
+        END = sa.id
+      )
+      WHERE pt.user_id = ? 
+        AND pt.reference IS NOT NULL
+        AND (
+          pt.reference LIKE 'saju_analysis_%' OR
+          pt.reference LIKE 'compatibility_analysis_%' OR
+          pt.reference LIKE 'yearly_fortune_analysis_%'
+        )
+        AND sa.id IS NOT NULL
+    `;
+
+    const totalCount = await c.env.DB.prepare(countQuery).bind(userId).first();
+    const total = totalCount?.total || 0;
+
+    return c.json({
+      success: true,
+      userId,
+      transactions: (transactions.results || []).map((t: any) => ({
+        id: t.id,
+        amount: t.amount,
+        description: t.description,
+        type: t.type,
+        reference: t.reference,
+        created_at: t.created_at,
+        analysis: {
+          id: t.analysis_id,
+          analysis_type: t.analysis_type,
+          type: t.analysis_type_detail,
+          title: t.title
+        }
+      })),
+      pagination: {
+        currentPage: page,
+        pageSize: limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      },
+    });
+  } catch (error) {
+    return c.json(
+      {
+        error: "분석 거래 내역 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * 관리자가 분석 결과를 ID로 직접 조회합니다.
+ */
+export async function getAnalysisById(
+  c: Context
+): Promise<Response> {
+  try {
+    // 관리자 권한 체크
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const analysisId = Number(c.req.param("analysisId"));
+    if (!analysisId) {
+      return c.json({ error: "잘못된 분석 ID입니다." }, 400);
+    }
+
+    // 분석 결과 조회
+    const analysis = await c.env.DB.prepare(`
+      SELECT 
+        id, analysis_type, type, title, sajuData, user_prompt, 
+        system_prompt, ai_response, model_used, points_spent, 
+        is_favorite, i18n, timezone, analysis_started_at, analysis_completed_at,
+        created_at, updated_at
+      FROM saju_analyses 
+      WHERE id = ?
+    `).bind(analysisId).first();
+
+    if (!analysis) {
+      return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
+    }
+
+    // 사주 데이터를 JSON으로 파싱
+    let sajuData = null;
+    try {
+      sajuData = JSON.parse(analysis.sajuData);
+    } catch (e) {
+      console.error("사주 데이터 파싱 오류:", e);
+    }
+
+    return c.json({
+      success: true,
+      analysis: {
+        id: analysis.id,
+        analysis_type: analysis.analysis_type,
+        type: analysis.type,
+        title: analysis.title,
+        user_prompt: analysis.user_prompt,
+        system_prompt: analysis.system_prompt,
+        ai_response: analysis.ai_response,
+        model_used: analysis.model_used,
+        points_spent: analysis.points_spent,
+        is_favorite: Boolean(analysis.is_favorite),
+        analysis_started_at: analysis.analysis_started_at,
+        analysis_completed_at: analysis.analysis_completed_at,
+        saju_data: sajuData,
+        i18n: analysis.i18n,
+        timezone: analysis.timezone,
+        created_at: analysis.created_at,
+        updated_at: analysis.updated_at
+      }
+    });
+
+  } catch (error) {
+    return c.json(
+      {
+        error: "분석 결과 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
       },
       500

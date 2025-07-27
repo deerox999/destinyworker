@@ -1,7 +1,7 @@
 /*
   삭제할 때는 수동외엔 방법이 없음
   npx wrangler d1 execute destiny --remote --command "DROP TABLE IF EXISTS comments;"
-  추가할 떄는 npm run db:migrate:remote
+  npm run db:migrate:remote
 */
 generator client {
   provider = "prisma-client-js"
@@ -237,6 +237,7 @@ model PointTransaction {
   description String   /// 거래 설명
   type        String   /// 거래 유형 ('DEBIT': 차감, 'CREDIT': 증가)
   reference   String?  /// 참조 정보 (예: 사주 분석 ID)
+  analysisId  Int?     @map("analysis_id") /// 분석 결과 ID (SajuAnalysis와 연결)
   createdAt   DateTime @default(now()) @map("created_at") /// 거래 시간
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 거래는 하나의 사용자에 속함
 
