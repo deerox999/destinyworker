@@ -3,6 +3,13 @@ import { Context } from "hono";
 import { getUserFromToken } from "../../common/utils";
 import { usePoints, refundPoints } from "../../common/paymentUtils";
 
+// 포인트 상수 정의
+const POINT_COSTS = {
+  SAJU_ANALYSIS: 1000,
+  COMPATIBILITY_ANALYSIS: 1500,
+  YEARLY_FORTUNE: 0, // 무료 서비스
+} as const;
+
 // Gemini API와 통신하기 위한 환경 변수 확장
 export interface Env {
   GOOGLE_GEMINI_API_KEY: string; // Gemini API 키
@@ -380,7 +387,7 @@ export async function SajuAnalysisWithGemini(
   const pointValidation = await usePoints(
     c.env.DB,
     user.id,
-    1000,
+    POINT_COSTS.SAJU_ANALYSIS,
     "사주 분석 서비스 이용",
     `saju_analysis_${Date.now()}`
   );
@@ -591,17 +598,19 @@ export async function SajuAnalysisWithGemini(
   } catch (error) {
     console.error("Gemini 사주 분석 API 오류:", error);
     
-    // API 호출 실패 시 포인트 환불
-    try {
-      await refundPoints(
-        c.env.DB,
-        user.id,
-        1000,
-        "사주 분석 서비스 실패로 인한 포인트 환불",
-        `saju_analysis_refund_${Date.now()}`
-      );
-    } catch (refundError) {
-      console.error("포인트 환불 실패:", refundError);
+    // API 호출 실패 시 포인트 환불 (실제 차감된 포인트만)
+    if (pointValidation.success && pointValidation.data && !pointValidation.data.isAdmin) {
+      try {
+        await refundPoints(
+          c.env.DB,
+          user.id,
+          POINT_COSTS.SAJU_ANALYSIS,
+          "사주 분석 서비스 실패로 인한 포인트 환불",
+          `saju_analysis_refund_${Date.now()}`
+        );
+      } catch (refundError) {
+        console.error("포인트 환불 실패:", refundError);
+      }
     }
     
     return c.json(
@@ -629,7 +638,7 @@ export async function SajuCompatibilityAnalysis(
   const pointValidation = await usePoints(
     c.env.DB,
     user.id,
-    1500,
+    POINT_COSTS.COMPATIBILITY_ANALYSIS,
     "궁합 분석 서비스 이용",
     `compatibility_analysis_${Date.now()}`
   );
@@ -921,17 +930,19 @@ ${JSON.stringify(body.sajuData.person2, null, 2)}`
   } catch (error) {
     console.error("Gemini 궁합 분석 API 오류:", error);
     
-    // API 호출 실패 시 포인트 환불
-    try {
-      await refundPoints(
-        c.env.DB,
-        user.id,
-        1500,
-        "궁합 분석 서비스 실패로 인한 포인트 환불",
-        `compatibility_analysis_refund_${Date.now()}`
-      );
-    } catch (refundError) {
-      console.error("포인트 환불 실패:", refundError);
+    // API 호출 실패 시 포인트 환불 (실제 차감된 포인트만)
+    if (pointValidation.success && pointValidation.data && !pointValidation.data.isAdmin) {
+      try {
+        await refundPoints(
+          c.env.DB,
+          user.id,
+          POINT_COSTS.COMPATIBILITY_ANALYSIS,
+          "궁합 분석 서비스 실패로 인한 포인트 환불",
+          `compatibility_analysis_refund_${Date.now()}`
+        );
+      } catch (refundError) {
+        console.error("포인트 환불 실패:", refundError);
+      }
     }
     
     return c.json(
@@ -954,6 +965,8 @@ export async function YearlyFortuneAnalysis(
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
+
+  // 무료 서비스이므로 포인트 검증/차감 없음
 
   try {
     const body: SajuAnalysisRequest = await c.req.json();
