@@ -274,9 +274,9 @@ export async function usePoints(
   description: string,
   reference?: string,
   analysisId?: number
-): Promise<{ 
-  success: boolean; 
-  message: string; 
+): Promise<{
+  success: boolean;
+  message: string;
   remainingPoints?: number;
   data?: {
     current: number;
@@ -289,7 +289,7 @@ export async function usePoints(
   // 사용자 역할 확인
   const userStmt = db.prepare("SELECT role, point FROM users WHERE id = ?");
   const user = await userStmt.bind(userId).first();
-  
+
   if (!user) {
     return {
       success: false,
@@ -308,8 +308,15 @@ export async function usePoints(
   }
 
   // 차감 실행
-  const result = await deductPoints(db, userId, requiredPoints, description, reference, analysisId);
-  
+  const result = await deductPoints(
+    db,
+    userId,
+    requiredPoints,
+    description,
+    reference,
+    analysisId
+  );
+
   // 차감 성공 시 data 추가
   if (result.success && result.remainingPoints !== undefined) {
     return {
@@ -322,7 +329,7 @@ export async function usePoints(
       },
     };
   }
-  
+
   return result;
 }
 
@@ -335,7 +342,14 @@ export async function refundPoints(
   reference?: string,
   analysisId?: number
 ): Promise<{ success: boolean; message: string; newPoints?: number }> {
-  return await addPoints(db, userId, amount, description, reference, analysisId);
+  return await addPoints(
+    db,
+    userId,
+    amount,
+    description,
+    reference,
+    analysisId
+  );
 }
 
 /**

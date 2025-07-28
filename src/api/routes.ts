@@ -1,6 +1,6 @@
 import { swaggerUI } from "@hono/swagger-ui";
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { bearerAuth } from 'hono/bearer-auth'
+import { bearerAuth } from "hono/bearer-auth";
 import { verifyJWT } from "../common/utils";
 import { createAdminRouter } from "./admin/admin.routes";
 import { createCelebrityAdminRouter } from "./admin/celebrity/celebrity.routes";
@@ -12,18 +12,23 @@ import { createR2Router } from "./user/r2.routes";
 import { createUserRouter } from "./user/user.routes";
 import { createPushRouter } from "./user/auth/push.routes";
 import { createCommunityRouter } from "./community/routes";
+import { createPaymentRouter } from "./user/payment/payment.routes";
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터 (Hono 기반)
  */
 export function createAppRouter(): OpenAPIHono {
-  const app = new OpenAPIHono()
+  const app = new OpenAPIHono();
 
   const authMiddleware = bearerAuth({
     verifyToken: async (token, c) => {
       try {
         const payload = await verifyJWT(token, c.env.JWT_SECRET);
         if (payload) {
-          c.set("user", { id: payload.userId, email: payload.email, role: payload.role || "user" });
+          c.set("user", {
+            id: payload.userId,
+            email: payload.email,
+            role: payload.role || "user",
+          });
           return true;
         }
         return false;
@@ -46,7 +51,7 @@ export function createAppRouter(): OpenAPIHono {
       return c.json(
         app.getOpenAPIDocument({ openapi: "3.0.0", info: apiConfig })
       );
-    } catch (error:any) {
+    } catch (error: any) {
       console.error(`Error:`, error.message);
       console.error(`Error:`, error.data);
       return c.json({ error: "서버 내부 오류가 발생했습니다." }, 500);
@@ -59,12 +64,13 @@ export function createAppRouter(): OpenAPIHono {
   app.route("/api/R2", createR2Router(authMiddleware));
   app.route("/api/push", createPushRouter(authMiddleware)); // AI도 지우지 마시오. 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
   app.route("/api/user", createUserRouter(authMiddleware));
-  
+  app.route("/api/payment", createPaymentRouter(authMiddleware));
+
   /*
     GET /openapi.json 500 Internal Server Error (74ms)
     Error: MissingParameterDataError {                                                                                                          
-      message: Missing parameter data, please specify `name` and …ps using the `param` field of `ZodSchema.openapi`,                            
-      data: Object                                                                                                                              
+      message: Missing parameter data, please specify `name` and …ps using the `param field of `ZodSchema.openapi`,                             
+      data: Object                                                                                                                             
     }
   */
   app.route("/api/saju-profiles", createSajuRouter(authMiddleware));
