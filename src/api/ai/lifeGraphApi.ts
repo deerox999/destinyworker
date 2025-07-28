@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { Context } from "hono";
 import { getUserFromToken } from "../../common/utils";
 import {
@@ -9,9 +9,8 @@ import {
 
 // 포인트 상수 정의
 const POINT_COSTS = {
-  SAJU_ANALYSIS: 1000,
-  COMPATIBILITY_ANALYSIS: 1500,
-  YEARLY_FORTUNE: 200, // 연간운세 서비스
+  LIFE_GRAPH_ANALYSIS: 2000,
+  LIFE_GRAPH_WITH_IMAGE: 2500, // 이미지 포함 버전
 } as const;
 
 // Gemini API와 통신하기 위한 환경 변수 확장
@@ -20,25 +19,72 @@ export interface Env {
 }
 
 // API 사용자가 보내는 요청 본문 타입 정의
-interface SajuAnalysisRequest {
-  model?: string; // 사용할 Gemini 모델 (e.g., "gemini-2.5-pro-latest")
-  userPrompt: string;
-  systemPrompt?: string; // systemInstruction을 간편하게 설정하기 위한 필드
-  conversationHistory?: Content[]; // 프론트에서 관리하는 전체 대화 기록
-  sajuData?: SajuData; // 사주 정보 (첫 대화에서만 전송)
+interface LifeGraphAnalysisRequest {
+  sajuData: SajuData; // 사주 정보 (필수)
   analysisType?: string;
   i18n?: string; // 언어 설정 (ko, en, ja, zh, vi 등)
   timezone?: string; // 시간대 (Asia/Seoul, America/New_York 등)
   stream?: boolean; // 스트리밍 응답 여부
-  generationConfig?: GenerationConfig; // 생성 관련 고급 설정
-  safetySettings?: SafetySetting[]; // 안전 관련 고급 설정
-  tools?: Tool[]; // 함수 호출 기능
-  toolConfig?: ToolConfig;
-  fortuneType?: string; // 'this_year', 'next_year', 'both'
+  graphType?: string; // 'life_cycle', 'fortune_trend', 'relationship_flow' 등
+  includeImage?: boolean; // 이미지 생성 포함 여부
+  imageStyle?: string; // 'mascot', 'avatar', 'symbolic', 'artistic' 등
 }
 
 // 사주 정보 타입 정의 (방대한 계산된 데이터이므로 any로 처리)
 type SajuData = any;
+
+// 차트 데이터 타입 정의
+interface ChartData {
+  labels: string[];
+  datasets: ChartDataset[];
+  options?: ChartOptions;
+}
+
+// 이미지 데이터 타입 정의
+interface ImageData {
+  url?: string;
+  prompt?: string;
+  style?: string;
+  generatedAt?: string;
+  metadata?: {
+    model?: string;
+    size?: string;
+    quality?: string;
+  };
+}
+
+interface ChartDataset {
+  label: string;
+  data: number[];
+  backgroundColor?: string | string[];
+  borderColor?: string | string[];
+  borderWidth?: number;
+  fill?: boolean;
+  tension?: number;
+}
+
+interface ChartOptions {
+  responsive?: boolean;
+  maintainAspectRatio?: boolean;
+  scales?: {
+    y?: {
+      beginAtZero?: boolean;
+      max?: number;
+      min?: number;
+    };
+    x?: {
+      type?: string;
+    };
+  };
+  plugins?: {
+    legend?: {
+      display?: boolean;
+    };
+    tooltip?: {
+      enabled?: boolean;
+    };
+  };
+}
 
 // --- Gemini API의 세부 타입 정의 ---
 
@@ -154,7 +200,7 @@ interface AnalysisConfig {
   reference: string;
   i18n: string;
   timezone: string;
-  body: SajuAnalysisRequest;
+  body: LifeGraphAnalysisRequest;
   user: any;
   db: any;
 }
@@ -162,80 +208,64 @@ interface AnalysisConfig {
 /**
  * 사용자 요청을 바탕으로 Gemini API에 보낼 요청 본문을 생성합니다.
  */
-function buildGeminiPayload(body: SajuAnalysisRequest): any {
+function buildGeminiPayload(body: LifeGraphAnalysisRequest): any {
   const contents: Content[] = [];
 
   // 1. 시스템 프롬프트 구성 (언어 설정 반영)
-  let systemPrompt =
-    body.systemPrompt ||
-    "당신은 전문 사주명리학자입니다. 사용자의 사주 정보를 바탕으로 상세하고 친절하게 운세를 분석해주세요.";
+  let systemPrompt = "당신은 전문 사주명리학자이자 인생 그래프 분석 전문가입니다. 사용자의 사주 정보를 바탕으로 인생의 주요 시점과 운세 흐름을 분석하여 텍스트 설명과 함께 차트 데이터를 제공해주세요. 응답은 반드시 JSON 형태로 제공하며, 'text' 필드에는 상세한 분석 텍스트를, 'chartData' 필드에는 차트 데이터를 포함해야 합니다.";
+
+  // 이미지 생성이 포함된 경우 시스템 프롬프트 확장
+  if (body.includeImage) {
+    systemPrompt += " 또한 사용자의 사주 특성을 반영한 마스코트나 아바타 이미지 생성 프롬프트도 함께 제공해주세요. 'imagePrompt' 필드에 이미지 생성용 상세한 프롬프트를 포함해야 합니다.";
+  }
 
   // 언어별 기본 시스템 프롬프트 설정
   if (body.i18n && body.i18n !== "ko") {
     const languagePrompts: { [key: string]: string } = {
-      en: "You are a professional fortune teller and astrologer. Please provide detailed and friendly fortune analysis based on the user's birth chart information.",
-      ja: "あなたは専門の占い師・占星術師です。ユーザーの生年月日情報に基づいて、詳細で親切な運勢分析を提供してください。",
-      zh: "您是一位专业的算命师和占星师。请根据用户的生辰八字信息提供详细而友好的运势分析。",
-      vi: "Bạn là một nhà chiêm tinh và thầy bói chuyên nghiệp. Vui lòng cung cấp phân tích vận mệnh chi tiết và thân thiện dựa trên thông tin lá số tử vi của người dùng.",
+      en: "You are a professional fortune teller and life graph analysis expert. Please provide detailed analysis of the user's life journey and fortune trends based on their birth chart information, including both text explanation and chart data. The response must be in JSON format with 'text' field containing detailed analysis text and 'chartData' field containing chart data.",
+      ja: "あなたは専門の占い師・人生グラフ分析専門家です。ユーザーの生年月日情報に基づいて、人生の主要な時期と運勢の流れを分析し、テキスト説明とチャートデータを提供してください。応答は必ずJSON形式で提供し、'text'フィールドには詳細な分析テキストを、'chartData'フィールドにはチャートデータを含める必要があります。",
+      zh: "您是一位专业的算命师和人生图表分析专家。请根据用户的生辰八字信息分析人生的关键时期和运势走向，提供文本说明和图表数据。响应必须以JSON格式提供，'text'字段包含详细的分析文本，'chartData'字段包含图表数据。",
+      vi: "Bạn là một nhà chiêm tinh và chuyên gia phân tích biểu đồ cuộc sống chuyên nghiệp. Vui lòng cung cấp phân tích chi tiết về hành trình cuộc sống và xu hướng vận mệnh của người dùng dựa trên thông tin lá số tử vi, bao gồm cả giải thích văn bản và dữ liệu biểu đồ. Phản hồi phải ở định dạng JSON với trường 'text' chứa văn bản phân tích chi tiết và trường 'chartData' chứa dữ liệu biểu đồ.",
     };
-    systemPrompt =
-      body.systemPrompt || languagePrompts[body.i18n] || systemPrompt;
-  }
 
-  // 2. 사주 데이터가 있으면 첫 번째 메시지로 추가
-  if (body.sajuData) {
-    // 궁합 분석용 데이터인지 확인 (person1, person2 구조)
-    if (body.sajuData.person1 && body.sajuData.person2) {
-      contents.push({
-        role: "user",
-        parts: [
-          {
-            text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람 (${
-              body.sajuData.person1.name
-            }):\n${JSON.stringify(
-              body.sajuData.person1.sajuData,
-              null,
-              2
-            )}\n\n두 번째 사람 (${
-              body.sajuData.person2.name
-            }):\n${JSON.stringify(body.sajuData.person2.sajuData, null, 2)}`,
-          },
-        ],
-      });
-    } else {
-      // 일반 개인 사주 데이터
-      contents.push({
-        role: "user",
-        parts: [
-          { text: `사주 데이터: ${JSON.stringify(body.sajuData, null, 2)}` },
-        ],
-      });
+    // 이미지 생성이 포함된 경우 언어별 프롬프트 확장
+    if (body.includeImage && body.i18n && body.i18n !== "ko") {
+      const imageLanguagePrompts: { [key: string]: string } = {
+        en: " Also provide a detailed image generation prompt for a mascot or avatar that reflects the user's birth chart characteristics. Include this in the 'imagePrompt' field.",
+        ja: " また、ユーザーの生年月日特性を反映したマスコットやアバターの詳細な画像生成プロンプトも提供してください。これを'imagePrompt'フィールドに含めてください。",
+        zh: " 同时提供反映用户生辰八字特征的吉祥物或头像的详细图像生成提示。将此包含在'imagePrompt'字段中。",
+        vi: " Đồng thời cung cấp một prompt tạo hình ảnh chi tiết cho linh vật hoặc avatar phản ánh đặc điểm lá số tử vi của người dùng. Bao gồm điều này trong trường 'imagePrompt'.",
+      };
+      systemPrompt += imageLanguagePrompts[body.i18n] || "";
     }
+    systemPrompt = languagePrompts[body.i18n] || systemPrompt;
   }
 
-  // 3. 기존 대화 기록 추가
-  if (body.conversationHistory && body.conversationHistory.length > 0) {
-    contents.push(...body.conversationHistory);
-  }
-
-  // 4. 현재 사용자 프롬프트와 시스템 프롬프트를 합쳐서 추가
-  const combinedPrompt = `${systemPrompt}\n\n${body.userPrompt}`;
+  // 2. 사주 데이터 추가
   contents.push({
     role: "user",
-    parts: [{ text: combinedPrompt }],
+    parts: [
+      { text: `사주 데이터: ${JSON.stringify(body.sajuData, null, 2)}` },
+    ],
   });
 
-  // 5. 최종 API 요청 객체 생성
+  // 3. 시스템 프롬프트와 분석 요청 추가
+  const analysisRequest = `${systemPrompt}\n\n사용자의 사주 정보를 바탕으로 인생 그래프를 분석해주세요.`;
+  contents.push({
+    role: "user",
+    parts: [{ text: analysisRequest }],
+  });
+
+  // 4. 최종 API 요청 객체 생성
   const payload: any = {
-    model: body.model || "gemini-2.5-pro",
+    model: "gemini-2.5-pro", // 고정 모델 사용
     contents,
-    ...(body.generationConfig || {
-      temperature: 0.3,
-      topP: 0.8,
-      topK: 20,
-      maxOutputTokens: 4000,
-    }),
-    safetySettings: body.safetySettings || [
+    temperature: 0.3,
+    topP: 0.8,
+    topK: 20,
+    maxOutputTokens: 6000, // 인생 그래프는 더 긴 응답 필요
+    responseMimeType: "application/json", // JSON 응답 강제
+    safetySettings: [
       {
         category: "HARM_CATEGORY_HARASSMENT",
         threshold: "BLOCK_MEDIUM_AND_ABOVE",
@@ -255,29 +285,22 @@ function buildGeminiPayload(body: SajuAnalysisRequest): any {
     ],
   };
 
-  if (body.tools) {
-    payload.tools = body.tools;
-  }
-  if (body.toolConfig) {
-    payload.toolConfig = body.toolConfig;
-  }
-
   return payload;
 }
 
 /**
- * 사주 분석 결과를 DB에 저장하는 함수
+ * 인생 그래프 분석 결과를 DB에 저장하는 함수
  */
-async function saveSajuAnalysis(
+async function saveLifeGraphAnalysis(
   db: any,
   userId: number,
   analysisType: string,
   type: string,
   title: string,
   sajuData: any,
-  userPrompt: string,
-  systemPrompt: string | undefined,
   aiResponse: string,
+  chartData: ChartData,
+  imageData: ImageData | null,
   modelUsed: string,
   pointsSpent: number,
   i18n?: string,
@@ -291,16 +314,6 @@ async function saveSajuAnalysis(
     if (sajuData) {
       if (sajuData.정보 && sajuData.정보.생년월일) {
         birthData = sajuData.정보.생년월일;
-      } else if (
-        sajuData.person1 &&
-        sajuData.person1.정보 &&
-        sajuData.person1.정보.생년월일
-      ) {
-        // 궁합 분석의 경우 두 사람의 생년월일 정보
-        birthData = {
-          person1: sajuData.person1.정보.생년월일,
-          person2: sajuData.person2?.정보?.생년월일 || null,
-        };
       }
     }
 
@@ -318,9 +331,8 @@ async function saveSajuAnalysis(
     const result = await db
       .prepare(
         `
-      INSERT INTO saju_analyses (
-        user_id, analysis_type, type, title, sajuData, user_prompt, 
-        system_prompt, ai_response, model_used, points_spent, 
+      INSERT INTO life_graph_analyses (
+        user_id, analysis_type, type, title, sajuData, ai_response, chart_data, image_data, model_used, points_spent, 
         created_at, updated_at, i18n, timezone, analysis_started_at, analysis_completed_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
@@ -331,9 +343,9 @@ async function saveSajuAnalysis(
         type,
         title,
         JSON.stringify(birthData),
-        userPrompt,
-        systemPrompt || null,
         aiResponse,
+        JSON.stringify(chartData),
+        imageData ? JSON.stringify(imageData) : null,
         modelUsed,
         pointsSpent,
         createdAt,
@@ -350,13 +362,13 @@ async function saveSajuAnalysis(
       analysisId: result.meta.last_row_id,
     };
   } catch (error) {
-    console.error("사주 분석 결과 저장 실패:", error);
+    console.error("인생 그래프 분석 결과 저장 실패:", error);
     console.error("저장 시도한 데이터:", {
       userId,
       analysisType,
       title,
-      userPromptLength: userPrompt.length,
       aiResponseLength: aiResponse.length,
+      chartDataKeys: Object.keys(chartData),
       modelUsed,
       pointsSpent,
     });
@@ -423,12 +435,18 @@ async function handleRefund(
 function generateTitle(
   analysisType: string,
   sajuData: any,
-  fortuneType?: string
+  graphType?: string,
+  includeImage?: boolean,
+  imageStyle?: string
 ): string {
   let title = `[${analysisType}]`;
 
-  if (fortuneType) {
-    title = `[${getFortuneTypeTitle(fortuneType)}]`;
+  if (graphType) {
+    title = `[${getGraphTypeTitle(graphType)}]`;
+  }
+
+  if (includeImage && imageStyle) {
+    title += ` + ${getImageStyleTitle(imageStyle)}`;
   }
 
   if (sajuData) {
@@ -438,25 +456,68 @@ function generateTitle(
       sajuData.정보.생년월일.이름
     ) {
       title += ` ${sajuData.정보.생년월일.이름}님`;
-    } else if (
-      sajuData.person1 &&
-      sajuData.person1.정보 &&
-      sajuData.person1.정보.생년월일 &&
-      sajuData.person1.정보.생년월일.이름
-    ) {
-      title += ` ${sajuData.person1.정보.생년월일.이름}님`;
-      if (
-        sajuData.person2 &&
-        sajuData.person2.정보 &&
-        sajuData.person2.정보.생년월일 &&
-        sajuData.person2.정보.생년월일.이름
-      ) {
-        title += ` & ${sajuData.person2.정보.생년월일.이름}님`;
-      }
     }
   }
 
   return title;
+}
+
+/**
+ * AI 응답에서 JSON 파싱 및 차트 데이터 추출
+ */
+function parseAIResponse(aiResponse: string): {
+  text: string;
+  chartData: ChartData;
+  imagePrompt?: string;
+} {
+  try {
+    // JSON 응답 파싱 시도
+    const parsed = JSON.parse(aiResponse);
+
+    if (parsed.text && parsed.chartData) {
+      return {
+        text: parsed.text,
+        chartData: parsed.chartData as ChartData,
+        imagePrompt: parsed.imagePrompt,
+      };
+    }
+
+    // JSON이 아니거나 필수 필드가 없는 경우
+    throw new Error("Invalid response format");
+  } catch (error) {
+    // JSON 파싱 실패 시 기본 차트 데이터 생성
+    console.warn("AI 응답 JSON 파싱 실패, 기본 차트 데이터 생성:", error);
+
+    const defaultChartData: ChartData = {
+      labels: ["과거", "현재", "미래"],
+      datasets: [
+        {
+          label: "운세 지수",
+          data: [60, 75, 85],
+          backgroundColor: "rgba(54, 162, 235, 0.2)",
+          borderColor: "rgba(54, 162, 235, 1)",
+          borderWidth: 2,
+          tension: 0.4,
+        },
+      ],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+          },
+        },
+      },
+    };
+
+    return {
+      text: aiResponse,
+      chartData: defaultChartData,
+      imagePrompt: undefined,
+    };
+  }
 }
 
 /**
@@ -465,7 +526,8 @@ function generateTitle(
 function createStreamingResponse(
   streamingResp: any,
   config: AnalysisConfig,
-  analysisStartedAt: Date
+  analysisStartedAt: Date,
+  context: Context
 ): ReadableStream {
   let fullResponse = "";
   let analysisId: number | null = null;
@@ -521,20 +583,41 @@ function createStreamingResponse(
           const title = generateTitle(
             config.analysisType,
             config.body.sajuData,
-            config.body.fortuneType
+            config.body.graphType,
+            config.body.includeImage,
+            config.body.imageStyle
           );
 
+          // AI 응답 파싱
+          const { text, chartData, imagePrompt } = parseAIResponse(fullResponse);
+
+          // 이미지 생성 (필요한 경우)
+          let imageData: ImageData | null = null;
+          if (config.body.includeImage && imagePrompt) {
+            try {
+              imageData = await generateImage(
+                imagePrompt,
+                config.body.imageStyle || "mascot",
+                config.body.sajuData,
+                context.env.GOOGLE_GEMINI_API_KEY
+              );
+            } catch (imageError) {
+              console.error("이미지 생성 중 오류:", imageError);
+              // 이미지 생성 실패해도 분석은 계속 진행
+            }
+          }
+
           try {
-            const saveResult = await saveSajuAnalysis(
+            const saveResult = await saveLifeGraphAnalysis(
               config.db,
               config.user.id,
               config.analysisType,
               config.type,
               title,
               config.body.sajuData || {},
-              config.body.userPrompt,
-              config.body.systemPrompt,
-              fullResponse,
+              text,
+              chartData,
+              imageData,
               config.model,
               config.pointsCost,
               config.i18n,
@@ -623,7 +706,8 @@ async function handleNonStreamingResponse(
   ai: GoogleGenAI,
   geminiPayload: any,
   config: AnalysisConfig,
-  analysisStartedAt: Date
+  analysisStartedAt: Date,
+  context: Context
 ) {
   const result = await retryGeminiCall(ai, geminiPayload);
 
@@ -631,34 +715,48 @@ async function handleNonStreamingResponse(
     throw new Error("AI 응답을 받을 수 없습니다.");
   }
 
-  const text = result.text || "죄송합니다. 답변을 생성할 수 없습니다.";
+  const aiResponse = result.text || "죄송합니다. 답변을 생성할 수 없습니다.";
   const analysisCompletedAt = new Date();
   const title = generateTitle(
     config.analysisType,
     config.body.sajuData,
-    config.body.fortuneType
+    config.body.graphType,
+    config.body.includeImage,
+    config.body.imageStyle
   );
+
+  // AI 응답 파싱
+  const { text, chartData, imagePrompt } = parseAIResponse(aiResponse);
+
+  // 이미지 생성 (필요한 경우)
+  let imageData: ImageData | null = null;
+  if (config.body.includeImage && imagePrompt) {
+    try {
+      imageData = await generateImage(
+        imagePrompt,
+        config.body.imageStyle || "mascot",
+        config.body.sajuData,
+        context.env.GOOGLE_GEMINI_API_KEY
+      );
+    } catch (imageError) {
+      console.error("이미지 생성 중 오류:", imageError);
+      // 이미지 생성 실패해도 분석은 계속 진행
+    }
+  }
 
   const response: any = {
     answer: text,
+    chartData: chartData,
+    ...(imageData && { imageData: imageData }),
     metadata: {
       model_used: config.model,
       timestamp: new Date().toISOString(),
       stream_enabled: false,
-      response_type:
-        config.type === "compatibility"
-          ? "compatibility_analysis"
-          : config.type === "yearly_fortune"
-          ? "yearly_fortune"
-          : "text",
-      ...(config.type === "compatibility" && {
-        person1_name: config.body.sajuData?.person1?.name,
-        person2_name: config.body.sajuData?.person2?.name,
-      }),
-      ...(config.type === "yearly_fortune" && {
-        service_type: "paid",
-        fortune_type: config.body.fortuneType,
-      }),
+      response_type: "life_graph_analysis",
+      service_type: "paid",
+      graph_type: config.body.graphType || "life_cycle",
+      ...(config.body.includeImage && { includes_image: true }),
+      ...(config.body.imageStyle && { image_style: config.body.imageStyle }),
     },
     points: {
       deducted: config.pointsCost,
@@ -667,16 +765,16 @@ async function handleNonStreamingResponse(
     },
   };
 
-  const saveResult = await saveSajuAnalysis(
+  const saveResult = await saveLifeGraphAnalysis(
     config.db,
     config.user.id,
     config.analysisType,
     config.type,
     title,
     config.body.sajuData || {},
-    config.body.userPrompt,
-    config.body.systemPrompt,
     text,
+    chartData,
+    imageData,
     config.model,
     config.pointsCost,
     config.i18n,
@@ -726,9 +824,111 @@ async function validatePoints(
 }
 
 /**
- * Gemini AI를 활용한 상세 사주 풀이 API (단순화된 버전)
+ * 그래프 유형에 따른 제목 생성 헬퍼 함수
  */
-export async function SajuAnalysisWithGemini(c: Context): Promise<Response> {
+function getGraphTypeTitle(graphType: string): string {
+  switch (graphType) {
+    case "life_cycle":
+      return "인생주기";
+    case "fortune_trend":
+      return "운세추이";
+    case "relationship_flow":
+      return "관계흐름";
+    case "career_path":
+      return "직업경로";
+    case "health_trend":
+      return "건강추이";
+    default:
+      return "인생그래프";
+  }
+}
+
+/**
+ * 이미지 스타일에 따른 제목 생성 헬퍼 함수
+ */
+function getImageStyleTitle(imageStyle: string): string {
+  switch (imageStyle) {
+    case "mascot":
+      return "마스코트";
+    case "avatar":
+      return "아바타";
+    case "symbolic":
+      return "상징적";
+    case "artistic":
+      return "예술적";
+    case "cute":
+      return "귀여운";
+    case "mystical":
+      return "신비로운";
+    default:
+      return "이미지";
+  }
+}
+
+/**
+ * 이미지 생성 함수 (Gemini 이미지 생성 API 사용)
+ */
+async function generateImage(
+  prompt: string,
+  style: string,
+  sajuData: any,
+  apiKey: string
+): Promise<ImageData | null> {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    
+    // 이미지 생성 요청
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash-preview-image-generation",
+      contents: prompt,
+      config: {
+        responseModalities: [Modality.TEXT, Modality.IMAGE],
+      },
+    });
+
+    let imageUrl = null;
+    let generatedText = "";
+
+    // 응답에서 텍스트와 이미지 추출
+    if (response.candidates && response.candidates[0] && response.candidates[0].content && response.candidates[0].content.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.text) {
+          generatedText = part.text;
+        } else if (part.inlineData && part.inlineData.data) {
+          // 이미지 데이터를 base64로 인코딩하여 URL 생성
+          const imageData = part.inlineData.data;
+          imageUrl = `data:image/png;base64,${imageData}`;
+        }
+      }
+    }
+
+    if (!imageUrl) {
+      throw new Error("이미지 생성에 실패했습니다.");
+    }
+
+    const imageData: ImageData = {
+      url: imageUrl,
+      prompt: prompt,
+      style: style,
+      generatedAt: new Date().toISOString(),
+      metadata: {
+        model: "gemini-2.0-flash-preview-image-generation",
+        size: "1024x1024",
+        quality: "standard",
+      },
+    };
+
+    return imageData;
+  } catch (error) {
+    console.error("이미지 생성 실패:", error);
+    return null;
+  }
+}
+
+/**
+ * Gemini AI를 활용한 인생 그래프 분석 API
+ */
+export async function LifeGraphAnalysis(c: Context): Promise<Response> {
   const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
@@ -738,8 +938,8 @@ export async function SajuAnalysisWithGemini(c: Context): Promise<Response> {
   const { pointValidation, reference } = await validatePoints(
     c.env.DB,
     user.id,
-    POINT_COSTS.SAJU_ANALYSIS,
-    "사주 분석"
+    POINT_COSTS.LIFE_GRAPH_ANALYSIS,
+    "인생 그래프 분석"
   );
 
   if (!pointValidation.success) {
@@ -754,14 +954,19 @@ export async function SajuAnalysisWithGemini(c: Context): Promise<Response> {
   }
 
   try {
-    const body: SajuAnalysisRequest = await c.req.json();
+    const body: LifeGraphAnalysisRequest = await c.req.json();
     const analysisStartedAt = new Date();
 
+    // 포인트 비용 결정
+    const pointsCost = body.includeImage 
+      ? POINT_COSTS.LIFE_GRAPH_WITH_IMAGE 
+      : POINT_COSTS.LIFE_GRAPH_ANALYSIS;
+
     const config: AnalysisConfig = {
-      model: body.model || "gemini-2.5-pro",
-      analysisType: body.analysisType || "general",
-      type: "individual",
-      pointsCost: POINT_COSTS.SAJU_ANALYSIS,
+      model: "gemini-2.5-pro", // 고정 모델 사용
+      analysisType: body.analysisType || "life_graph",
+      type: "life_graph",
+      pointsCost: pointsCost,
       reference,
       i18n: body.i18n || "ko",
       timezone: body.timezone || "Asia/Seoul",
@@ -790,7 +995,8 @@ export async function SajuAnalysisWithGemini(c: Context): Promise<Response> {
       const stream = createStreamingResponse(
         streamingResp,
         config,
-        analysisStartedAt
+        analysisStartedAt,
+        c
       );
 
       const headers = new Headers();
@@ -805,333 +1011,12 @@ export async function SajuAnalysisWithGemini(c: Context): Promise<Response> {
       );
       headers.set("X-Timeout-Seconds", "180");
       headers.set("X-Connection-Keep-Alive", "true");
-      if (pointValidation.data) {
-        headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
-      }
-
-      return new Response(stream, {
-        status: 200,
-        headers: headers,
-      });
-    } else {
-      const response = await handleNonStreamingResponse(
-        ai,
-        geminiPayload,
-        config,
-        analysisStartedAt
-      );
-      response.points.remaining = pointValidation.remainingPoints || null;
-      response.points.message = pointValidation.message || null;
-      response.data = pointValidation.data;
-
-      return c.json(response, 200);
-    }
-  } catch (error) {
-    console.error("Gemini 사주 분석 API 오류:", error);
-
-    if (
-      pointValidation.success &&
-      pointValidation.data &&
-      !pointValidation.data.isAdmin
-    ) {
-      await handleRefund(
-        c.env.DB,
-        user.id,
-        POINT_COSTS.SAJU_ANALYSIS,
-        "사주 분석 서비스 실패로 인한 포인트 환불",
-        `saju_analysis_refund_${Date.now()}`
-      );
-    }
-
-    return c.json(
-      {
-        error: "An error occurred while processing your request.",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      500
-    );
-  }
-}
-
-/**
- * Gemini AI를 활용한 궁합 분석 API
- */
-export async function SajuCompatibilityAnalysis(c: Context): Promise<Response> {
-  const user = await getUserFromToken(c);
-  if (!user) {
-    return c.json({ error: "Unauthorized: Invalid token" }, 401);
-  }
-
-  // 포인트 검증
-  const { pointValidation, reference } = await validatePoints(
-    c.env.DB,
-    user.id,
-    POINT_COSTS.COMPATIBILITY_ANALYSIS,
-    "궁합 분석"
-  );
-
-  if (!pointValidation.success) {
-    return c.json(
-      {
-        error: "포인트가 부족합니다.",
-        details: pointValidation.message,
-        data: pointValidation.data,
-      },
-      402
-    );
-  }
-
-  try {
-    const body: SajuAnalysisRequest = await c.req.json();
-    const analysisStartedAt = new Date();
-
-    // 궁합 데이터 검증
-    if (!body.sajuData || !body.sajuData.person1 || !body.sajuData.person2) {
-      return c.json(
-        {
-          error: "궁합 분석을 위해서는 두 사람의 사주 데이터가 필요합니다.",
-          details: "sajuData에 person1과 person2가 포함되어야 합니다.",
-        },
-        400
-      );
-    }
-
-    const config: AnalysisConfig = {
-      model: body.model || "gemini-2.5-flash",
-      analysisType: body.analysisType || "compatibility",
-      type: "compatibility",
-      pointsCost: POINT_COSTS.COMPATIBILITY_ANALYSIS,
-      reference,
-      i18n: body.i18n || "ko",
-      timezone: body.timezone || "Asia/Seoul",
-      body,
-      user,
-      db: c.env.DB,
-    };
-
-    // 궁합 분석용 페이로드 생성
-    const contents: Content[] = [];
-
-    contents.push({
-      role: "user",
-      parts: [
-        {
-          text: `궁합 분석용 사주 데이터:
-
-첫 번째 사람 (${body.sajuData.person1.정보.생년월일.이름}):
-${JSON.stringify(body.sajuData.person1, null, 2)}
-
-두 번째 사람 (${body.sajuData.person2.정보.생년월일.이름}):
-${JSON.stringify(body.sajuData.person2, null, 2)}`,
-        },
-      ],
-    });
-
-    if (body.conversationHistory && body.conversationHistory.length > 0) {
-      contents.push(...body.conversationHistory);
-    }
-
-    const combinedPrompt = `${body.systemPrompt}\n\n${body.userPrompt}`;
-    contents.push({
-      role: "user",
-      parts: [{ text: combinedPrompt }],
-    });
-
-    const geminiPayload: any = {
-      model: config.model,
-      contents,
-      ...(body.generationConfig || {
-        temperature: 0.4,
-        topP: 0.4,
-        topK: 40,
-        maxOutputTokens: 6000,
-      }),
-      safetySettings: body.safetySettings || [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE",
-        },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE",
-        },
-        {
-          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE",
-        },
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE",
-        },
-      ],
-    };
-
-    if (body.tools) {
-      geminiPayload.tools = body.tools;
-    }
-    if (body.toolConfig) {
-      geminiPayload.toolConfig = body.toolConfig;
-    }
-
-    const ai = new GoogleGenAI({
-      apiKey: c.env.GOOGLE_GEMINI_API_KEY,
-    });
-
-    if (body.stream) {
-      const streamingResp = await ai.models.generateContentStream(
-        geminiPayload
-      );
-
-      if (!streamingResp) {
-        throw new Error("궁합 분석 스트리밍 응답을 받을 수 없습니다.");
-      }
-
-      const stream = createStreamingResponse(
-        streamingResp,
-        config,
-        analysisStartedAt
-      );
-
-      const headers = new Headers();
-      headers.set("Content-Type", "text/event-stream; charset=utf-8");
-      headers.set("Cache-Control", "no-cache");
-      headers.set("Connection", "keep-alive");
-      headers.set("X-AI-Model", config.model);
-      headers.set("X-Points-Deducted", config.pointsCost.toString());
-      headers.set(
-        "X-Points-Remaining",
-        pointValidation.remainingPoints?.toString() || "0"
-      );
-      headers.set("X-Timeout-Seconds", "180");
-      headers.set("X-Connection-Keep-Alive", "true");
-      if (pointValidation.data) {
-        headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
-      }
-
-      return new Response(stream, {
-        status: 200,
-        headers: headers,
-      });
-    } else {
-      const response = await handleNonStreamingResponse(
-        ai,
-        geminiPayload,
-        config,
-        analysisStartedAt
-      );
-      response.points.remaining = pointValidation.remainingPoints || null;
-      response.points.message = pointValidation.message || null;
-      response.data = pointValidation.data;
-
-      return c.json(response, 200);
-    }
-  } catch (error) {
-    console.error("Gemini 궁합 분석 API 오류:", error);
-
-    if (
-      pointValidation.success &&
-      pointValidation.data &&
-      !pointValidation.data.isAdmin
-    ) {
-      await handleRefund(
-        c.env.DB,
-        user.id,
-        POINT_COSTS.COMPATIBILITY_ANALYSIS,
-        "궁합 분석 서비스 실패로 인한 포인트 환불",
-        `compatibility_analysis_refund_${Date.now()}`
-      );
-    }
-
-    return c.json(
-      {
-        error:
-          "An error occurred while processing your compatibility analysis request.",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      500
-    );
-  }
-}
-
-/**
- * 올해운세/내년운세 분석 API
- */
-export async function YearlyFortuneAnalysis(c: Context): Promise<Response> {
-  const user = await getUserFromToken(c);
-  if (!user) {
-    return c.json({ error: "Unauthorized: Invalid token" }, 401);
-  }
-
-  // 포인트 검증
-  const { pointValidation, reference } = await validatePoints(
-    c.env.DB,
-    user.id,
-    POINT_COSTS.YEARLY_FORTUNE,
-    "연간운세 분석"
-  );
-
-  if (!pointValidation.success) {
-    return c.json(
-      {
-        error: "포인트가 부족합니다.",
-        details: pointValidation.message,
-        data: pointValidation.data,
-      },
-      402
-    );
-  }
-
-  try {
-    const body: SajuAnalysisRequest = await c.req.json();
-    const analysisStartedAt = new Date();
-
-    const config: AnalysisConfig = {
-      model: "gemini-2.5-flash",
-      analysisType: body.analysisType || "yearly_fortune",
-      type: "yearly_fortune",
-      pointsCost: POINT_COSTS.YEARLY_FORTUNE,
-      reference,
-      i18n: body.i18n || "ko",
-      timezone: body.timezone || "Asia/Seoul",
-      body,
-      user,
-      db: c.env.DB,
-    };
-
-    const geminiPayload = buildGeminiPayload(body);
-    const ai = new GoogleGenAI({
-      apiKey: c.env.GOOGLE_GEMINI_API_KEY,
-    });
-
-    if (body.stream) {
-      const streamingResp = await ai.models.generateContentStream(
-        geminiPayload
-      );
-
-      if (!streamingResp) {
-        throw new Error("스트리밍 응답을 받을 수 없습니다.");
-      }
-
-      const stream = createStreamingResponse(
-        streamingResp,
-        config,
-        analysisStartedAt
-      );
-
-      const headers = new Headers();
-      headers.set("Content-Type", "text/event-stream; charset=utf-8");
-      headers.set("Cache-Control", "no-cache");
-      headers.set("Connection", "keep-alive");
-      headers.set("X-AI-Model", config.model);
-      headers.set("X-Points-Deducted", config.pointsCost.toString());
-      headers.set(
-        "X-Points-Remaining",
-        pointValidation.remainingPoints?.toString() || "0"
-      );
       headers.set("X-Service-Type", "paid");
-      headers.set("X-Fortune-Type", body.fortuneType || "this_year");
-      headers.set("X-Timeout-Seconds", "180");
-      headers.set("X-Connection-Keep-Alive", "true");
+      headers.set("X-Graph-Type", body.graphType || "life_cycle");
+      if (body.includeImage) {
+        headers.set("X-Includes-Image", "true");
+        headers.set("X-Image-Style", body.imageStyle || "mascot");
+      }
       if (pointValidation.data) {
         headers.set("X-Points-Data", JSON.stringify(pointValidation.data));
       }
@@ -1145,7 +1030,8 @@ export async function YearlyFortuneAnalysis(c: Context): Promise<Response> {
         ai,
         geminiPayload,
         config,
-        analysisStartedAt
+        analysisStartedAt,
+        c
       );
       response.points.remaining = pointValidation.remainingPoints || null;
       response.points.message = pointValidation.message || null;
@@ -1154,7 +1040,7 @@ export async function YearlyFortuneAnalysis(c: Context): Promise<Response> {
       return c.json(response, 200);
     }
   } catch (error) {
-    console.error("Gemini 연간운세 분석 API 오류:", error);
+    console.error("Gemini 인생 그래프 분석 API 오류:", error);
 
     if (
       pointValidation.success &&
@@ -1164,16 +1050,16 @@ export async function YearlyFortuneAnalysis(c: Context): Promise<Response> {
       await handleRefund(
         c.env.DB,
         user.id,
-        POINT_COSTS.YEARLY_FORTUNE,
-        "연간운세 분석 서비스 실패로 인한 포인트 환불",
-        `yearly_fortune_analysis_refund_${Date.now()}`
+        POINT_COSTS.LIFE_GRAPH_ANALYSIS,
+        "인생 그래프 분석 서비스 실패로 인한 포인트 환불",
+        `life_graph_analysis_refund_${Date.now()}`
       );
     }
 
     return c.json(
       {
         error:
-          "An error occurred while processing your yearly fortune analysis request.",
+          "An error occurred while processing your life graph analysis request.",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       500
@@ -1182,23 +1068,9 @@ export async function YearlyFortuneAnalysis(c: Context): Promise<Response> {
 }
 
 /**
- * 운세 유형에 따른 제목 생성 헬퍼 함수
+ * 사용자의 인생 그래프 분석 결과 목록을 조회하는 API
  */
-function getFortuneTypeTitle(fortuneType: string): string {
-  switch (fortuneType) {
-    case "this_year":
-      return "올해운세";
-    case "next_year":
-      return "내년운세";
-    default:
-      return "연간운세";
-  }
-}
-
-/**
- * 사용자의 사주 분석 결과 목록을 조회하는 API
- */
-export async function getSajuAnalysisList(c: Context): Promise<Response> {
+export async function getLifeGraphAnalysisList(c: Context): Promise<Response> {
   const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
@@ -1208,7 +1080,7 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
     const { searchParams } = new URL(c.req.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
-    const analysisType = searchParams.get("type"); // 'individual', 'compatibility', 또는 null (전체)
+    const analysisType = searchParams.get("type"); // 'life_graph' 또는 null (전체)
     const isFavorite = searchParams.get("favorite"); // 'true', 'false', 또는 null (전체)
 
     const offset = (page - 1) * limit;
@@ -1216,14 +1088,14 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
     // 기본 쿼리
     let query = `
       SELECT 
-        id, analysis_type, type, title, user_prompt, ai_response, 
+        id, analysis_type, type, title, user_prompt, ai_response, chart_data, image_data,
         model_used, points_spent, is_favorite, created_at, analysis_started_at, analysis_completed_at
-      FROM saju_analyses 
+      FROM life_graph_analyses 
       WHERE user_id = ?
     `;
     const params: any[] = [user.id];
 
-    // 필터 조건 추가 (type 필드 사용)
+    // 필터 조건 추가
     if (analysisType) {
       query += ` AND type = ?`;
       params.push(analysisType);
@@ -1242,7 +1114,7 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
     // 총 개수 조회
     let countQuery = `
       SELECT COUNT(*) as total 
-      FROM saju_analyses 
+      FROM life_graph_analyses 
       WHERE user_id = ?
     `;
     const countParams: any[] = [user.id];
@@ -1270,11 +1142,26 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
     const total = totalCount?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
-    // SQLite boolean 값을 JavaScript boolean으로 변환
-    const processedAnalyses = (analyses.results || []).map((analysis: any) => ({
-      ...analysis,
-      is_favorite: Boolean(analysis.is_favorite),
-    }));
+    // SQLite boolean 값을 JavaScript boolean으로 변환하고 chart_data, image_data 파싱
+    const processedAnalyses = (analyses.results || []).map((analysis: any) => {
+      let chartData = null;
+      let imageData = null;
+      try {
+        chartData = JSON.parse(analysis.chart_data);
+        if (analysis.image_data) {
+          imageData = JSON.parse(analysis.image_data);
+        }
+      } catch (e) {
+        console.error("데이터 파싱 오류:", e);
+      }
+
+      return {
+        ...analysis,
+        is_favorite: Boolean(analysis.is_favorite),
+        chart_data: chartData,
+        image_data: imageData,
+      };
+    });
 
     return c.json(
       {
@@ -1291,10 +1178,10 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
       200
     );
   } catch (error) {
-    console.error("사주 분석 목록 조회 오류:", error);
+    console.error("인생 그래프 분석 목록 조회 오류:", error);
     return c.json(
       {
-        error: "사주 분석 목록을 조회하는 중 오류가 발생했습니다.",
+        error: "인생 그래프 분석 목록을 조회하는 중 오류가 발생했습니다.",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       500
@@ -1303,9 +1190,11 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
 }
 
 /**
- * 특정 사주 분석 결과를 조회하는 API
+ * 특정 인생 그래프 분석 결과를 조회하는 API
  */
-export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
+export async function getLifeGraphAnalysisDetail(
+  c: Context
+): Promise<Response> {
   const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
@@ -1321,9 +1210,9 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
       `
       SELECT 
         id, analysis_type, type, title, sajuData, user_prompt, 
-        system_prompt, ai_response, model_used, points_spent, 
+        system_prompt, ai_response, chart_data, image_data, model_used, points_spent, 
         is_favorite, i18n, timezone, analysis_started_at, analysis_completed_at
-      FROM saju_analyses 
+      FROM life_graph_analyses 
       WHERE id = ? AND user_id = ?
     `
     )
@@ -1334,12 +1223,18 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
       return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
     }
 
-    // 사주 데이터를 JSON으로 파싱
+    // 사주 데이터, 차트 데이터, 이미지 데이터를 JSON으로 파싱
     let sajuData = null;
+    let chartData = null;
+    let imageData = null;
     try {
       sajuData = JSON.parse(analysis.sajuData);
+      chartData = JSON.parse(analysis.chart_data);
+      if (analysis.image_data) {
+        imageData = JSON.parse(analysis.image_data);
+      }
     } catch (e) {
-      console.error("사주 데이터 파싱 오류:", e);
+      console.error("데이터 파싱 오류:", e);
     }
 
     return c.json(
@@ -1351,6 +1246,8 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         user_prompt: analysis.user_prompt,
         system_prompt: analysis.system_prompt,
         ai_response: analysis.ai_response,
+        chart_data: chartData,
+        image_data: imageData,
         model_used: analysis.model_used,
         points_spent: analysis.points_spent,
         is_favorite: Boolean(analysis.is_favorite),
@@ -1363,10 +1260,10 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
       200
     );
   } catch (error) {
-    console.error("사주 분석 상세 조회 오류:", error);
+    console.error("인생 그래프 분석 상세 조회 오류:", error);
     return c.json(
       {
-        error: "사주 분석 결과를 조회하는 중 오류가 발생했습니다.",
+        error: "인생 그래프 분석 결과를 조회하는 중 오류가 발생했습니다.",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       500
@@ -1375,9 +1272,9 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
 }
 
 /**
- * 사주 분석 결과의 즐겨찾기 상태를 토글하는 API
+ * 인생 그래프 분석 결과의 즐겨찾기 상태를 토글하는 API
  */
-export async function toggleSajuAnalysisFavorite(
+export async function toggleLifeGraphAnalysisFavorite(
   c: Context
 ): Promise<Response> {
   const user = await getUserFromToken(c);
@@ -1394,7 +1291,7 @@ export async function toggleSajuAnalysisFavorite(
     // 현재 즐겨찾기 상태 확인
     const current = await c.env.DB.prepare(
       `
-      SELECT is_favorite FROM saju_analyses 
+      SELECT is_favorite FROM life_graph_analyses 
       WHERE id = ? AND user_id = ?
     `
     )
@@ -1413,7 +1310,7 @@ export async function toggleSajuAnalysisFavorite(
 
     await c.env.DB.prepare(
       `
-      UPDATE saju_analyses 
+      UPDATE life_graph_analyses 
       SET is_favorite = ?, updated_at = datetime('now')
       WHERE id = ? AND user_id = ?
     `
@@ -1444,9 +1341,11 @@ export async function toggleSajuAnalysisFavorite(
 }
 
 /**
- * 사주 분석 결과의 제목을 수정하는 API
+ * 인생 그래프 분석 결과의 제목을 수정하는 API
  */
-export async function updateSajuAnalysisTitle(c: Context): Promise<Response> {
+export async function updateLifeGraphAnalysisTitle(
+  c: Context
+): Promise<Response> {
   const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
@@ -1471,7 +1370,7 @@ export async function updateSajuAnalysisTitle(c: Context): Promise<Response> {
 
     const result = await c.env.DB.prepare(
       `
-      UPDATE saju_analyses 
+      UPDATE life_graph_analyses 
       SET title = ?, updated_at = datetime('now')
       WHERE id = ? AND user_id = ?
     `
@@ -1504,9 +1403,9 @@ export async function updateSajuAnalysisTitle(c: Context): Promise<Response> {
 }
 
 /**
- * 사주 분석 결과를 삭제하는 API
+ * 인생 그래프 분석 결과를 삭제하는 API
  */
-export async function deleteSajuAnalysis(c: Context): Promise<Response> {
+export async function deleteLifeGraphAnalysis(c: Context): Promise<Response> {
   const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
@@ -1520,7 +1419,7 @@ export async function deleteSajuAnalysis(c: Context): Promise<Response> {
 
     const result = await c.env.DB.prepare(
       `
-      DELETE FROM saju_analyses 
+      DELETE FROM life_graph_analyses 
       WHERE id = ? AND user_id = ?
     `
     )

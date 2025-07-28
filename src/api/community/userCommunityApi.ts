@@ -29,7 +29,11 @@ export const userCommunityApi = {
                 }
               },
               _count: {
-                select: { comments: true }
+                select: { 
+                  comments: {
+                    where: { isDeleted: false }
+                  }
+                }
               }
             }
           }
@@ -54,7 +58,11 @@ export const userCommunityApi = {
             }
           },
           _count: {
-            select: { comments: true }
+            select: { 
+              comments: {
+                where: { isDeleted: false }
+              }
+            }
           }
         }
       });
@@ -73,7 +81,11 @@ export const userCommunityApi = {
             }
           },
           _count: {
-            select: { comments: true }
+            select: { 
+              comments: {
+                where: { isDeleted: false }
+              }
+            }
           }
         }
       });
@@ -284,7 +296,11 @@ export const userCommunityApi = {
               }
             },
             _count: {
-              select: { comments: true }
+              select: { 
+                comments: {
+                  where: { isDeleted: false }
+                }
+              }
             }
           }
         }),
@@ -417,7 +433,11 @@ export const userCommunityApi = {
               }
             },
             _count: {
-              select: { comments: true }
+              select: { 
+                comments: {
+                  where: { isDeleted: false }
+                }
+              }
             }
           }
         }),
@@ -490,7 +510,11 @@ export const userCommunityApi = {
             }
           },
           _count: {
-            select: { comments: true }
+            select: { 
+              comments: {
+                where: { isDeleted: false }
+              }
+            }
           }
         }
       });

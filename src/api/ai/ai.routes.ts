@@ -1,5 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { FortuneTelling } from "./DestinyTellerApi";
+
 import { 
   SajuAnalysisWithGemini, 
   SajuCompatibilityAnalysis,
@@ -209,37 +209,6 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
 
   // --- 라우트 정의 ---
 
-  const FortuneTellingRoute = createRoute({
-    method: "post",
-    path: "/detailed-fortune-telling",
-    summary: "상세 사주 풀이 (RAG 결합)",
-    description:
-      "사용자 프롬프트와 사주 지식 베이스(RAG)를 결합하여 AI가 상세한 운세 풀이를 제공합니다.",
-    tags: ["AI"],
-    security: [{ BearerAuth: [] }],
-    request: {
-      body: {
-        content: { "application/json": { schema: AiBasicRequestSchema } },
-      },
-    },
-    responses: {
-      200: {
-        description:
-          "성공. stream=true일 경우 text/event-stream, false일 경우 application/json.",
-        content: {
-          "application/json": {
-            schema: z
-              .object({
-                result: z.string().openapi({ example: "당신의 사주는..." }),
-              })
-              .openapi({ type: "object" }),
-          },
-        },
-      },
-      400: { description: "잘못된 요청" },
-      500: { description: "AI 모델 실행 오류" },
-    },
-  });
 
   const SajuAnalysisWithGeminiRoute = createRoute({
     method: "post",
@@ -332,9 +301,9 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const YearlyFortuneAnalysisRoute = createRoute({
     method: "post",
     path: "/yearly-fortune-analysis",
-    summary: "연간운세 분석 (무료 서비스)",
+    summary: "연간운세 분석",
     description:
-      "Google의 Gemini AI 모델을 사용하여 올해운세, 내년운세, 또는 둘 다를 분석합니다. fortuneType 파라미터로 분기합니다. 무료 서비스로 포인트 차감이 없습니다.",
+      "Google의 Gemini AI 모델을 사용하여 올해운세, 내년운세, 또는 둘 다를 분석합니다. fortuneType 파라미터로 분기합니다.",
     tags: ["AI"],
     security: [{ BearerAuth: [] }],
     request: {
@@ -965,7 +934,6 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   });
 
   // 라우트 등록 (구체적인 경로를 먼저 등록)
-  app.openapi(FortuneTellingRoute, FortuneTelling);
   app.openapi(SajuAnalysisWithGeminiRoute, SajuAnalysisWithGemini);
   app.openapi(SajuCompatibilityAnalysisRoute, SajuCompatibilityAnalysis);
   app.openapi(YearlyFortuneAnalysisRoute, YearlyFortuneAnalysis);
