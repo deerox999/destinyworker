@@ -1,5 +1,5 @@
 /*
-wrangler d1 execute destiny --command "update users set role='admin' where id=1;"
+wrangler d1 execute destiny-new --command "update users set role='admin' where id=1;"
 */
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -66,7 +66,7 @@ try {
     try {
       // 로컬 D1의 실제 테이블 목록 조회
       const localTables = execSync(
-        `npx wrangler d1 execute destiny --command "SELECT name FROM sqlite_master WHERE type='table';"`,
+        `npx wrangler d1 execute destiny-local --command "SELECT name FROM sqlite_master WHERE type='table';"`,
         { encoding: 'utf8' }
       );
       
@@ -75,7 +75,7 @@ try {
       
       // 로컬 D1의 스키마를 추출
       const localSchema = execSync(
-        `npx wrangler d1 execute destiny --command "SELECT sql FROM sqlite_master WHERE type='table';"`,
+        `npx wrangler d1 execute destiny-local --command "SELECT sql FROM sqlite_master WHERE type='table';"`,
         { encoding: 'utf8' }
       );
       
@@ -197,18 +197,15 @@ try {
     console.log('⚠️  --force 플래그가 지정되어 위험한 변경사항을 진행합니다.\n');
   }
 
-  // 7. 로컬 D1에 적용 (선택사항)
-  if (process.argv.includes('--local')) {
-    console.log('🏠 3단계: 로컬 D1에 적용 중...');
-    execSync(`npx wrangler d1 execute destiny --file=${tempSqlFile}`, { stdio: 'inherit' });
-    console.log('✅ 로컬 D1 적용 완료');
-  }
-
-  // 8. 원격 D1에 적용
+  // 4. D1에 SQL 적용
   if (process.argv.includes('--remote') || !process.argv.includes('--local')) {
     console.log('☁️  4단계: 원격 D1에 적용 중...');
-          execSync(`npx wrangler d1 execute destiny-new --remote --file=${tempSqlFile}`, { stdio: 'inherit' });
+    execSync(`npx wrangler d1 execute destiny-new --remote --file=${tempSqlFile}`, { stdio: 'inherit' });
     console.log('✅ 원격 D1 적용 완료');
+  } else {
+    console.log('🏠 4단계: 로컬 D1에 적용 중...');
+    execSync(`npx wrangler d1 execute destiny-local --file=${tempSqlFile}`, { stdio: 'inherit' });
+    console.log('✅ 로컬 D1 적용 완료');
   }
 
   // 9. Prisma 클라이언트 재생성

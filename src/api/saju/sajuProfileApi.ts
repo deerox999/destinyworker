@@ -118,6 +118,7 @@ export async function createSajuProfile(
       {
         success: true,
         id: profile.id,
+        profile: toKoreanFields(profile),
         message: "생성 완료",
       },
       201

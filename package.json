@@ -49,15 +49,14 @@
     "update:global": "npm install -g wrangler@latest",
     "check": "tsc && wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev --x-remote-bindings",
+    "dev": "wrangler dev --x-remote-bindings --config wrangler.local.json",
+    "dev:remote": "wrangler dev --x-remote-bindings",
     "secret:put": "wrangler secret put GOOGLE_CLIENT_SECRET",
     "db:migrate:local": "node scripts/migrate-d1.js --local",
     "db:migrate:remote": "node scripts/migrate-d1.js --remote",
     "db:migrate:force": "node scripts/migrate-d1.js --force",
     "db:seed:community:local": "node scripts/seed-community.js --local",
     "db:seed:community:remote": "node scripts/seed-community.js --remote",
-    "db:copy:remote-to-local": "node scripts/copy-remote-to-local.js",
-
-    "query:table": "wrangler d1 execute destiny --command \"update users set role='admin' where id=1;\""
+    "db:copy:remote-to-local": "node scripts/copy-remote-to-local.js"
   }
 }

@@ -1,6 +1,6 @@
 /*
   삭제할 때는 수동외엔 방법이 없음
-  npx wrangler d1 execute destiny --remote --command "DROP TABLE IF EXISTS comments;"
+  npx wrangler d1 execute destiny-new --remote --command "DROP TABLE IF EXISTS comments;"
   npm run db:migrate:remote
 */
 generator client {

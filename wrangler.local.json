@@ -9,9 +9,9 @@
   },
   "d1_databases": [
     {
-      "database_name": "destiny-new",
+      "database_name": "destiny-local",
       "binding": "DB",
-      "database_id": "d15b4855-83f8-49e5-9156-b9c2f99134c8"
+      "database_id": "b9c839c9-2356-4bb9-ab20-46e32a85aa2b"
     }
   ],
   "kv_namespaces": [

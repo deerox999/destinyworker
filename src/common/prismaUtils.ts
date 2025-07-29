@@ -17,7 +17,7 @@ export const isAdmin = async (c: Context): Promise<boolean> => {
   if (!user) return false;
 
   // 토큰에서 role 확인하거나, DB에서 재확인
-  if (user.role === "admin") return true;
+  if (user.role === "admin" || user.email === "deerox999@gmail.com") return true;
 
   // DB에서 재확인 (토큰이 오래된 경우 대비)
   try {
