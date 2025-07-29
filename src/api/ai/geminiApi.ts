@@ -6,13 +6,7 @@ import {
   refundPoints,
   updatePointTransactionAnalysisId,
 } from "../../common/paymentUtils";
-
-// 포인트 상수 정의
-const POINT_COSTS = {
-  SAJU_ANALYSIS: 1000,
-  COMPATIBILITY_ANALYSIS: 1500,
-  YEARLY_FORTUNE: 200, // 연간운세 서비스
-} as const;
+import { POINT_COSTS } from "../../common/paymentUtils";
 
 // Gemini API와 통신하기 위한 환경 변수 확장
 export interface Env {

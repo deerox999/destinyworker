@@ -7,9 +7,18 @@ interface User {
   google_id: string;
   email: string;
   name: string;
+  userName?: string;
   picture?: string;
   role: string;
   point: number;
+  privacy_consent: boolean;
+  privacy_consent_version: string;
+  privacy_consent_at?: string;
+  report_storage_consent: boolean;
+  report_storage_consent_version: string;
+  report_storage_consent_at?: string;
+  last_consent_at?: string;
+  consent_status: string;
   created_at: string;
   updated_at: string;
 }
@@ -244,7 +253,24 @@ export async function googleLogin(
     return c.json({
       success: true,
       token: jwtToken,
-      user: user,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        userName: user.userName,
+        picture: user.picture,
+        role: user.role,
+        point: user.point,
+        privacyConsent: user.privacy_consent || false,
+        privacyConsentVersion: user.privacy_consent_version || "1.0",
+        privacyConsentAt: user.privacy_consent_at || null,
+        reportStorageConsent: user.report_storage_consent || false,
+        reportStorageConsentVersion: user.report_storage_consent_version || "1.0",
+        reportStorageConsentAt: user.report_storage_consent_at || null,
+        lastConsentAt: user.last_consent_at || null,
+        consentStatus: user.consent_status || "none",
+        created_at: user.created_at,
+      },
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -333,27 +359,12 @@ export async function getUserInfo(
     }
 
     // 사용자 정보 조회
-    const userStmt = c.env.DB.prepare(
-      "SELECT id, email, name, userName, picture, role, point, created_at FROM users WHERE id = ?"
-    );
+    const userStmt = c.env.DB.prepare("SELECT * FROM users WHERE id = ?");
     const user = await userStmt.bind(payload.userId).first();
-
     if (!user) {
       return c.json({ error: "사용자를 찾을 수 없습니다." }, 404);
     }
-
-    return c.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        userName: user.userName,
-        picture: user.picture,
-        role: user.role,
-        point: user.point,
-        created_at: user.created_at,
-      },
-    });
+    return c.json({ user: user });
   } catch (error) {
     console.error("Get user info error:", error);
     return c.json(

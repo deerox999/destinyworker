@@ -2,10 +2,16 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
+import { SajuAnalysisWorker } from "./durable-objects/SajuAnalysisWorker";
+import { handleSajuAnalysisMessage } from "./queue-consumers/sajuAnalysisConsumer";
 
 type Env = {
   Bindings: {
-    KV: KVNamespace
+    KV: KVNamespace;
+    SAJU_ANALYSIS_WORKER: DurableObjectNamespace;
+    analysis: Queue;
+    GOOGLE_GEMINI_API_KEY: string;
+    DB: D1Database;
   }
 }
 
@@ -49,5 +55,10 @@ app.notFound((c) => {
 const routes = createAppRouter();
 app.route("/", routes);
 
+// Durable Object 등록
+export { SajuAnalysisWorker };
+
+// Queue Consumer 등록
+export { handleSajuAnalysisMessage };
 
 export default app;

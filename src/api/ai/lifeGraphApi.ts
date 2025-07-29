@@ -1,3 +1,7 @@
+/*
+현재 미사용중인 API, 테이블 설계 잘 해야 함.
+이미지 생성 및 인생그래프 생성 api
+ */
 import { GoogleGenAI, Modality } from "@google/genai";
 import { Context } from "hono";
 import { getUserFromToken } from "../../common/utils";

@@ -5,6 +5,7 @@ import { verifyJWT } from "../common/utils";
 import { createAdminRouter } from "./admin/admin.routes";
 import { createCelebrityAdminRouter } from "./admin/celebrity/celebrity.routes";
 import { createAiRouter } from "./ai/ai.routes";
+import asyncSajuRouter from "./ai/asyncSaju.routes";
 import { createCelebrityRouter } from "./celebrity/celebrity.routes";
 import { createSajuRouter } from "./saju/saju.routes";
 import { createAuthRouter } from "./user/auth/auth.routes";
@@ -75,6 +76,7 @@ export function createAppRouter(): OpenAPIHono {
   */
   app.route("/api/saju-profiles", createSajuRouter(authMiddleware));
   app.route("/api/ai", createAiRouter(authMiddleware));
+  app.route("/api/ai/async", asyncSajuRouter);
   app.route("/api/admin", createAdminRouter(authMiddleware));
   app.route("/api/celebrities", createCelebrityRouter(authMiddleware));
   app.route("/api/admin/celebrities", createCelebrityAdminRouter(authMiddleware));

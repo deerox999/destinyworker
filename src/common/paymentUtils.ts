@@ -1,4 +1,10 @@
-import { Context } from "hono";
+
+// 포인트 상수 정의
+export const POINT_COSTS = {
+  SAJU_ANALYSIS: 1000,
+  COMPATIBILITY_ANALYSIS: 1500,
+  YEARLY_FORTUNE: 200,
+} as const;
 
 // 포인트 관련 인터페이스
 export interface PointTransaction {
