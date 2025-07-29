@@ -61,4 +61,18 @@ export { SajuAnalysisWorker };
 // Queue Consumer 등록
 export { saju_analysis_queue_handler };
 
-export default app;
+// Queue consumer를 default export에 추가
+const queueHandler = {
+  async queue(
+    batch: MessageBatch<any>,
+    env: any,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    return saju_analysis_queue_handler(batch as any, env);
+  },
+};
+
+export default {
+  ...app,
+  ...queueHandler,
+};
