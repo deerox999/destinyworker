@@ -22,7 +22,7 @@ try {
     try {
       // 현재 D1의 테이블 스키마를 추출
       const dbSchema = execSync(
-        `npx wrangler d1 execute destiny --remote --command ".schema"`,
+        `npx wrangler d1 execute destiny-new --remote --command ".schema"`,
         { encoding: 'utf8' }
       );
       
@@ -207,7 +207,7 @@ try {
   // 8. 원격 D1에 적용
   if (process.argv.includes('--remote') || !process.argv.includes('--local')) {
     console.log('☁️  4단계: 원격 D1에 적용 중...');
-    execSync(`npx wrangler d1 execute destiny --remote --file=${tempSqlFile}`, { stdio: 'inherit' });
+          execSync(`npx wrangler d1 execute destiny-new --remote --file=${tempSqlFile}`, { stdio: 'inherit' });
     console.log('✅ 원격 D1 적용 완료');
   }
 

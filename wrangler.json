@@ -9,9 +9,9 @@
   },
   "d1_databases": [
     {
-      "database_name": "destiny",
+      "database_name": "destiny-new",
       "binding": "DB",
-      "database_id": "85e7d772-5696-4091-abf9-ff9d70b94a7a"
+      "database_id": "d15b4855-83f8-49e5-9156-b9c2f99134c8"
       
     }
   ],
