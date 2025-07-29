@@ -121,8 +121,8 @@ async function findOrCreateUser(
     } else {
       // 새 사용자 생성 (기본 포인트 3000 지급)
       stmt = db.prepare(`
-        INSERT INTO users (google_id, email, name, picture, point) 
-        VALUES (?, ?, ?, ?, 3000)
+        INSERT INTO users (google_id, email, name, picture, point, updated_at) 
+        VALUES (?, ?, ?, ?, 3000, CURRENT_TIMESTAMP)
       `);
       const insertResult = await stmt
         .bind(
@@ -197,7 +197,8 @@ export async function googleLogin(
     return c.json({ error: "데이터베이스가 설정되지 않았습니다." }, 500);
   }
 
-  if (!c.env.GOOGLE_CLIENT_ID || !c.env.JWT_SECRET) {
+  if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
+    console.log(c.env)
     return c.json({ error: "OAuth 설정이 누락되었습니다." }, 500);
   }
 
@@ -227,7 +228,7 @@ export async function googleLogin(
     // JWT 토큰 생성
     const jwtToken = await generateJWT(
       { userId: user.id, email: user.email, role: user.role },
-      c.env.JWT_SECRET
+      c.env.GOOGLE_CLIENT_SECRET
     );
 
     // 세션 저장
@@ -280,7 +281,7 @@ export async function googleLogin(
 
 // 로그아웃
 export async function logout(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.JWT_SECRET) {
+  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.json(
       { error: "데이터베이스가 설정되지 않았거나 JWT 시크릿이 없습니다." },
       500
@@ -296,7 +297,7 @@ export async function logout(c: Context): Promise<Response> {
     const token = authHeader.substring(7);
 
     // 토큰에서 사용자 정보 추출
-    const payload = await verifyJWT(token, c.env.JWT_SECRET);
+    const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
     if (!payload) {
       // 토큰이 유효하지 않아도 세션은 삭제 시도
       await deleteSession(c.env.DB, token);
@@ -331,7 +332,7 @@ export async function logout(c: Context): Promise<Response> {
 export async function getUserInfo(
   c: Context
 ): Promise<Response> {
-  if (!c.env.DB || !c.env.JWT_SECRET) {
+  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
@@ -342,7 +343,7 @@ export async function getUserInfo(
     }
 
     const token = authHeader.substring(7);
-    const payload = await verifyJWT(token, c.env.JWT_SECRET);
+    const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
 
     if (!payload) {
       return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
@@ -378,7 +379,7 @@ export async function getUserInfo(
 export async function refreshToken(
   c: Context
 ): Promise<Response> {
-  if (!c.env.DB || !c.env.JWT_SECRET) {
+  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
@@ -389,7 +390,7 @@ export async function refreshToken(
     }
 
     const oldToken = authHeader.substring(7);
-    const payload = await verifyJWT(oldToken, c.env.JWT_SECRET);
+    const payload = await verifyJWT(oldToken, c.env.GOOGLE_CLIENT_SECRET);
 
     if (!payload) {
       return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
@@ -401,7 +402,7 @@ export async function refreshToken(
     // 새 JWT 토큰 생성
     const newJwtToken = await generateJWT(
       { userId: payload.userId, email: payload.email, role: payload.role || "user" },
-      c.env.JWT_SECRET
+      c.env.GOOGLE_CLIENT_SECRET
     );
 
     // 새 세션 저장

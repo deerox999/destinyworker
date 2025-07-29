@@ -1,12 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 
-// 포인트 상수 정의
-const POINT_COSTS = {
-  SAJU_ANALYSIS: 1000,
-  COMPATIBILITY_ANALYSIS: 1500,
-  YEARLY_FORTUNE: 200,
-} as const;
-
 // Queue 메시지 타입
 interface SajuAnalysisMessage {
   jobId: string;
@@ -29,13 +22,15 @@ interface SajuAnalysisMessage {
 /**
  * Queue Consumer - 사주 분석 작업을 백그라운드에서 처리
  */
-export async function handleSajuAnalysisMessage(
+export async function saju_analysis_queue_handler(
   batch: MessageBatch<SajuAnalysisMessage>,
   env: any
 ): Promise<void> {
   for (const message of batch.messages) {
     try {
-      console.log(`Processing job ${message.body.jobId} for user ${message.body.userId}`);
+      console.log(
+        `Processing job ${message.body.jobId} for user ${message.body.userId}`
+      );
 
       // Gemini API 호출
       const ai = new GoogleGenAI({
@@ -46,32 +41,40 @@ export async function handleSajuAnalysisMessage(
       const result = await retryGeminiCall(ai, payload);
 
       if (!result) {
-        throw new Error('AI 응답을 받을 수 없습니다.');
+        throw new Error("AI 응답을 받을 수 없습니다.");
       }
 
-      const text = result.text || '죄송합니다. 답변을 생성할 수 없습니다.';
+      const text = result.text || "죄송합니다. 답변을 생성할 수 없습니다.";
       const analysisCompletedAt = new Date();
       const title = generateTitle(message.body);
 
       // DB에 저장
-      const saveResult = await saveSajuAnalysis(message.body, text, title, analysisCompletedAt, env);
+      const saveResult = await saveSajuAnalysis(
+        message.body,
+        text,
+        title,
+        analysisCompletedAt,
+        env
+      );
 
       if (!saveResult.success) {
-        throw new Error('분석 결과 저장에 실패했습니다.');
+        throw new Error("분석 결과 저장에 실패했습니다.");
       }
 
       // Durable Object에 완료 상태 업데이트
-      const durableObjectId = env.SAJU_ANALYSIS_WORKER.idFromString(message.body.durableObjectId);
+      const durableObjectId = env.SAJU_ANALYSIS_WORKER.idFromString(
+        message.body.durableObjectId
+      );
       const durableObject = env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
 
-      await durableObject.fetch('http://localhost/update-status', {
-        method: 'POST',
+      await durableObject.fetch("http://localhost/update-status", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           jobId: message.body.jobId,
-          status: 'completed',
+          status: "completed",
           result: {
             answer: text,
             analysisId: saveResult.analysisId,
@@ -79,12 +82,12 @@ export async function handleSajuAnalysisMessage(
               model_used: message.body.model,
               timestamp: new Date().toISOString(),
               response_type: getResponseType(message.body.type),
-              ...(message.body.type === 'compatibility' && {
+              ...(message.body.type === "compatibility" && {
                 person1_name: message.body.sajuData?.person1?.name,
                 person2_name: message.body.sajuData?.person2?.name,
               }),
-              ...(message.body.type === 'yearly_fortune' && {
-                service_type: 'paid',
+              ...(message.body.type === "yearly_fortune" && {
+                service_type: "paid",
                 fortune_type: message.body.fortuneType,
               }),
             },
@@ -98,42 +101,43 @@ export async function handleSajuAnalysisMessage(
       });
 
       console.log(`Job ${message.body.jobId} completed successfully`);
-
     } catch (error) {
       console.error(`Error processing job ${message.body.jobId}:`, error);
 
       // Durable Object에 실패 상태 업데이트
       try {
-        const durableObjectId = env.SAJU_ANALYSIS_WORKER.idFromString(message.body.durableObjectId);
+        const durableObjectId = env.SAJU_ANALYSIS_WORKER.idFromString(
+          message.body.durableObjectId
+        );
         const durableObject = env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
 
-        await durableObject.fetch('http://localhost/update-status', {
-          method: 'POST',
+        await durableObject.fetch("http://localhost/update-status", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             jobId: message.body.jobId,
-            status: 'failed',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            status: "failed",
+            error: error instanceof Error ? error.message : "Unknown error",
           }),
         });
       } catch (updateError) {
-        console.error('Failed to update job status:', updateError);
+        console.error("[Queue] Failed to update job status:", updateError);
       }
 
       // 실패 시 포인트 환불
       try {
-        const { refundPoints } = await import('../common/paymentUtils');
+        const { refundPoints } = await import("../common/paymentUtils");
         await refundPoints(
           env.DB,
           message.body.userId,
           message.body.pointsCost,
-          `Queue 처리 실패로 인한 포인트 환불`,
-          `queue_failure_refund_${Date.now()}`
+          `사주 분석 작업 실패로 인한 포인트 환불 (${message.body.type})`,
+          `analysis_saju_${message.body.type}_refund_${Date.now()}`
         );
       } catch (refundError) {
-        console.error('Failed to refund points:', refundError);
+        console.error("[Queue] 포인트 환불 실패:", refundError);
       }
     }
   }
@@ -146,7 +150,8 @@ function buildGeminiPayload(message: SajuAnalysisMessage): any {
   const contents: any[] = [];
 
   // 시스템 프롬프트 구성
-  let systemPrompt = message.systemPrompt || 
+  let systemPrompt =
+    message.systemPrompt ||
     "당신은 전문 사주명리학자입니다. 사용자의 사주 정보를 바탕으로 상세하고 친절하게 운세를 분석해주세요.";
 
   if (message.i18n && message.i18n !== "ko") {
@@ -156,7 +161,8 @@ function buildGeminiPayload(message: SajuAnalysisMessage): any {
       zh: "您是一位专业的算命师和占星师。请根据用户的生辰八字信息提供详细而友好的运势分析。",
       vi: "Bạn là một nhà chiêm tinh và thầy bói chuyên nghiệp. Vui lòng cung cấp phân tích vận mệnh chi tiết và thân thiện dựa trên thông tin lá số tử vi của người dùng.",
     };
-    systemPrompt = message.systemPrompt || languagePrompts[message.i18n] || systemPrompt;
+    systemPrompt =
+      message.systemPrompt || languagePrompts[message.i18n] || systemPrompt;
   }
 
   // 사주 데이터 추가
@@ -166,7 +172,15 @@ function buildGeminiPayload(message: SajuAnalysisMessage): any {
         role: "user",
         parts: [
           {
-            text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람 (${message.sajuData.person1.name}):\n${JSON.stringify(message.sajuData.person1.sajuData, null, 2)}\n\n두 번째 사람 (${message.sajuData.person2.name}):\n${JSON.stringify(message.sajuData.person2.sajuData, null, 2)}`,
+            text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람 (${
+              message.sajuData.person1.name
+            }):\n${JSON.stringify(
+              message.sajuData.person1.sajuData,
+              null,
+              2
+            )}\n\n두 번째 사람 (${
+              message.sajuData.person2.name
+            }):\n${JSON.stringify(message.sajuData.person2.sajuData, null, 2)}`,
           },
         ],
       });
@@ -223,7 +237,11 @@ function buildGeminiPayload(message: SajuAnalysisMessage): any {
 /**
  * 재시도 로직 함수
  */
-async function retryGeminiCall(ai: GoogleGenAI, payload: any, maxRetries = 3): Promise<any> {
+async function retryGeminiCall(
+  ai: GoogleGenAI,
+  payload: any,
+  maxRetries = 3
+): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
@@ -233,7 +251,10 @@ async function retryGeminiCall(ai: GoogleGenAI, payload: any, maxRetries = 3): P
       clearTimeout(timeoutId);
       return result;
     } catch (error) {
-      console.error(`Gemini API 호출 실패 (시도 ${attempt}/${maxRetries}):`, error);
+      console.error(
+        `Gemini API 호출 실패 (시도 ${attempt}/${maxRetries}):`,
+        error
+      );
 
       if (attempt === maxRetries) {
         throw error;
@@ -257,11 +278,25 @@ function generateTitle(message: SajuAnalysisMessage): string {
   }
 
   if (message.sajuData) {
-    if (message.sajuData.정보 && message.sajuData.정보.생년월일 && message.sajuData.정보.생년월일.이름) {
+    if (
+      message.sajuData.정보 &&
+      message.sajuData.정보.생년월일 &&
+      message.sajuData.정보.생년월일.이름
+    ) {
       title += ` ${message.sajuData.정보.생년월일.이름}님`;
-    } else if (message.sajuData.person1 && message.sajuData.person1.정보 && message.sajuData.person1.정보.생년월일 && message.sajuData.person1.정보.생년월일.이름) {
+    } else if (
+      message.sajuData.person1 &&
+      message.sajuData.person1.정보 &&
+      message.sajuData.person1.정보.생년월일 &&
+      message.sajuData.person1.정보.생년월일.이름
+    ) {
       title += ` ${message.sajuData.person1.정보.생년월일.이름}님`;
-      if (message.sajuData.person2 && message.sajuData.person2.정보 && message.sajuData.person2.정보.생년월일 && message.sajuData.person2.정보.생년월일.이름) {
+      if (
+        message.sajuData.person2 &&
+        message.sajuData.person2.정보 &&
+        message.sajuData.person2.정보.생년월일 &&
+        message.sajuData.person2.정보.생년월일.이름
+      ) {
         title += ` & ${message.sajuData.person2.정보.생년월일.이름}님`;
       }
     }
@@ -289,12 +324,12 @@ function getFortuneTypeTitle(fortuneType: string): string {
  */
 function getResponseType(type: string): string {
   switch (type) {
-    case 'compatibility':
-      return 'compatibility_analysis';
-    case 'yearly_fortune':
-      return 'yearly_fortune';
+    case "compatibility":
+      return "compatibility_analysis";
+    case "yearly_fortune":
+      return "yearly_fortune";
     default:
-      return 'text';
+      return "text";
   }
 }
 
@@ -313,7 +348,11 @@ async function saveSajuAnalysis(
     if (message.sajuData) {
       if (message.sajuData.정보 && message.sajuData.정보.생년월일) {
         birthData = message.sajuData.정보.생년월일;
-      } else if (message.sajuData.person1 && message.sajuData.person1.정보 && message.sajuData.person1.정보.생년월일) {
+      } else if (
+        message.sajuData.person1 &&
+        message.sajuData.person1.정보 &&
+        message.sajuData.person1.정보.생년월일
+      ) {
         birthData = {
           person1: message.sajuData.person1.정보.생년월일,
           person2: message.sajuData.person2?.정보?.생년월일 || null,
@@ -327,16 +366,15 @@ async function saveSajuAnalysis(
     const startedAt = new Date().toISOString(); // Queue 처리 시작 시간
     const completedAt = analysisCompletedAt.toISOString();
 
-    const result = await env.DB
-      .prepare(
-        `
+    const result = await env.DB.prepare(
+      `
         INSERT INTO saju_analyses (
           user_id, analysis_type, type, title, sajuData, user_prompt, 
           system_prompt, ai_response, model_used, points_spent, 
           created_at, updated_at, i18n, timezone, analysis_started_at, analysis_completed_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
-      )
+    )
       .bind(
         message.userId,
         message.analysisType,
@@ -368,4 +406,4 @@ async function saveSajuAnalysis(
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
-} 
+}

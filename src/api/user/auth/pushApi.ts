@@ -80,7 +80,7 @@ export async function getVapidPublicKey(c: Context): Promise<Response> {
 }
 
 export async function subscribe(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.JWT_SECRET) {
+  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
@@ -89,7 +89,7 @@ export async function subscribe(c: Context): Promise<Response> {
     return c.json({ error: "인증 토큰이 필요합니다." }, 401);
   }
   const token = authHeader.substring(7);
-  const payload = await verifyJWT(token, c.env.JWT_SECRET);
+  const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
 
   if (!payload) {
     return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
@@ -123,7 +123,7 @@ export async function subscribe(c: Context): Promise<Response> {
 }
 
 export async function unsubscribe(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.JWT_SECRET) {
+  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
@@ -132,7 +132,7 @@ export async function unsubscribe(c: Context): Promise<Response> {
     return c.json({ error: "인증 토큰이 필요합니다." }, 401);
   }
   const token = authHeader.substring(7);
-  const payload = await verifyJWT(token, c.env.JWT_SECRET);
+  const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
 
   if (!payload) {
     return c.json({ error: "유효하지 않은 토큰입니다." }, 401);

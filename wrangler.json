@@ -1,5 +1,5 @@
 {
-  "compatibility_date": "2025-04-01",
+  "compatibility_date": "2025-07-29",
   "main": "src/index.ts",
   "name": "destinyworker",
   "upload_source_maps": true,
@@ -9,37 +9,52 @@
   },
   "d1_databases": [
     {
+      "database_name": "destiny",
       "binding": "DB",
-      "database_id": "85e7d772-5696-4091-abf9-ff9d70b94a7a",
-      "database_name": "destiny"
+      "database_id": "85e7d772-5696-4091-abf9-ff9d70b94a7a"
+      
     }
   ],
   "kv_namespaces": [
     {
       "binding": "VIEW_CACHE_KV",
       "id": "f76d441ea2524c58a72e355fb4df71b2",
-      "preview_id": "68d8ef3bc1644f2f81cca8b57f842267"
+      "preview_id": "68d8ef3bc1644f2f81cca8b57f842267",
+      "experimental_remote": true
     }
   ],
   "ai": {
-    "binding": "AI"
+    "binding": "AI",
+    "experimental_remote": true
   },
   "vectorize": [
     {
       "binding": "VECTORIZE_INDEX",
-      "index_name": "saju-index"
+      "index_name": "saju-index",
+      "experimental_remote": true
     }
   ],
   "r2_buckets": [
     {
       "binding": "DESTINY_R2",
       "bucket_name": "destiny",
-      "preview_bucket_name": "destiny-dev"
+      "preview_bucket_name": "destiny-dev",
+      "experimental_remote": true
     }
   ],
   "queues": {
-    "binding": "analysis",
-    "name": "saju-analysis-queue"
+    "producers": [
+      {
+        "binding": "QUEUE",
+        "queue": "analysis",
+        "experimental_remote": true
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "analysis"
+      }
+    ]
   },
   "durable_objects": {
     "bindings": [
@@ -53,17 +68,8 @@
         "name": "SajuAnalysisWorker",
         "script_name": "destinyworker"
       }
-    ]
-  },
-  "vars": {
-    "GOOGLE_CLIENT_ID": "337392205026-edu53b4l8cb843u6vq1s2aniljfhq0e4.apps.googleusercontent.com",
-    "ENVIRONMENT": "development"
-  },
-  "observability": {
-    "enabled": true
-  },
-  "dev": {
-    "port": 9393
+    ],
+    "experimental_remote": true
   },
   "migrations": [
     {
@@ -72,5 +78,14 @@
         "SajuAnalysisWorker"
       ]
     }
-  ]
+  ],
+  "vars": {
+    "ENVIRONMENT": "development"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "dev": {
+    "port": 9393
+  }
 }

@@ -24,7 +24,7 @@
     "lunar-javascript": "^1.7.3",
     "swagger-typescript-api": "^13.2.7",
     "typescript": "5.8.3",
-    "wrangler": "^4.25.0"
+    "wrangler": "^4.26.1"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.844.0",
@@ -45,15 +45,19 @@
   },
   "scripts": {
     "cf-typegen": "wrangler types",
+    "update:local": "npm i -D wrangler@latest",
+    "update:global": "npm install -g wrangler@latest",
     "check": "tsc && wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev --remote --port 9393",
-    "secret:put": "wrangler secret put MY_API_KEY",
-    "db:migrate": "node scripts/migrate-d1.js",
+    "dev": "wrangler dev --x-remote-bindings",
+    "secret:put": "wrangler secret put GOOGLE_CLIENT_SECRET",
     "db:migrate:local": "node scripts/migrate-d1.js --local",
     "db:migrate:remote": "node scripts/migrate-d1.js --remote",
     "db:migrate:force": "node scripts/migrate-d1.js --force",
-    "db:seed:community": "node scripts/seed-community.js",
-    "generate:swagger": "swagger-typescript-api -p http://localhost:9393/openapi.json -o ./src/generated --name api.ts --module-name-first-tag --axios"
+    "db:seed:community:local": "node scripts/seed-community.js --local",
+    "db:seed:community:remote": "node scripts/seed-community.js --remote",
+    "db:copy:remote-to-local": "node scripts/copy-remote-to-local.js",
+
+    "query:table": "wrangler d1 execute destiny --command \"update users set role='admin' where id=1;\""
   }
 }

@@ -1,4 +1,6 @@
-#!/usr/bin/env node
+/*
+wrangler d1 execute destiny --command "update users set role='admin' where id=1;"
+*/
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -57,7 +59,60 @@ try {
       );
     }
   } 
-  // 2. 이전 스키마 상태와 비교
+  // 2. 로컬 D1의 실제 상태와 비교 (--local 플래그가 있는 경우)
+  else if (process.argv.includes('--local')) {
+    console.log('📊 1단계: 로컬 D1 실제 상태와 Prisma 스키마 비교 중...');
+    
+    try {
+      // 로컬 D1의 실제 테이블 목록 조회
+      const localTables = execSync(
+        `npx wrangler d1 execute destiny --command "SELECT name FROM sqlite_master WHERE type='table';"`,
+        { encoding: 'utf8' }
+      );
+      
+      console.log('📋 로컬 D1에 있는 테이블들:');
+      console.log(localTables);
+      
+      // 로컬 D1의 스키마를 추출
+      const localSchema = execSync(
+        `npx wrangler d1 execute destiny --command "SELECT sql FROM sqlite_master WHERE type='table';"`,
+        { encoding: 'utf8' }
+      );
+      
+      // CREATE 문들만 추출
+      const createStatements = localSchema
+        .split('\n')
+        .filter(line => line && line.trim().startsWith('CREATE TABLE'))
+        .join('\n');
+      
+      if (createStatements.trim()) {
+        fs.writeFileSync(currentDbSchemaFile, createStatements);
+        console.log('💾 로컬 D1 스키마 추출 완료');
+        
+        // 로컬 D1 스키마를 Prisma 스키마와 비교
+        migrationSql = execSync(
+          `npx prisma migrate diff --from-schema-datasource ${currentDbSchemaFile} --to-schema-datamodel prisma/schema.prisma --script`,
+          { encoding: 'utf8' }
+        );
+        
+        console.log('📊 로컬 D1 상태와 Prisma 스키마 비교 완료');
+      } else {
+        // 로컬 D1이 비어있는 경우
+        migrationSql = execSync(
+          'npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script',
+          { encoding: 'utf8' }
+        );
+      }
+      
+    } catch (error) {
+      console.log('⚠️  로컬 D1 스키마 추출 실패, 전체 스키마로 진행합니다.');
+      migrationSql = execSync(
+        'npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script',
+        { encoding: 'utf8' }
+      );
+    }
+  }
+  // 3. 이전 스키마 상태와 비교
   else if (fs.existsSync(lastSchemaFile)) {
     console.log('📊 1단계: 이전 스키마와 현재 스키마 비교 중...');
     

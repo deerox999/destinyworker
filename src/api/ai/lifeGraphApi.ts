@@ -570,15 +570,6 @@ function createStreamingResponse(
             const data = `data: ${JSON.stringify(chunk)}\n\n`;
             controller.enqueue(new TextEncoder().encode(data));
           }
-
-          // 연결 유지를 위한 heartbeat
-          if (Math.random() < 0.3) {
-            const heartbeat = `data: ${JSON.stringify({
-              type: "heartbeat",
-              timestamp: Date.now(),
-            })}\n\n`;
-            controller.enqueue(new TextEncoder().encode(heartbeat));
-          }
         }
 
         // 스트리밍 완료 후 저장 로직

@@ -2,11 +2,22 @@ const { execSync } = require('child_process');
 
 async function seedCommunity() {
   try {
-    console.log('커뮤니티 기본 데이터를 추가하는 중...');
+    // 파라미터 확인
+    const isLocal = process.argv.includes('--local');
+    const isRemote = process.argv.includes('--remote');
+    
+    if (!isLocal && !isRemote) {
+      console.log('❌ --local 또는 --remote 플래그를 지정해주세요.');
+      console.log('사용법: node scripts/seed-community.js --local 또는 --remote');
+      process.exit(1);
+    }
+    
+    const target = isLocal ? '로컬' : '원격';
+    console.log(`커뮤니티 기본 데이터를 ${target} D1에 추가하는 중...`);
 
     // 공간 ID 조회 (이미 생성되어 있을 수 있으므로 먼저 조회)
     console.log('1. 공간 ID 조회 중...');
-    const boardsResult = execSync(`npx wrangler d1 execute destiny --remote --command "SELECT id, name FROM boards WHERE name IN ('bug-report', 'saju-discussion', 'feature-request')"`, { encoding: 'utf8' });
+    const boardsResult = execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "SELECT id, name FROM boards WHERE name IN ('bug-report', 'saju-discussion', 'feature-request')"`, { encoding: 'utf8' });
     
     console.log('조회 결과:', boardsResult);
     
@@ -42,18 +53,18 @@ async function seedCommunity() {
       console.log('2. 기본 공간 생성 중...');
       
       // 버그 제보 공간
-      execSync(`npx wrangler d1 execute destiny --remote --command "INSERT OR REPLACE INTO boards (name, displayName, description, isActive, created_at, updated_at) VALUES ('bug-report', '버그 제보', '서비스에서 발견한 버그를 제보하는 공간입니다.', 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
+      execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "INSERT OR REPLACE INTO boards (name, displayName, description, isActive, created_at, updated_at) VALUES ('bug-report', '버그 제보', '서비스에서 발견한 버그를 제보하는 공간입니다.', 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
       
       // 사주 이야기 공간
-      execSync(`npx wrangler d1 execute destiny --remote --command "INSERT OR REPLACE INTO boards (name, displayName, description, isActive, created_at, updated_at) VALUES ('saju-discussion', '사주 이야기', '사주와 운세에 대한 이야기를 나누는 공간입니다.', 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
+      execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "INSERT OR REPLACE INTO boards (name, displayName, description, isActive, created_at, updated_at) VALUES ('saju-discussion', '사주 이야기', '사주와 운세에 대한 이야기를 나누는 공간입니다.', 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
       
       // 기능/개선 요청 공간
-      execSync(`npx wrangler d1 execute destiny --remote --command "INSERT OR REPLACE INTO boards (name, displayName, description, isActive, created_at, updated_at) VALUES ('feature-request', '기능/개선 요청', '새로운 기능을 요청하거나 기존 기능을 개선하고 싶은 공간입니다.', 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
+      execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "INSERT OR REPLACE INTO boards (name, displayName, description, isActive, created_at, updated_at) VALUES ('feature-request', '기능/개선 요청', '새로운 기능을 요청하거나 기존 기능을 개선하고 싶은 공간입니다.', 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
 
       console.log('공간 생성 완료');
 
       // 다시 공간 ID 조회
-      const boardsResult2 = execSync(`npx wrangler d1 execute destiny --remote --command "SELECT id, name FROM boards WHERE name IN ('bug-report', 'saju-discussion', 'feature-request')"`, { encoding: 'utf8' });
+      const boardsResult2 = execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "SELECT id, name FROM boards WHERE name IN ('bug-report', 'saju-discussion', 'feature-request')"`, { encoding: 'utf8' });
       
       try {
         const jsonMatch2 = boardsResult2.match(/\[[\s\S]*\]/);
@@ -91,7 +102,7 @@ async function seedCommunity() {
 
     for (const category of bugCategories) {
       if (boards['bug-report']) {
-        execSync(`npx wrangler d1 execute destiny --remote --command "INSERT OR REPLACE INTO board_categories (board_id, name, sort_order, isActive, created_at, updated_at) VALUES (${boards['bug-report']}, '${category.name}', ${category.sortOrder}, 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
+        execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "INSERT OR REPLACE INTO board_categories (board_id, name, sort_order, isActive, created_at, updated_at) VALUES (${boards['bug-report']}, '${category.name}', ${category.sortOrder}, 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
       }
     }
 
@@ -107,7 +118,7 @@ async function seedCommunity() {
 
     for (const category of sajuCategories) {
       if (boards['saju-discussion']) {
-        execSync(`npx wrangler d1 execute destiny --remote --command "INSERT OR REPLACE INTO board_categories (board_id, name, sort_order, isActive, created_at, updated_at) VALUES (${boards['saju-discussion']}, '${category.name}', ${category.sortOrder}, 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
+        execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "INSERT OR REPLACE INTO board_categories (board_id, name, sort_order, isActive, created_at, updated_at) VALUES (${boards['saju-discussion']}, '${category.name}', ${category.sortOrder}, 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
       }
     }
 
@@ -123,7 +134,7 @@ async function seedCommunity() {
 
     for (const category of featureCategories) {
       if (boards['feature-request']) {
-        execSync(`npx wrangler d1 execute destiny --remote --command "INSERT OR REPLACE INTO board_categories (board_id, name, sort_order, isActive, created_at, updated_at) VALUES (${boards['feature-request']}, '${category.name}', ${category.sortOrder}, 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
+        execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "INSERT OR REPLACE INTO board_categories (board_id, name, sort_order, isActive, created_at, updated_at) VALUES (${boards['feature-request']}, '${category.name}', ${category.sortOrder}, 1, datetime('now'), datetime('now'))"`, { stdio: 'inherit' });
       }
     }
 
@@ -137,11 +148,11 @@ async function seedCommunity() {
     ];
 
     for (const tagName of defaultTags) {
-      execSync(`npx wrangler d1 execute destiny --remote --command "INSERT OR REPLACE INTO tags (name, created_at) VALUES ('${tagName}', datetime('now'))"`, { stdio: 'inherit' });
+      execSync(`npx wrangler d1 execute destiny ${isLocal ? '' : '--remote'} --command "INSERT OR REPLACE INTO tags (name, created_at) VALUES ('${tagName}', datetime('now'))"`, { stdio: 'inherit' });
     }
 
     console.log('기본 태그 생성 완료');
-    console.log('커뮤니티 기본 데이터 추가 완료!');
+    console.log(`커뮤니티 기본 데이터 ${target} D1에 추가 완료!`);
     
   } catch (error) {
     console.error('시드 데이터 추가 중 오류 발생:', error);

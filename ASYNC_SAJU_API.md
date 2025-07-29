@@ -1,6 +1,6 @@
 # 비동기 사주 분석 API
 
-Cloudflare Queue와 Durable Object를 활용한 비동기 사주 분석 API입니다. 기존 스트리밍 API와 달리 즉시 응답하고 백그라운드에서 처리됩니다.
+Cloudflare Queue와 Durable Object를 활용한 비동기 사주 분석 API입니다. 기존 스트리밍 API와 달리 즉시 응답하고 백그라운드에서 처리됩니다. `stream` 파라미터를 통해 스트리밍과 비동기 처리를 선택할 수 있습니다.
 
 ## 개요
 
@@ -8,6 +8,7 @@ Cloudflare Queue와 Durable Object를 활용한 비동기 사주 분석 API입�
 - **Queue 기반**: Cloudflare Queue를 통한 안정적인 작업 처리
 - **상태 조회**: 작업 진행 상황을 실시간으로 확인 가능
 - **DB 저장**: 완료된 분석 결과는 자동으로 DB에 저장
+- **스트리밍 지원**: `stream: true` 파라미터로 실시간 스트리밍 응답 가능
 
 ## API 엔드포인트
 
@@ -37,9 +38,19 @@ POST /api/ai/async/analysis
   "analysisType": "general",
   "type": "individual",
   "i18n": "ko",
-  "timezone": "Asia/Seoul"
+  "timezone": "Asia/Seoul",
+  "stream": false
 }
 ```
+
+**스트리밍 모드 (`stream: true`):**
+- 즉시 스트리밍 응답을 받습니다
+- 실시간으로 AI 분석 결과를 확인할 수 있습니다
+- 기존 스트리밍 API와 동일한 방식으로 작동합니다
+
+**비동기 모드 (`stream: false` 또는 생략):**
+- 즉시 jobId를 반환하고 백그라운드에서 처리됩니다
+- `/api/ai/async/status?jobId={jobId}`로 상태를 확인할 수 있습니다
 
 **응답:**
 ```json

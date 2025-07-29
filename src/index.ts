@@ -2,8 +2,8 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
-import { SajuAnalysisWorker } from "./durable-objects/SajuAnalysisWorker";
-import { handleSajuAnalysisMessage } from "./queue-consumers/sajuAnalysisConsumer";
+import { SajuAnalysisWorker } from "./api/ai/durable-objects/SajuAnalysisWorker";
+import { saju_analysis_queue_handler } from "./queue-consumers/sajuAnalysisConsumer";
 
 type Env = {
   Bindings: {
@@ -59,6 +59,6 @@ app.route("/", routes);
 export { SajuAnalysisWorker };
 
 // Queue Consumer 등록
-export { handleSajuAnalysisMessage };
+export { saju_analysis_queue_handler };
 
 export default app;

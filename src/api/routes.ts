@@ -5,15 +5,15 @@ import { verifyJWT } from "../common/utils";
 import { createAdminRouter } from "./admin/admin.routes";
 import { createCelebrityAdminRouter } from "./admin/celebrity/celebrity.routes";
 import { createAiRouter } from "./ai/ai.routes";
-import asyncSajuRouter from "./ai/asyncSaju.routes";
 import { createCelebrityRouter } from "./celebrity/celebrity.routes";
+import { createCommunityRouter } from "./community/routes";
 import { createSajuRouter } from "./saju/saju.routes";
 import { createAuthRouter } from "./user/auth/auth.routes";
+import { createPushRouter } from "./user/auth/push.routes";
+import { createPaymentRouter } from "./user/payment/payment.routes";
 import { createR2Router } from "./user/r2.routes";
 import { createUserRouter } from "./user/user.routes";
-import { createPushRouter } from "./user/auth/push.routes";
-import { createCommunityRouter } from "./community/routes";
-import { createPaymentRouter } from "./user/payment/payment.routes";
+
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터 (Hono 기반)
  */
@@ -23,7 +23,7 @@ export function createAppRouter(): OpenAPIHono {
   const authMiddleware = bearerAuth({
     verifyToken: async (token, c) => {
       try {
-        const payload = await verifyJWT(token, c.env.JWT_SECRET);
+        const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
         if (payload) {
           c.set("user", {
             id: payload.userId,
@@ -63,23 +63,15 @@ export function createAppRouter(): OpenAPIHono {
   // 모듈화된 라우터 병합
   app.route("/api/auth", createAuthRouter());
   app.route("/api/R2", createR2Router(authMiddleware));
-  app.route("/api/push", createPushRouter(authMiddleware)); // AI도 지우지 마시오. 현재는 사용 안하는 api지만, 추후에 사용할 예정. (푸시 알림 기능 관련 api)
+  app.route("/api/push", createPushRouter(authMiddleware));
   app.route("/api/user", createUserRouter(authMiddleware));
   app.route("/api/payment", createPaymentRouter(authMiddleware));
-
-  /*
-    GET /openapi.json 500 Internal Server Error (74ms)
-    Error: MissingParameterDataError {                                                                                                          
-      message: Missing parameter data, please specify `name` and …ps using the `param field of `ZodSchema.openapi`,                             
-      data: Object                                                                                                                             
-    }
-  */
   app.route("/api/saju-profiles", createSajuRouter(authMiddleware));
   app.route("/api/ai", createAiRouter(authMiddleware));
-  app.route("/api/ai/async", asyncSajuRouter);
   app.route("/api/admin", createAdminRouter(authMiddleware));
   app.route("/api/celebrities", createCelebrityRouter(authMiddleware));
   app.route("/api/admin/celebrities", createCelebrityAdminRouter(authMiddleware));
   app.route("/api/community", createCommunityRouter());
+
   return app;
 }
