@@ -1,5 +1,5 @@
 import { Context } from "hono";
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../../../common/prismaUtils";
 
 // JWT 페이로드 인터페이스
 interface JWTPayload {
@@ -102,7 +102,7 @@ export async function subscribe(c: Context): Promise<Response> {
   }
 
   try {
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
     
     // 기존 구독 확인
     const existing = await prisma.pushSubscription.findUnique({
@@ -123,7 +123,6 @@ export async function subscribe(c: Context): Promise<Response> {
       }
     });
 
-    await prisma.$disconnect();
     return c.json({ success: true, message: "구독 성공" }, 201);
   } catch (e) {
     console.error("구독 정보 저장 실패:", e);
@@ -153,7 +152,7 @@ export async function unsubscribe(c: Context): Promise<Response> {
   }
 
   try {
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
     
     // 구독 삭제
     const result = await prisma.pushSubscription.deleteMany({
@@ -162,8 +161,6 @@ export async function unsubscribe(c: Context): Promise<Response> {
         userId: payload.userId
       }
     });
-
-    await prisma.$disconnect();
 
     if (result.count === 0) {
         return c.json({ success: false, message: "구독 정보를 찾을 수 없거나 해당 유저의 구독이 아닙니다." }, 404);

@@ -1,6 +1,6 @@
 import { Context } from "hono";
 import { paginate } from "../../common/paginationUtils";
-import { isAdmin } from "../../common/prismaUtils";
+import { isAdmin, createPrismaClient } from "../../common/prismaUtils";
 import { addPoints, deductPoints, getUserPoints, getPointTransactions } from "../../common/paymentUtils";
 import { PrismaClient } from "@prisma/client";
 
@@ -34,7 +34,7 @@ export async function getUsers(c: Context): Promise<any> {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // URL 파라미터에서 페이지네이션 정보 추출
     const page = parseInt(c.req.query("page") || "1");
@@ -124,7 +124,7 @@ export async function getUserProfiles(
       return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // 사용자 존재 여부 확인 (포인트 포함)
     const user = await prisma.user.findUnique({
@@ -188,7 +188,7 @@ export async function getAdminStats(
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // 전체 통계 조회
     const [totalUsers, totalProfiles, adminUsers] = await Promise.all([
@@ -229,7 +229,7 @@ export async function getLoginHistory(
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     const page = parseInt(c.req.query("page") || "1");
     const limit = parseInt(c.req.query("limit") || "20");
@@ -306,7 +306,7 @@ export async function getAiUsageStatsByModel(
     return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient(c.env.DB);
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
   const sort = c.req.query("sort") || "total_tokens";
@@ -408,7 +408,7 @@ export async function getAiUsageStatsByUser(
     return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient(c.env.DB);
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
   const sort = c.req.query("sort") || "total_tokens";
@@ -643,7 +643,7 @@ export async function getAiUsageStatsForModel(
     return c.json({ error: "모델 이름이 필요합니다." }, 400);
   }
 
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient(c.env.DB);
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
   const sort = c.req.query("sort") || "total_tokens";
@@ -965,7 +965,7 @@ export async function getUserAnalysisTransactions(
     const limit = parseInt(c.req.query("limit") || "20");
     const offset = (page - 1) * limit;
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // 분석 결과가 있는 거래만 조회
     const query = `
@@ -1074,7 +1074,7 @@ export async function getAnalysisById(
       return c.json({ error: "잘못된 분석 ID입니다." }, 400);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // 분석 결과 조회
     const analysis = await prisma.sajuAnalysis.findUnique({

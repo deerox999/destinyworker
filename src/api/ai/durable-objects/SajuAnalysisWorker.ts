@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { POINT_COSTS } from "../../../common/paymentUtils";
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../../../common/prismaUtils";
 
 // 분석 작업 상태
 interface AnalysisJob {
@@ -536,7 +536,7 @@ export class SajuAnalysisWorker implements DurableObject {
         }
       }
 
-      const prisma = new PrismaClient();
+      const prisma = createPrismaClient(this.env.DB);
       
       const result = await prisma.sajuAnalysis.create({
         data: {
@@ -556,8 +556,6 @@ export class SajuAnalysisWorker implements DurableObject {
           analysisCompletedAt: analysisCompletedAt,
         },
       });
-
-      await prisma.$disconnect();
 
       return {
         success: true,

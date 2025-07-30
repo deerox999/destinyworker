@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../../common/prismaUtils";
 import { Context } from "hono";
 import {
   createEmbedding,
@@ -115,9 +115,10 @@ async function performWebSearch(
  * D1에서 특정 대화 ID에 해당하는 기록을 가져옵니다.
  */
 async function getConversationHistory(
-  conversationId: string
+  conversationId: string,
+  db: D1Database
 ): Promise<ChatMessage[]> {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient(db);
   
   try {
     const history = await prisma.conversationHistory.findMany({
@@ -135,7 +136,7 @@ async function getConversationHistory(
       content: msg.content
     }));
   } finally {
-    await prisma.$disconnect();
+    // Cloudflare Workers에서는 $disconnect가 필요하지 않음
   }
 }
 
@@ -146,9 +147,10 @@ async function saveConversationTurn(
   conversationId: string,
   userId: number,
   userMessage: string,
-  assistantMessage: string
+  assistantMessage: string,
+  db: D1Database
 ) {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient(db);
   
   try {
     await prisma.conversationHistory.createMany({
@@ -168,7 +170,7 @@ async function saveConversationTurn(
       ],
     });
   } finally {
-    await prisma.$disconnect();
+    // Cloudflare Workers에서는 $disconnect가 필요하지 않음
   }
 }
 
@@ -178,7 +180,7 @@ async function saveConversationTurn(
 export async function SajuChatList(
   c: Context
 ): Promise<Response> {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient(c.env.DB);
 
   try {
     const user = await getUserFromToken(c);
@@ -240,8 +242,6 @@ export async function SajuChatList(
       { error: "Failed to fetch conversation list." },
       500
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -284,7 +284,8 @@ export async function SajuChat(
           conversationId,
           user.id,
           userQuery,
-          getRejectionMessage(lang)
+          getRejectionMessage(lang),
+          c.env.DB
         );
       }
     }
@@ -419,7 +420,8 @@ ${fullContext}`;
       newConversationId,
       user.id,
       userQuery,
-      assistantResponse
+      assistantResponse,
+      c.env.DB
     );
 
     return c.json(
@@ -446,7 +448,7 @@ ${fullContext}`;
 export async function SajuChatFull(
   c: Context
 ): Promise<Response> {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient(c.env.DB);
   const conversationId = c.req.param("id");
 
   try {
@@ -466,7 +468,7 @@ export async function SajuChatFull(
       );
     }
 
-    const messages = await getConversationHistory(conversationId);
+    const messages = await getConversationHistory(conversationId, c.env.DB);
 
     return c.json(
       {
@@ -482,8 +484,6 @@ export async function SajuChatFull(
       { error: "Failed to fetch conversation." },
       500
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -493,7 +493,7 @@ export async function SajuChatFull(
 export async function SajuChatDelete(
   c: Context
 ): Promise<Response> {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient(c.env.DB);
 
   try {
     const user = await getUserFromToken(c);
@@ -559,7 +559,5 @@ export async function SajuChatDelete(
       { error: "Failed to delete conversations." },
       500
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

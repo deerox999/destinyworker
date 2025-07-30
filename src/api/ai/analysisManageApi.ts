@@ -1,6 +1,6 @@
 import { Context } from "hono";
+import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
-import { PrismaClient } from "@prisma/client";
 
 // UTC 변환 유틸리티 함수
 const toUTC = (date: Date | string | null): string | null => {
@@ -28,7 +28,7 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
     const offset = (page - 1) * limit;
 
     // Prisma 클라이언트 생성
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // 필터 조건 구성
     const where: any = {
@@ -128,7 +128,7 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
       return c.json({ error: "분석 ID가 필요합니다." }, 400);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     const analysis = await prisma.sajuAnalysis.findFirst({
       where: {
@@ -217,7 +217,7 @@ export async function toggleSajuAnalysisFavorite(
       return c.json({ error: "분석 ID가 필요합니다." }, 400);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // 현재 즐겨찾기 상태 확인
     const current = await prisma.sajuAnalysis.findFirst({
@@ -300,7 +300,7 @@ export async function updateSajuAnalysisTitle(c: Context): Promise<Response> {
       return c.json({ error: "제목은 100자를 초과할 수 없습니다." }, 400);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // 제목 업데이트
     const result = await prisma.sajuAnalysis.updateMany({
@@ -355,7 +355,7 @@ export async function deleteSajuAnalysis(c: Context): Promise<Response> {
       return c.json({ error: "분석 ID가 필요합니다." }, 400);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
 
     // 분석 결과 삭제
     const result = await prisma.sajuAnalysis.deleteMany({

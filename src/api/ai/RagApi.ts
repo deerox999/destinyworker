@@ -1,6 +1,6 @@
 import { Context } from "hono";
 import { createEmbedding, createEmbeddings } from "../../common/ragUtils";
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../../common/prismaUtils";
 
 /**
  * RAG 문서에 대한 사주 프로젝트용 표준 메타데이터 스키마.
@@ -47,7 +47,7 @@ interface QueryRequest {
  * @returns 저장에 성공한 문서의 ID와 텍스트 배열
  */
 async function saveDocumentsWithPrisma(
-  prisma: PrismaClient,
+  prisma: any,
   documents: { text: string; metadata?: any }[]
 ): Promise<{ id: number; text: string }[]> {
   const successfullyInserted: { id: number; text: string }[] = [];
@@ -110,7 +110,7 @@ export async function RagAddDocuments(
     }
 
     // Metadata 유효성 검사
-    for (const doc of documents) {
+    for (const doc of documents as any[]) {
       if (!doc.metadata.source || !doc.metadata.category) {
         return c.json(
           {
@@ -122,9 +122,8 @@ export async function RagAddDocuments(
       }
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
     const newlyInsertedDocs = await saveDocumentsWithPrisma(prisma, documents);
-    await prisma.$disconnect();
 
     if (newlyInsertedDocs.length === 0) {
       return c.json(
@@ -168,7 +167,7 @@ export async function RagDocuments(
   c: Context
 ): Promise<Response> {
   try {
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
     
     // 페이지네이션 파라미터 추출
     const page = parseInt(c.req.query("page") || "1");
@@ -202,8 +201,6 @@ export async function RagDocuments(
         updatedAt: true
       }
     });
-    
-    await prisma.$disconnect();
     
     // 메타데이터 파싱
     const parsedDocuments = documents.map(doc => ({
@@ -256,7 +253,7 @@ export async function RagDelete(c: Context): Promise<Response> {
       );
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
     
     // Prisma를 통해 D1에서 삭제
     const { count: deletedCount } = await prisma.document.deleteMany({
@@ -266,8 +263,6 @@ export async function RagDelete(c: Context): Promise<Response> {
         }
       }
     });
-    
-    await prisma.$disconnect();
 
     // Vectorize에서 삭제
     const stringIds = validIds.map((id) => id.toString());
@@ -329,7 +324,7 @@ export async function RagUpdate(
       return c.json({ error: "메타데이터의 category는 필수이며 문자열이어야 합니다." }, 400);
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(c.env.DB);
     
     // 기존 문서를 가져와서 텍스트 변경 여부 확인
     const existingDoc = await prisma.document.findUnique({
@@ -338,7 +333,6 @@ export async function RagUpdate(
     });
 
     if (!existingDoc) {
-      await prisma.$disconnect();
       return c.json({ error: `Document with ID ${docId} not found.` }, 404);
     }
 
@@ -350,8 +344,6 @@ export async function RagUpdate(
         metadata: JSON.stringify(metadata)
       }
     });
-    
-    await prisma.$disconnect();
 
     // 텍스트가 변경된 경우에만 임베딩을 다시 생성하고 벡터를 업데이트
     if (existingDoc.text !== text) {

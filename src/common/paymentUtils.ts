@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from './prismaUtils';
 
 // 포인트 상수 정의
 export const POINT_COSTS = {
@@ -58,7 +59,8 @@ async function savePointTransaction(
 }
 
 // 사용자 포인트 조회
-export async function getUserPoints(prisma: PrismaClient, userId: number): Promise<number> {
+export async function getUserPoints(db: D1Database, userId: number): Promise<number> {
+  const prisma = createPrismaClient(db);
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -68,17 +70,20 @@ export async function getUserPoints(prisma: PrismaClient, userId: number): Promi
   } catch (error) {
     console.error("Get user points error:", error);
     return 0;
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 // 포인트 검증 (충분한 포인트가 있는지 확인)
 export async function validatePoints(
-  prisma: PrismaClient,
+  db: D1Database,
   userId: number,
   requiredPoints: number
 ): Promise<PointValidationResult> {
+  const prisma = createPrismaClient(db);
   try {
-    const currentPoints = await getUserPoints(prisma, userId);
+    const currentPoints = await getUserPoints(db, userId);
     const remainingPoints = currentPoints - requiredPoints;
 
     return {
@@ -114,21 +119,24 @@ export async function validatePoints(
         shortage: requiredPoints,
       },
     };
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 // 포인트 차감
 export async function deductPoints(
-  prisma: PrismaClient,
+  db: D1Database,
   userId: number,
   amount: number,
   description: string,
   reference?: string,
   analysisId?: number
 ): Promise<{ success: boolean; message: string; remainingPoints?: number }> {
+  const prisma = createPrismaClient(db);
   try {
     // 포인트 검증
-    const validation = await validatePoints(prisma, userId, amount);
+    const validation = await validatePoints(db, userId, amount);
     if (!validation.isValid) {
       return {
         success: false,
@@ -169,18 +177,21 @@ export async function deductPoints(
       success: false,
       message: "포인트 차감 중 오류가 발생했습니다.",
     };
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 // 포인트 증가
 export async function addPoints(
-  prisma: PrismaClient,
+  db: D1Database,
   userId: number,
   amount: number,
   description: string,
   reference?: string,
   analysisId?: number
 ): Promise<{ success: boolean; message: string; newPoints?: number }> {
+  const prisma = createPrismaClient(db);
   try {
     // 포인트 증가
     const result = await prisma.user.update({
@@ -215,12 +226,14 @@ export async function addPoints(
       success: false,
       message: "포인트 증가 중 오류가 발생했습니다.",
     };
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 // 포인트 거래 내역 조회
 export async function getPointTransactions(
-  prisma: PrismaClient,
+  db: D1Database,
   userId: number,
   limit: number = 20,
   offset: number = 0
@@ -235,6 +248,7 @@ export async function getPointTransactions(
     created_at: string;
   }>
 > {
+  const prisma = createPrismaClient(db);
   try {
     const transactions = await prisma.pointTransaction.findMany({
       where: { userId },
@@ -264,12 +278,14 @@ export async function getPointTransactions(
   } catch (error) {
     console.error("Get point transactions error:", error);
     return [];
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 // 포인트 사용 (차감 + 검증을 한번에)
 export async function usePoints(
-  prisma: PrismaClient,
+  db: D1Database,
   userId: number,
   requiredPoints: number,
   description: string,
@@ -287,6 +303,8 @@ export async function usePoints(
     isAdmin?: boolean;
   };
 }> {
+  const prisma = createPrismaClient(db);
+  
   try {
     // 사용자 역할 확인
     const user = await prisma.user.findUnique({
@@ -302,7 +320,7 @@ export async function usePoints(
     }
 
     // 먼저 검증
-    const validation = await validatePoints(prisma, userId, requiredPoints);
+    const validation = await validatePoints(db, userId, requiredPoints);
     if (!validation.isValid) {
       return {
         success: false,
@@ -313,7 +331,7 @@ export async function usePoints(
 
     // 차감 실행
     const result = await deductPoints(
-      prisma,
+      db,
       userId,
       requiredPoints,
       description,
@@ -341,12 +359,19 @@ export async function usePoints(
       success: false,
       message: "포인트 사용 중 오류가 발생했습니다.",
     };
+  } finally {
+    // Prisma 클라이언트 정리
+    try {
+      await prisma.$disconnect();
+    } catch (disconnectError) {
+      console.error("Prisma disconnect error:", disconnectError);
+    }
   }
 }
 
 // 포인트 환불 (차감된 포인트를 다시 돌려줌)
 export async function refundPoints(
-  prisma: PrismaClient,
+  db: D1Database,
   userId: number,
   amount: number,
   description: string,
@@ -354,7 +379,7 @@ export async function refundPoints(
   analysisId?: number
 ): Promise<{ success: boolean; message: string; newPoints?: number }> {
   return await addPoints(
-    prisma,
+    db,
     userId,
     amount,
     description,
@@ -367,11 +392,12 @@ export async function refundPoints(
  * 포인트 거래의 analysis_id를 업데이트합니다.
  */
 export async function updatePointTransactionAnalysisId(
-  prisma: PrismaClient,
+  db: D1Database,
   userId: number,
   reference: string,
   analysisId: number
 ): Promise<boolean> {
+  const prisma = createPrismaClient(db);
   try {
     const result = await prisma.pointTransaction.updateMany({
       where: {
@@ -388,5 +414,7 @@ export async function updatePointTransactionAnalysisId(
   } catch (error) {
     console.error("Update point transaction analysis_id error:", error);
     return false;
+  } finally {
+    await prisma.$disconnect();
   }
 }

@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../../../common/prismaUtils";
 
 // Queue 메시지 타입
 interface SajuAnalysisMessage {
@@ -344,7 +345,7 @@ async function saveSajuAnalysis(
       }
     }
 
-    const prisma = new PrismaClient();
+    const prisma = createPrismaClient(env.DB);
     
     const analysis = await prisma.sajuAnalysis.create({
       data: {
