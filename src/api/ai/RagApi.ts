@@ -1,6 +1,7 @@
 import { Context } from "hono";
-import { paginate } from "../../common/paginationUtils";
 import { createEmbedding, createEmbeddings } from "../../common/ragUtils";
+import { PrismaClient } from "@prisma/client";
+
 /**
  * RAG 문서에 대한 사주 프로젝트용 표준 메타데이터 스키마.
  * 일관된 메타데이터는 AI 답변의 품질과 데이터 필터링 기능에 큰 영향을 미칩니다.
@@ -39,54 +40,35 @@ interface QueryRequest {
 // =================================================================
 
 /**
- * 여러 텍스트를 D1에 한 번에 저장합니다.
+ * 여러 텍스트를 Prisma를 통해 한 번에 저장합니다.
  * 중복된 텍스트는 건너뜁니다.
- * @param db D1 Database 인스턴스
+ * @param prisma Prisma 클라이언트 인스턴스
  * @param documents 저장할 문서 배열 ({text, metadata})
  * @returns 저장에 성공한 문서의 ID와 텍스트 배열
  */
-async function saveDocumentsToD1(
-  db: D1Database,
+async function saveDocumentsWithPrisma(
+  prisma: PrismaClient,
   documents: { text: string; metadata?: any }[]
 ): Promise<{ id: number; text: string }[]> {
-  const statements = documents.map(({ text, metadata }) =>
-    db
-      .prepare(
-        "INSERT INTO documents (text, metadata) VALUES (?, ?) ON CONFLICT(text) DO NOTHING RETURNING id, text"
-      )
-      .bind(text, metadata ? JSON.stringify(metadata) : null)
-  );
+  const successfullyInserted: { id: number; text: string }[] = [];
 
-  try {
-    const results = await db.batch<{ id: number; text: string }>(statements);
-    const successfullyInserted = results.flatMap(
-      (result) => result.results || []
-    );
-    return successfullyInserted;
-  } catch (e) {
-    console.error("D1 batch insert failed:", e);
-    // 트랜잭션 실패 시 개별적으로 처리 (선택적 폴백)
-    const inserted = [];
-    for (const doc of documents) {
-      try {
-        const { results } = await db
-          .prepare(
-            "INSERT INTO documents (text, metadata) VALUES (?, ?) ON CONFLICT(text) DO NOTHING RETURNING id, text"
-          )
-          .bind(doc.text, doc.metadata ? JSON.stringify(doc.metadata) : null)
-          .run<{ id: number; text: string }>();
-        if (results && results.length > 0) {
-          inserted.push(results[0]);
-        }
-      } catch (innerError) {
-        console.error(
-          `Failed to insert document with text: ${doc.text}`,
-          innerError
-        );
-      }
+  for (const doc of documents) {
+    try {
+      const result = await prisma.document.upsert({
+        where: { text: doc.text },
+        update: {}, // 기존 문서가 있으면 업데이트하지 않음
+        create: {
+          text: doc.text,
+          metadata: doc.metadata ? JSON.stringify(doc.metadata) : null,
+        },
+      });
+      successfullyInserted.push({ id: result.id, text: result.text });
+    } catch (error) {
+      console.error(`Failed to insert document with text: ${doc.text}`, error);
     }
-    return inserted;
   }
+
+  return successfullyInserted;
 }
 
 /**
@@ -140,7 +122,9 @@ export async function RagAddDocuments(
       }
     }
 
-    const newlyInsertedDocs = await saveDocumentsToD1(c.env.DB, documents);
+    const prisma = new PrismaClient();
+    const newlyInsertedDocs = await saveDocumentsWithPrisma(prisma, documents);
+    await prisma.$disconnect();
 
     if (newlyInsertedDocs.length === 0) {
       return c.json(
@@ -184,9 +168,59 @@ export async function RagDocuments(
   c: Context
 ): Promise<Response> {
   try {
-    return await paginate(c, c.env.DB, {
-      tableName: "documents",
-      searchField: "text",
+    const prisma = new PrismaClient();
+    
+    // 페이지네이션 파라미터 추출
+    const page = parseInt(c.req.query("page") || "1");
+    const limit = parseInt(c.req.query("limit") || "10");
+    const search = c.req.query("search") || "";
+    
+    const skip = (page - 1) * limit;
+    
+    // 검색 조건 구성
+    const where = search ? {
+      text: {
+        contains: search,
+        mode: 'insensitive' as const
+      }
+    } : {};
+    
+    // 전체 개수 조회
+    const total = await prisma.document.count({ where });
+    
+    // 문서 목록 조회
+    const documents = await prisma.document.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        text: true,
+        metadata: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+    
+    await prisma.$disconnect();
+    
+    // 메타데이터 파싱
+    const parsedDocuments = documents.map(doc => ({
+      ...doc,
+      metadata: doc.metadata ? JSON.parse(doc.metadata) : null
+    }));
+    
+    return c.json({
+      data: parsedDocuments,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
     });
   } catch (error) {
     console.error("Error listing documents:", error);
@@ -222,13 +256,18 @@ export async function RagDelete(c: Context): Promise<Response> {
       );
     }
 
-    // D1에서 삭제
-    const placeholders = validIds.map(() => "?").join(",");
-    const query = `DELETE FROM documents WHERE id IN (${placeholders})`;
-    const { meta } = await c.env.DB.prepare(query)
-      .bind(...validIds)
-      .run();
-    const deletedCount = meta.changes || 0;
+    const prisma = new PrismaClient();
+    
+    // Prisma를 통해 D1에서 삭제
+    const { count: deletedCount } = await prisma.document.deleteMany({
+      where: {
+        id: {
+          in: validIds
+        }
+      }
+    });
+    
+    await prisma.$disconnect();
 
     // Vectorize에서 삭제
     const stringIds = validIds.map((id) => id.toString());
@@ -290,26 +329,32 @@ export async function RagUpdate(
       return c.json({ error: "메타데이터의 category는 필수이며 문자열이어야 합니다." }, 400);
     }
 
+    const prisma = new PrismaClient();
+    
     // 기존 문서를 가져와서 텍스트 변경 여부 확인
-    const { results } = await c.env.DB.prepare("SELECT text FROM documents WHERE id = ?")
-      .bind(docId)
-      .run();
+    const existingDoc = await prisma.document.findUnique({
+      where: { id: docId },
+      select: { text: true }
+    });
 
-    if (!results || results.length === 0) {
+    if (!existingDoc) {
+      await prisma.$disconnect();
       return c.json({ error: `Document with ID ${docId} not found.` }, 404);
     }
 
-    const oldDoc = results[0];
-
-    // D1에 문서 업데이트
-    await c.env.DB.prepare(
-      "UPDATE documents SET text = ?, metadata = ? WHERE id = ?"
-    )
-      .bind(text, JSON.stringify(metadata), docId)
-      .run();
+    // Prisma를 통해 문서 업데이트
+    await prisma.document.update({
+      where: { id: docId },
+      data: {
+        text,
+        metadata: JSON.stringify(metadata)
+      }
+    });
+    
+    await prisma.$disconnect();
 
     // 텍스트가 변경된 경우에만 임베딩을 다시 생성하고 벡터를 업데이트
-    if (oldDoc.text !== text) {
+    if (existingDoc.text !== text) {
       const embedding = await createEmbedding(c.env.AI, text);
       await c.env.VECTORIZE_INDEX.upsert([
         { id: docId.toString(), values: embedding },

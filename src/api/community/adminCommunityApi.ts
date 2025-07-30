@@ -1,5 +1,5 @@
 import { Context } from "hono";
-import { createPrismaClient } from "../../common/prismaUtils";
+import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
 
 export const adminCommunityApi = {
@@ -7,9 +7,8 @@ export const adminCommunityApi = {
   async getBoards(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const prisma = createPrismaClient(c.env.DB);
@@ -40,9 +39,8 @@ export const adminCommunityApi = {
   async createBoard(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const body = await c.req.json();
@@ -95,9 +93,8 @@ export const adminCommunityApi = {
   async updateBoard(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const { boardId } = c.req.param();
@@ -148,9 +145,8 @@ export const adminCommunityApi = {
   async deleteBoard(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const { boardId } = c.req.param();
@@ -194,9 +190,8 @@ export const adminCommunityApi = {
   async getBoardCategories(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const { boardId } = c.req.param();
@@ -239,9 +234,8 @@ export const adminCommunityApi = {
   async createCategory(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const { boardId } = c.req.param();
@@ -310,9 +304,8 @@ export const adminCommunityApi = {
   async updateCategory(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const { categoryId } = c.req.param();
@@ -362,9 +355,8 @@ export const adminCommunityApi = {
   async deleteCategory(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const { categoryId } = c.req.param();
@@ -408,9 +400,8 @@ export const adminCommunityApi = {
   async createSampleData(c: Context) {
     try {
       // 관리자 권한 확인
-      const user = await getUserFromToken(c);
-      if (!user || user.role !== 'admin') {
-        return c.json({ success: false, message: '관리자 권한이 필요합니다.' }, 403);
+      if (!(await isAdmin(c))) {
+        return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
       const prisma = createPrismaClient(c.env.DB);

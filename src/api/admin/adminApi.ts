@@ -1,7 +1,15 @@
 import { Context } from "hono";
 import { paginate } from "../../common/paginationUtils";
-import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
+import { isAdmin } from "../../common/prismaUtils";
 import { addPoints, deductPoints, getUserPoints, getPointTransactions } from "../../common/paymentUtils";
+import { PrismaClient } from "@prisma/client";
+
+// UTC 변환 유틸리티 함수
+const toUTC = (date: Date | string | null): string | null => {
+  if (!date) return null;
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return dateObj.toISOString();
+};
 
 // 영어 -> 한글 필드 변환 (사주 프로필용)
 const toKoreanFields = (profile: any) => ({
@@ -14,8 +22,8 @@ const toKoreanFields = (profile: any) => ({
   분: profile.minute,
   달력: profile.calendar,
   성별: profile.gender,
-  createdAt: profile.createdAt,
-  updatedAt: profile.updatedAt,
+  createdAt: toUTC(profile.createdAt),
+  updatedAt: toUTC(profile.updatedAt),
 });
 
 // 가입한 유저 목록 조회
@@ -26,7 +34,7 @@ export async function getUsers(c: Context): Promise<any> {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = createPrismaClient(c.env.DB);
+    const prisma = new PrismaClient();
 
     // URL 파라미터에서 페이지네이션 정보 추출
     const page = parseInt(c.req.query("page") || "1");
@@ -79,8 +87,8 @@ export async function getUsers(c: Context): Promise<any> {
         picture: user.picture,
         role: user.role,
         point: user.point,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
+        createdAt: toUTC(user.createdAt),
+        updatedAt: toUTC(user.updatedAt),
         profileCount: user._count.sajuProfiles,
       })),
       pagination: {
@@ -116,7 +124,7 @@ export async function getUserProfiles(
       return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
     }
 
-    const prisma = createPrismaClient(c.env.DB);
+    const prisma = new PrismaClient();
 
     // 사용자 존재 여부 확인 (포인트 포함)
     const user = await prisma.user.findUnique({
@@ -154,7 +162,7 @@ export async function getUserProfiles(
         picture: user.picture,
         role: user.role,
         point: user.point,
-        createdAt: user.createdAt,
+        createdAt: toUTC(user.createdAt),
       },
       profiles: profiles.map(toKoreanFields),
       count: profiles.length,
@@ -180,7 +188,7 @@ export async function getAdminStats(
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = createPrismaClient(c.env.DB);
+    const prisma = new PrismaClient();
 
     // 전체 통계 조회
     const [totalUsers, totalProfiles, adminUsers] = await Promise.all([
@@ -221,7 +229,7 @@ export async function getLoginHistory(
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
-    const prisma = createPrismaClient(c.env.DB);
+    const prisma = new PrismaClient();
 
     const page = parseInt(c.req.query("page") || "1");
     const limit = parseInt(c.req.query("limit") || "20");
@@ -267,7 +275,7 @@ export async function getLoginHistory(
       history: history.map((h: any) => ({
         id: h.id,
         action: h.action,
-        createdAt: h.createdAt,
+        createdAt: toUTC(h.createdAt),
         user: h.user,
       })),
       pagination: {
@@ -298,7 +306,7 @@ export async function getAiUsageStatsByModel(
     return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const prisma = createPrismaClient(c.env.DB);
+  const prisma = new PrismaClient();
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
   const sort = c.req.query("sort") || "total_tokens";
@@ -366,6 +374,8 @@ export async function getAiUsageStatsByModel(
       unique_users: Number(row.unique_users),
     }));
 
+    await prisma.$disconnect();
+
     return c.json({
       success: true,
       stats: formattedStats,
@@ -385,8 +395,6 @@ export async function getAiUsageStatsByModel(
       },
       500
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -400,7 +408,7 @@ export async function getAiUsageStatsByUser(
     return c.json({ error: "관리자 권한이 필요합니다." }, 403);
   }
 
-  const prisma = createPrismaClient(c.env.DB);
+  const prisma = new PrismaClient();
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
   const sort = c.req.query("sort") || "total_tokens";
@@ -438,6 +446,7 @@ export async function getAiUsageStatsByUser(
       countResult.length > 0 ? Number(countResult[0].totalItems) : 0;
 
     if (totalItems === 0) {
+      await prisma.$disconnect();
       return c.json({
         success: true,
         stats: [],
@@ -471,6 +480,7 @@ export async function getAiUsageStatsByUser(
     const userIds = paginatedUserStats.map((u) => u.user_id);
 
     if (userIds.length === 0) {
+      await prisma.$disconnect();
       return c.json({
         success: true,
         stats: [],
@@ -539,6 +549,8 @@ export async function getAiUsageStatsByUser(
 
     const finalStats = userIds.map((id) => userStatsMap.get(id));
 
+    await prisma.$disconnect();
+
     return c.json({
       success: true,
       stats: finalStats,
@@ -551,15 +563,13 @@ export async function getAiUsageStatsByUser(
     });
   } catch (error) {
     console.error("Error fetching AI usage stats by user:", error);
-      return c.json(
+    return c.json(
       {
         error: "사용자별 AI 사용량 통계 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
       },
       500
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -600,7 +610,7 @@ export async function getAiUsageLogsForUser(
       });
     }
 
-      return await paginate(c, c.env.DB, {
+    return await paginate(c, c.env.DB, {
       tableName: "ai_usage_logs",
       defaultLimit: 20,
       baseWhereClauses,
@@ -633,7 +643,7 @@ export async function getAiUsageStatsForModel(
     return c.json({ error: "모델 이름이 필요합니다." }, 400);
   }
 
-  const prisma = createPrismaClient(c.env.DB);
+  const prisma = new PrismaClient();
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
   const sort = c.req.query("sort") || "total_tokens";
@@ -708,6 +718,8 @@ export async function getAiUsageStatsForModel(
       total_calls: Number(row.total_calls),
     }));
 
+    await prisma.$disconnect();
+
     return c.json({
       success: true,
       data: formattedData,
@@ -727,8 +739,6 @@ export async function getAiUsageStatsForModel(
       },
       500
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -908,7 +918,16 @@ export async function getUserPointTransactions(
     return c.json({
       success: true,
       userId,
-      transactions: transactionsWithAnalysisId,
+      transactions: transactionsWithAnalysisId.map((t: any) => ({
+        id: t.id,
+        userId: t.user_id,
+        amount: t.amount,
+        description: t.description,
+        type: t.type,
+        reference: t.reference,
+        analysisId: t.analysis_id,
+        createdAt: toUTC(t.created_at),
+      })),
       pagination: {
         currentPage: page,
         pageSize: limit,
@@ -946,6 +965,8 @@ export async function getUserAnalysisTransactions(
     const limit = parseInt(c.req.query("limit") || "20");
     const offset = (page - 1) * limit;
 
+    const prisma = new PrismaClient();
+
     // 분석 결과가 있는 거래만 조회
     const query = `
       SELECT 
@@ -972,7 +993,7 @@ export async function getUserAnalysisTransactions(
       LIMIT ? OFFSET ?
     `;
 
-    const transactions = await c.env.DB.prepare(query).bind(userId, limit, offset).all();
+    const transactions = await prisma.$queryRawUnsafe(query, userId, limit, offset);
 
     // 총 개수 조회
     const countQuery = `
@@ -996,22 +1017,24 @@ export async function getUserAnalysisTransactions(
         AND sa.id IS NOT NULL
     `;
 
-    const totalCount = await c.env.DB.prepare(countQuery).bind(userId).first();
-    const total = totalCount?.total || 0;
+    const totalCount = await prisma.$queryRawUnsafe(countQuery, userId) as any[];
+    const total = totalCount?.[0]?.total || 0;
+
+    await prisma.$disconnect();
 
     return c.json({
       success: true,
       userId,
-      transactions: (transactions.results || []).map((t: any) => ({
+      transactions: (transactions as any[]).map((t: any) => ({
         id: t.id,
         amount: t.amount,
         description: t.description,
         type: t.type,
         reference: t.reference,
-        created_at: t.created_at,
+        createdAt: toUTC(t.created_at),
         analysis: {
           id: t.analysis_id,
-          analysis_type: t.analysis_type,
+          analysisType: t.analysis_type,
           type: t.analysis_type_detail,
           title: t.title
         }
@@ -1051,16 +1074,33 @@ export async function getAnalysisById(
       return c.json({ error: "잘못된 분석 ID입니다." }, 400);
     }
 
+    const prisma = new PrismaClient();
+
     // 분석 결과 조회
-    const analysis = await c.env.DB.prepare(`
-      SELECT 
-        id, analysis_type, type, title, sajuData, user_prompt, 
-        system_prompt, ai_response, model_used, points_spent, 
-        is_favorite, i18n, timezone, analysis_started_at, analysis_completed_at,
-        created_at, updated_at
-      FROM saju_analyses 
-      WHERE id = ?
-    `).bind(analysisId).first();
+    const analysis = await prisma.sajuAnalysis.findUnique({
+      where: { id: analysisId },
+      select: {
+        id: true,
+        analysisType: true,
+        type: true,
+        title: true,
+        sajuData: true,
+        userPrompt: true,
+        systemPrompt: true,
+        aiResponse: true,
+        modelUsed: true,
+        pointsSpent: true,
+        isFavorite: true,
+        i18n: true,
+        timezone: true,
+        analysisStartedAt: true,
+        analysisCompletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    await prisma.$disconnect();
 
     if (!analysis) {
       return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
@@ -1078,22 +1118,22 @@ export async function getAnalysisById(
       success: true,
       analysis: {
         id: analysis.id,
-        analysis_type: analysis.analysis_type,
+        analysisType: analysis.analysisType,
         type: analysis.type,
         title: analysis.title,
-        user_prompt: analysis.user_prompt,
-        system_prompt: analysis.system_prompt,
-        ai_response: analysis.ai_response,
-        model_used: analysis.model_used,
-        points_spent: analysis.points_spent,
-        is_favorite: Boolean(analysis.is_favorite),
-        analysis_started_at: analysis.analysis_started_at,
-        analysis_completed_at: analysis.analysis_completed_at,
-        saju_data: sajuData,
+        userPrompt: analysis.userPrompt,
+        systemPrompt: analysis.systemPrompt,
+        aiResponse: analysis.aiResponse,
+        modelUsed: analysis.modelUsed,
+        pointsSpent: analysis.pointsSpent,
+        isFavorite: analysis.isFavorite,
+        analysisStartedAt: toUTC(analysis.analysisStartedAt),
+        analysisCompletedAt: toUTC(analysis.analysisCompletedAt),
+        sajuData: sajuData,
         i18n: analysis.i18n,
         timezone: analysis.timezone,
-        created_at: analysis.created_at,
-        updated_at: analysis.updated_at
+        createdAt: toUTC(analysis.createdAt),
+        updatedAt: toUTC(analysis.updatedAt)
       }
     });
 

@@ -1,4 +1,5 @@
 import { Context } from "hono";
+import { PrismaClient } from "@prisma/client";
 
 // JWT 페이로드 인터페이스
 interface JWTPayload {
@@ -80,7 +81,7 @@ export async function getVapidPublicKey(c: Context): Promise<Response> {
 }
 
 export async function subscribe(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
+  if (!c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
@@ -100,21 +101,29 @@ export async function subscribe(c: Context): Promise<Response> {
     return c.json({ error: "잘못된 푸시 구독 객체입니다." }, 400);
   }
 
-  const db = c.env.DB;
   try {
-    let stmt = db.prepare("SELECT endpoint FROM push_subscriptions WHERE endpoint = ?");
-    const existing = await stmt.bind(subscription.endpoint).first();
+    const prisma = new PrismaClient();
+    
+    // 기존 구독 확인
+    const existing = await prisma.pushSubscription.findUnique({
+      where: { endpoint: subscription.endpoint }
+    });
 
     if (existing) {
         return c.json({ success: true, message: "이미 구독중입니다." }, 200);
     }
 
-    stmt = db.prepare(`
-        INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) 
-        VALUES (?, ?, ?, ?)
-    `);
-    await stmt.bind(payload.userId, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth).run();
+    // 새 구독 생성
+    await prisma.pushSubscription.create({
+      data: {
+        userId: payload.userId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth
+      }
+    });
 
+    await prisma.$disconnect();
     return c.json({ success: true, message: "구독 성공" }, 201);
   } catch (e) {
     console.error("구독 정보 저장 실패:", e);
@@ -123,7 +132,7 @@ export async function subscribe(c: Context): Promise<Response> {
 }
 
 export async function unsubscribe(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
+  if (!c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
@@ -143,12 +152,20 @@ export async function unsubscribe(c: Context): Promise<Response> {
     return c.json({ error: "Endpoint가 필요합니다." }, 400);
   }
 
-  const db = c.env.DB;
   try {
-    const stmt = db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?");
-    const info = await stmt.bind(endpoint, payload.userId).run();
+    const prisma = new PrismaClient();
+    
+    // 구독 삭제
+    const result = await prisma.pushSubscription.deleteMany({
+      where: {
+        endpoint: endpoint,
+        userId: payload.userId
+      }
+    });
 
-    if (info.meta.changes === 0) {
+    await prisma.$disconnect();
+
+    if (result.count === 0) {
         return c.json({ success: false, message: "구독 정보를 찾을 수 없거나 해당 유저의 구독이 아닙니다." }, 404);
     }
 

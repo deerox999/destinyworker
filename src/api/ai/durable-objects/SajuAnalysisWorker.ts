@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { POINT_COSTS } from "../../../common/paymentUtils";
+import { PrismaClient } from "@prisma/client";
 
 // 분석 작업 상태
 interface AnalysisJob {
@@ -297,9 +298,9 @@ export class SajuAnalysisWorker implements DurableObject {
                   answer: fullResponse,
                   analysisId: saveResult.analysisId,
                   metadata: {
-                    model_used: job.model,
+                    modelUsed: job.model,
                     timestamp: new Date().toISOString(),
-                    response_type: self.getResponseType(job.type),
+                    responseType: self.getResponseType(job.type),
                   },
                 };
               }
@@ -535,44 +536,32 @@ export class SajuAnalysisWorker implements DurableObject {
         }
       }
 
-      const now = new Date();
-      const createdAt = now.toISOString();
-      const updatedAt = now.toISOString();
-      const startedAt = job.createdAt;
-      const completedAt = analysisCompletedAt.toISOString();
+      const prisma = new PrismaClient();
+      
+      const result = await prisma.sajuAnalysis.create({
+        data: {
+          userId: job.userId,
+          analysisType: job.analysisType,
+          type: job.type,
+          title: title,
+          sajuData: JSON.stringify(birthData),
+          userPrompt: job.userPrompt,
+          systemPrompt: job.systemPrompt || null,
+          aiResponse: aiResponse,
+          modelUsed: job.model,
+          pointsSpent: job.pointsCost,
+          i18n: job.i18n,
+          timezone: job.timezone,
+          analysisStartedAt: new Date(job.createdAt),
+          analysisCompletedAt: analysisCompletedAt,
+        },
+      });
 
-      const result = await this.env.DB.prepare(
-        `
-          INSERT INTO saju_analyses (
-            user_id, analysis_type, type, title, sajuData, user_prompt, 
-            system_prompt, ai_response, model_used, points_spent, 
-            created_at, updated_at, i18n, timezone, analysis_started_at, analysis_completed_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-        .bind(
-          job.userId,
-          job.analysisType,
-          job.type,
-          title,
-          JSON.stringify(birthData),
-          job.userPrompt,
-          job.systemPrompt || null,
-          aiResponse,
-          job.model,
-          job.pointsCost,
-          createdAt,
-          updatedAt,
-          job.i18n,
-          job.timezone,
-          startedAt,
-          completedAt
-        )
-        .run();
+      await prisma.$disconnect();
 
       return {
         success: true,
-        analysisId: result.meta.last_row_id,
+        analysisId: result.id,
       };
     } catch (error) {
       console.error("사주 분석 결과 저장 실패:", error);

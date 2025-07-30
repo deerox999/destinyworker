@@ -3,6 +3,8 @@ import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
 import { deleteR2Object } from "./r2Api";
 
+
+
 // 프로필 이름 유효성 검사
 const validateUserName = (userName: string): boolean => {
   if (!userName || typeof userName !== "string") return false;
@@ -57,23 +59,7 @@ export async function getUserProfile(
 
     return c.json({
       success: true,
-      user: {
-        id: user.id,
-        이메일: user.email,
-        이름: user.name,
-        프로필이름: user.userName,
-        프로필사진: user.picture,
-        개인정보동의: user.privacyConsent,
-        개인정보동의버전: user.privacyConsentVersion,
-        개인정보동의일시: user.privacyConsentAt,
-        리포트저장동의: user.reportStorageConsent,
-        리포트저장동의버전: user.reportStorageConsentVersion,
-        리포트저장동의일시: user.reportStorageConsentAt,
-        최종동의일시: user.lastConsentAt,
-        동의상태: user.consentStatus,
-        가입일: user.createdAt,
-        수정일: user.updatedAt,
-      },
+      user: user,
     });
   } catch (error) {
     console.error("사용자 정보 조회 실패:", error);
@@ -188,8 +174,8 @@ export async function updateUserProfile(
       success: true,
       message: "프로필이 성공적으로 수정되었습니다.",
       user: {
-        프로필이름: updatedUser.userName,
-        프로필사진: updatedUser.picture,
+        userName: updatedUser.userName,
+        picture: updatedUser.picture,
       },
     });
   } catch (error) {
@@ -293,16 +279,7 @@ export async function updateConsent(
     return c.json({
       success: true,
       message: "동의 정보가 성공적으로 업데이트되었습니다.",
-      consent: {
-        개인정보동의: updatedUser.privacyConsent,
-        개인정보동의버전: updatedUser.privacyConsentVersion,
-        개인정보동의일시: updatedUser.privacyConsentAt,
-        리포트저장동의: updatedUser.reportStorageConsent,
-        리포트저장동의버전: updatedUser.reportStorageConsentVersion,
-        리포트저장동의일시: updatedUser.reportStorageConsentAt,
-        최종동의일시: updatedUser.lastConsentAt,
-        동의상태: updatedUser.consentStatus,
-      },
+      consent: updatedUser,
     });
   } catch (error) {
     console.error("동의 정보 업데이트 실패:", error);

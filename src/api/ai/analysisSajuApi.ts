@@ -365,17 +365,22 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     } else {
       // 비동기 처리 (기존 방식)
       // Queue가 있는 경우에만 전송
-      if (c.env.analysis) {
+      if (c.env.QUEUE) {
         try {
-          await c.env.analysis.send({
+          await c.env.QUEUE.send({
             ...jobData,
             jobId,
             durableObjectId: durableObjectId.toString(),
           });
+          console.log(`[Queue] 작업 전송 성공: ${jobId}`);
         } catch (queueError) {
-          console.error("Queue 전송 실패:", queueError);
+          console.error("[Queue] 전송 실패:", queueError);
           // Queue 실패 시에도 작업은 등록되었으므로 계속 진행
+          // 하지만 사용자에게 알림
+          console.warn(`[Queue] Queue 전송 실패했지만 작업은 등록됨: ${jobId}`);
         }
+      } else {
+        console.warn("[Queue] QUEUE가 설정되지 않음");
       }
 
       const result = await response.json();

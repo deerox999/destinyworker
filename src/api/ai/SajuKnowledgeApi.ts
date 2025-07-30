@@ -1,7 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { PrismaClient } from "@prisma/client";
 import { Context } from "hono";
-import { createPrismaClient } from "../../common/prismaUtils";
 import {
   createEmbedding,
   findSimilarVectors,
@@ -116,51 +115,61 @@ async function performWebSearch(
  * D1에서 특정 대화 ID에 해당하는 기록을 가져옵니다.
  */
 async function getConversationHistory(
-  db: PrismaClient,
   conversationId: string
 ): Promise<ChatMessage[]> {
-  const history = await db.conversationHistory.findMany({
-    where: { conversationId },
-    orderBy: { createdAt: "asc" },
-    select: {
-      role: true,
-      content: true,
-    },
-  });
+  const prisma = new PrismaClient();
   
-  // role 값이 "assistant"인지 확인하고 ChatMessage 형식으로 변환
-  return history.map(msg => ({
-    role: msg.role as "user" | "assistant" | "system",
-    content: msg.content
-  }));
+  try {
+    const history = await prisma.conversationHistory.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        role: true,
+        content: true,
+      },
+    });
+    
+    // role 값이 "assistant"인지 확인하고 ChatMessage 형식으로 변환
+    return history.map(msg => ({
+      role: msg.role as "user" | "assistant" | "system",
+      content: msg.content
+    }));
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 /**
  * 사용자의 질문과 AI의 답변을 대화 기록에 저장합니다.
  */
 async function saveConversationTurn(
-  db: PrismaClient,
   conversationId: string,
   userId: number,
   userMessage: string,
   assistantMessage: string
 ) {
-  await db.conversationHistory.createMany({
-    data: [
-      {
-        conversationId,
-        userId,
-        role: "user",
-        content: userMessage,
-      },
-      {
-        conversationId,
-        userId,
-        role: "assistant",
-        content: assistantMessage,
-      },
-    ],
-  });
+  const prisma = new PrismaClient();
+  
+  try {
+    await prisma.conversationHistory.createMany({
+      data: [
+        {
+          conversationId,
+          userId,
+          role: "user",
+          content: userMessage,
+        },
+        {
+          conversationId,
+          userId,
+          role: "assistant",
+          content: assistantMessage,
+        },
+      ],
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 /**
@@ -169,7 +178,7 @@ async function saveConversationTurn(
 export async function SajuChatList(
   c: Context
 ): Promise<Response> {
-  const prisma = createPrismaClient(c.env.DB);
+  const prisma = new PrismaClient();
 
   try {
     const user = await getUserFromToken(c);
@@ -244,8 +253,6 @@ export async function SajuChat(
 ): Promise<Response> {
   const conversationId = c.req.param("id");
 
-  const prisma = createPrismaClient(c.env.DB);
-
   const {
     message: userQuery,
     i18n,
@@ -274,7 +281,6 @@ export async function SajuChat(
       const user = await getUserFromToken(c);
       if (user) {
         await saveConversationTurn(
-          prisma,
           conversationId,
           user.id,
           userQuery,
@@ -410,7 +416,6 @@ ${fullContext}`;
 
     // 6. 새로운 대화 내용 D1에 저장 (단발성 질문이므로 각각 독립적으로 저장)
     await saveConversationTurn(
-      prisma,
       newConversationId,
       user.id,
       userQuery,
@@ -432,8 +437,6 @@ ${fullContext}`;
       500,
       c.req.header()
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -443,7 +446,7 @@ ${fullContext}`;
 export async function SajuChatFull(
   c: Context
 ): Promise<Response> {
-  const prisma = createPrismaClient(c.env.DB);
+  const prisma = new PrismaClient();
   const conversationId = c.req.param("id");
 
   try {
@@ -463,7 +466,7 @@ export async function SajuChatFull(
       );
     }
 
-    const messages = await getConversationHistory(prisma, conversationId);
+    const messages = await getConversationHistory(conversationId);
 
     return c.json(
       {
@@ -490,7 +493,7 @@ export async function SajuChatFull(
 export async function SajuChatDelete(
   c: Context
 ): Promise<Response> {
-  const prisma = createPrismaClient(c.env.DB);
+  const prisma = new PrismaClient();
 
   try {
     const user = await getUserFromToken(c);

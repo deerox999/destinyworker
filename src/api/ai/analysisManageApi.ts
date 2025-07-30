@@ -1,5 +1,13 @@
 import { Context } from "hono";
 import { getUserFromToken } from "../../common/utils";
+import { PrismaClient } from "@prisma/client";
+
+// UTC 변환 유틸리티 함수
+const toUTC = (date: Date | string | null): string | null => {
+  if (!date) return null;
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return dateObj.toISOString();
+};
 
 /**
  * 사용자의 사주 분석 결과 목록을 조회하는 API
@@ -19,69 +27,67 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
 
     const offset = (page - 1) * limit;
 
-    // 기본 쿼리
-    let query = `
-      SELECT 
-        id, analysis_type, type, title, 
-        ai_response, points_spent, is_favorite, 
-        created_at, analysis_started_at, analysis_completed_at
-      FROM saju_analyses
-      WHERE user_id = ?
-    `;
-    const params: any[] = [user.id];
+    // Prisma 클라이언트 생성
+    const prisma = new PrismaClient();
 
-    // 필터 조건 추가 (type 필드 사용)
+    // 필터 조건 구성
+    const where: any = {
+      userId: user.id,
+    };
+
     if (analysisType) {
-      query += ` AND type = ?`;
-      params.push(analysisType);
+      where.type = analysisType;
     }
 
     if (isFavorite === "true") {
-      query += ` AND is_favorite = 1`;
+      where.isFavorite = true;
     } else if (isFavorite === "false") {
-      query += ` AND is_favorite = 0`;
+      where.isFavorite = false;
     }
 
-    // 정렬 및 페이징 (즐겨찾기 우선, 그 다음 최신순)
-    query += ` ORDER BY is_favorite DESC, created_at DESC LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
-
-    // 총 개수 조회
-    let countQuery = `
-      SELECT COUNT(*) as total 
-      FROM saju_analyses 
-      WHERE user_id = ?
-    `;
-    const countParams: any[] = [user.id];
-
-    if (analysisType) {
-      countQuery += ` AND type = ?`;
-      countParams.push(analysisType);
-    }
-
-    if (isFavorite === "true") {
-      countQuery += ` AND is_favorite = 1`;
-    } else if (isFavorite === "false") {
-      countQuery += ` AND is_favorite = 0`;
-    }
-
-    const [analyses, totalCount] = await Promise.all([
-      c.env.DB.prepare(query)
-        .bind(...params)
-        .all(),
-      c.env.DB.prepare(countQuery)
-        .bind(...countParams)
-        .first(),
+    // 분석 결과 조회
+    const [analyses, total] = await Promise.all([
+      prisma.sajuAnalysis.findMany({
+        where,
+        select: {
+          id: true,
+          analysisType: true,
+          type: true,
+          title: true,
+          aiResponse: true,
+          pointsSpent: true,
+          isFavorite: true,
+          createdAt: true,
+          analysisStartedAt: true,
+          analysisCompletedAt: true,
+        },
+        orderBy: [
+          { isFavorite: 'desc' },
+          { createdAt: 'desc' }
+        ],
+        take: limit,
+        skip: offset,
+      }),
+      prisma.sajuAnalysis.count({ where }),
     ]);
 
-    const total = totalCount?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
-    // SQLite boolean 값을 JavaScript boolean으로 변환
-    const processedAnalyses = (analyses.results || []).map((analysis: any) => ({
-      ...analysis,
-      is_favorite: Boolean(analysis.is_favorite),
+    // UTC 변환 적용
+    const processedAnalyses = analyses.map((analysis) => ({
+      id: analysis.id,
+      analysisType: analysis.analysisType,
+      type: analysis.type,
+      title: analysis.title,
+      aiResponse: analysis.aiResponse,
+      pointsSpent: analysis.pointsSpent,
+      isFavorite: analysis.isFavorite,
+      createdAt: toUTC(analysis.createdAt),
+      analysisStartedAt: toUTC(analysis.analysisStartedAt),
+      analysisCompletedAt: toUTC(analysis.analysisCompletedAt),
     }));
+
+    await prisma.$disconnect();
 
     return c.json(
       {
@@ -91,8 +97,6 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
           limit,
           total,
           totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1,
         },
       },
       200
@@ -124,17 +128,33 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
       return c.json({ error: "분석 ID가 필요합니다." }, 400);
     }
 
-    const analysis = await c.env.DB.prepare(
-      `
-      SELECT 
-        id, analysis_type, type, title, sajuData, ai_response, points_spent, 
-        is_favorite, i18n, timezone, analysis_started_at, analysis_completed_at
-      FROM saju_analyses 
-      WHERE id = ? AND user_id = ?
-    `
-    )
-      .bind(analysisId, user.id)
-      .first();
+    const prisma = new PrismaClient();
+
+    const analysis = await prisma.sajuAnalysis.findFirst({
+      where: {
+        id: parseInt(analysisId),
+        userId: user.id,
+      },
+      select: {
+        id: true,
+        analysisType: true,
+        type: true,
+        title: true,
+        sajuData: true,
+        userPrompt: true,
+        systemPrompt: true,
+        aiResponse: true,
+        modelUsed: true,
+        pointsSpent: true,
+        isFavorite: true,
+        i18n: true,
+        timezone: true,
+        analysisStartedAt: true,
+        analysisCompletedAt: true,
+      },
+    });
+
+    await prisma.$disconnect();
 
     if (!analysis) {
       return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
@@ -151,18 +171,18 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
     return c.json(
       {
         id: analysis.id,
-        analysis_type: analysis.analysis_type,
+        analysisType: analysis.analysisType,
         type: analysis.type,
         title: analysis.title,
-        user_prompt: analysis.user_prompt,
-        system_prompt: analysis.system_prompt,
-        ai_response: analysis.ai_response,
-        model_used: analysis.model_used,
-        points_spent: analysis.points_spent,
-        is_favorite: Boolean(analysis.is_favorite),
-        analysis_started_at: analysis.analysis_started_at,
-        analysis_completed_at: analysis.analysis_completed_at,
-        saju_data: sajuData,
+        userPrompt: analysis.userPrompt,
+        systemPrompt: analysis.systemPrompt,
+        aiResponse: analysis.aiResponse,
+        modelUsed: analysis.modelUsed,
+        pointsSpent: analysis.pointsSpent,
+        isFavorite: analysis.isFavorite,
+        analysisStartedAt: toUTC(analysis.analysisStartedAt),
+        analysisCompletedAt: toUTC(analysis.analysisCompletedAt),
+        sajuData: sajuData,
         i18n: analysis.i18n,
         timezone: analysis.timezone,
       },
@@ -197,43 +217,44 @@ export async function toggleSajuAnalysisFavorite(
       return c.json({ error: "분석 ID가 필요합니다." }, 400);
     }
 
+    const prisma = new PrismaClient();
+
     // 현재 즐겨찾기 상태 확인
-    const current = await c.env.DB.prepare(
-      `
-      SELECT is_favorite FROM saju_analyses 
-      WHERE id = ? AND user_id = ?
-    `
-    )
-      .bind(analysisId, user.id)
-      .first();
+    const current = await prisma.sajuAnalysis.findFirst({
+      where: {
+        id: parseInt(analysisId),
+        userId: user.id,
+      },
+      select: {
+        isFavorite: true,
+      },
+    });
 
     if (!current) {
+      await prisma.$disconnect();
       return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
     }
 
-    // SQLite boolean 값을 JavaScript boolean으로 변환
-    const currentFavoriteState = Boolean(current.is_favorite);
+    const newFavoriteState = !current.isFavorite;
 
-    // 즐겨찾기 상태 토글
-    const newFavoriteState = !currentFavoriteState;
+    // 즐겨찾기 상태 업데이트
+    await prisma.sajuAnalysis.update({
+      where: {
+        id: parseInt(analysisId),
+      },
+      data: {
+        isFavorite: newFavoriteState,
+        updatedAt: new Date(),
+      },
+    });
 
-    await c.env.DB.prepare(
-      `
-      UPDATE saju_analyses 
-      SET is_favorite = ?, updated_at = datetime('now')
-      WHERE id = ? AND user_id = ?
-    `
-    )
-      .bind(newFavoriteState ? 1 : 0, analysisId, user.id)
-      .run();
+    await prisma.$disconnect();
 
     return c.json(
       {
         success: true,
-        is_favorite: newFavoriteState,
-        message: newFavoriteState
-          ? "즐겨찾기에 추가되었습니다."
-          : "즐겨찾기에서 제거되었습니다.",
+        isFavorite: newFavoriteState,
+        message: newFavoriteState ? "즐겨찾기에 추가되었습니다." : "즐겨찾기에서 제거되었습니다.",
       },
       200
     );
@@ -267,25 +288,35 @@ export async function updateSajuAnalysisTitle(c: Context): Promise<Response> {
     const body = await c.req.json();
     const { title } = body;
 
-    if (!title || typeof title !== "string" || title.trim().length === 0) {
-      return c.json({ error: "유효한 제목이 필요합니다." }, 400);
+    if (!title || typeof title !== "string") {
+      return c.json({ error: "제목이 필요합니다." }, 400);
+    }
+
+    if (title.trim().length === 0) {
+      return c.json({ error: "제목은 비어있을 수 없습니다." }, 400);
     }
 
     if (title.length > 100) {
       return c.json({ error: "제목은 100자를 초과할 수 없습니다." }, 400);
     }
 
-    const result = await c.env.DB.prepare(
-      `
-      UPDATE saju_analyses 
-      SET title = ?, updated_at = datetime('now')
-      WHERE id = ? AND user_id = ?
-    `
-    )
-      .bind(title.trim(), analysisId, user.id)
-      .run();
+    const prisma = new PrismaClient();
 
-    if (result.meta.changes === 0) {
+    // 제목 업데이트
+    const result = await prisma.sajuAnalysis.updateMany({
+      where: {
+        id: parseInt(analysisId),
+        userId: user.id,
+      },
+      data: {
+        title: title.trim(),
+        updatedAt: new Date(),
+      },
+    });
+
+    await prisma.$disconnect();
+
+    if (result.count === 0) {
       return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
     }
 
@@ -293,7 +324,7 @@ export async function updateSajuAnalysisTitle(c: Context): Promise<Response> {
       {
         success: true,
         title: title.trim(),
-        message: "제목이 수정되었습니다.",
+        message: "제목이 성공적으로 수정되었습니다.",
       },
       200
     );
@@ -324,23 +355,26 @@ export async function deleteSajuAnalysis(c: Context): Promise<Response> {
       return c.json({ error: "분석 ID가 필요합니다." }, 400);
     }
 
-    const result = await c.env.DB.prepare(
-      `
-      DELETE FROM saju_analyses 
-      WHERE id = ? AND user_id = ?
-    `
-    )
-      .bind(analysisId, user.id)
-      .run();
+    const prisma = new PrismaClient();
 
-    if (result.meta.changes === 0) {
+    // 분석 결과 삭제
+    const result = await prisma.sajuAnalysis.deleteMany({
+      where: {
+        id: parseInt(analysisId),
+        userId: user.id,
+      },
+    });
+
+    await prisma.$disconnect();
+
+    if (result.count === 0) {
       return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
     }
 
     return c.json(
       {
         success: true,
-        message: "분석 결과가 삭제되었습니다.",
+        message: "분석 결과가 성공적으로 삭제되었습니다.",
       },
       200
     );

@@ -40,8 +40,6 @@ npm run db:seed:community
 `.dev.vars` 파일에 다음 환경 변수들을 설정하세요:
 
 ```env
-# Database
-DATABASE_URL="file:./dev.db"
 
 # R2 Storage
 R2_ACCOUNT_ID="your_account_id"

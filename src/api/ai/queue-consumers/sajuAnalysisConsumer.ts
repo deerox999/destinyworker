@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { PrismaClient } from "@prisma/client";
 
 // Queue 메시지 타입
 interface SajuAnalysisMessage {
@@ -38,7 +39,7 @@ export async function saju_analysis_queue_handler(
       });
 
       const payload = buildGeminiPayload(message.body);
-      const result = await retryGeminiCall(ai, payload);
+      const result = await ai.models.generateContent(payload);
 
       if (!result) {
         throw new Error("AI 응답을 받을 수 없습니다.");
@@ -67,7 +68,9 @@ export async function saju_analysis_queue_handler(
       );
       const durableObject = env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
 
-      await durableObject.fetch("http://localhost/update-status", {
+      console.log(`[Queue] Durable Object 업데이트 시도: ${message.body.jobId}`);
+
+      const updateResponse = await durableObject.fetch("http://localhost/update-status", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -79,16 +82,16 @@ export async function saju_analysis_queue_handler(
             answer: text,
             analysisId: saveResult.analysisId,
             metadata: {
-              model_used: message.body.model,
+              modelUsed: message.body.model,
               timestamp: new Date().toISOString(),
-              response_type: getResponseType(message.body.type),
+              responseType: getResponseType(message.body.type),
               ...(message.body.type === "compatibility" && {
-                person1_name: message.body.sajuData?.person1?.name,
-                person2_name: message.body.sajuData?.person2?.name,
+                person1Name: message.body.sajuData?.person1?.name,
+                person2Name: message.body.sajuData?.person2?.name,
               }),
               ...(message.body.type === "yearly_fortune" && {
-                service_type: "paid",
-                fortune_type: message.body.fortuneType,
+                serviceType: "paid",
+                fortuneType: message.body.fortuneType,
               }),
             },
             points: {
@@ -99,6 +102,12 @@ export async function saju_analysis_queue_handler(
           },
         }),
       });
+
+      if (!updateResponse.ok) {
+        console.error(`[Queue] Durable Object 업데이트 실패: ${message.body.jobId}`);
+      } else {
+        console.log(`[Queue] Durable Object 업데이트 성공: ${message.body.jobId}`);
+      }
 
       console.log(`Job ${message.body.jobId} completed successfully`);
     } catch (error) {
@@ -111,7 +120,9 @@ export async function saju_analysis_queue_handler(
         );
         const durableObject = env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
 
-        await durableObject.fetch("http://localhost/update-status", {
+        console.log(`[Queue] 실패 상태 업데이트 시도: ${message.body.jobId}`);
+
+        const updateResponse = await durableObject.fetch("http://localhost/update-status", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -122,13 +133,19 @@ export async function saju_analysis_queue_handler(
             error: error instanceof Error ? error.message : "Unknown error",
           }),
         });
+
+        if (!updateResponse.ok) {
+          console.error(`[Queue] 실패 상태 업데이트 실패: ${message.body.jobId}`);
+        } else {
+          console.log(`[Queue] 실패 상태 업데이트 성공: ${message.body.jobId}`);
+        }
       } catch (updateError) {
         console.error("[Queue] Failed to update job status:", updateError);
       }
 
       // 실패 시 포인트 환불
       try {
-        const { refundPoints } = await import("../common/paymentUtils");
+        const { refundPoints } = await import("../../../common/paymentUtils");
         await refundPoints(
           env.DB,
           message.body.userId,
@@ -235,39 +252,6 @@ function buildGeminiPayload(message: SajuAnalysisMessage): any {
 }
 
 /**
- * 재시도 로직 함수
- */
-async function retryGeminiCall(
-  ai: GoogleGenAI,
-  payload: any,
-  maxRetries = 3
-): Promise<any> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000);
-
-      const result = await ai.models.generateContent(payload);
-      clearTimeout(timeoutId);
-      return result;
-    } catch (error) {
-      console.error(
-        `Gemini API 호출 실패 (시도 ${attempt}/${maxRetries}):`,
-        error
-      );
-
-      if (attempt === maxRetries) {
-        throw error;
-      }
-
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.pow(2, attempt) * 1000)
-      );
-    }
-  }
-}
-
-/**
  * 제목 생성 함수
  */
 function generateTitle(message: SajuAnalysisMessage): string {
@@ -360,44 +344,32 @@ async function saveSajuAnalysis(
       }
     }
 
-    const now = new Date();
-    const createdAt = now.toISOString();
-    const updatedAt = now.toISOString();
-    const startedAt = new Date().toISOString(); // Queue 처리 시작 시간
-    const completedAt = analysisCompletedAt.toISOString();
+    const prisma = new PrismaClient();
+    
+    const analysis = await prisma.sajuAnalysis.create({
+      data: {
+        userId: message.userId,
+        analysisType: message.analysisType,
+        type: message.type,
+        title: title,
+        sajuData: JSON.stringify(birthData),
+        userPrompt: message.userPrompt,
+        systemPrompt: message.systemPrompt || null,
+        aiResponse: aiResponse,
+        modelUsed: message.model,
+        pointsSpent: message.pointsCost,
+        i18n: message.i18n,
+        timezone: message.timezone,
+        analysisStartedAt: new Date(),
+        analysisCompletedAt: analysisCompletedAt
+      }
+    });
 
-    const result = await env.DB.prepare(
-      `
-        INSERT INTO saju_analyses (
-          user_id, analysis_type, type, title, sajuData, user_prompt, 
-          system_prompt, ai_response, model_used, points_spent, 
-          created_at, updated_at, i18n, timezone, analysis_started_at, analysis_completed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    )
-      .bind(
-        message.userId,
-        message.analysisType,
-        message.type,
-        title,
-        JSON.stringify(birthData),
-        message.userPrompt,
-        message.systemPrompt || null,
-        aiResponse,
-        message.model,
-        message.pointsCost,
-        createdAt,
-        updatedAt,
-        message.i18n,
-        message.timezone,
-        startedAt,
-        completedAt
-      )
-      .run();
+    await prisma.$disconnect();
 
     return {
       success: true,
-      analysisId: result.meta.last_row_id,
+      analysisId: analysis.id,
     };
   } catch (error) {
     console.error("사주 분석 결과 저장 실패:", error);

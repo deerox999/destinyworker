@@ -1,242 +1,312 @@
 /*
-wrangler d1 execute destiny-new --command "update users set role='admin' where id=1;"
+로컬 개발환경에서 로컬 db 삭제 방법 (dev.db 삭제 후 npx prisma migrate dev 재생성)
 */
-const { execSync } = require('child_process');
-const fs = require('fs');
+/*
+D1 데이터베이스 마이그레이션 스크립트
+
+사용법:
+  node migrate-d1.js [환경옵션] [동작옵션]
+
+환경 옵션 (하나만 선택):
+  --local     로컬 D1 데이터베이스 (destiny-local)
+  --dev       개발 환경 D1 데이터베이스 (destiny-dev) 
+  --remote    프로덕션 D1 데이터베이스 (destiny-new) - 기본값
+
+동작 옵션:
+  --reset     데이터베이스 초기화 (모든 테이블 삭제)
+  --force     위험한 작업 강제 실행 (DROP, RESET 등)
+  --from-empty 빈 스키마에서 시작하여 전체 스키마 적용
+
+예시:
+  # 로컬 환경에 일반 마이그레이션
+  node scripts/migrate-d1.js --local
+
+  # 개발 환경에 강제 마이그레이션 (DROP 포함)
+  node scripts/migrate-d1.js --dev --force
+
+  # 프로덕션 환경 데이터베이스 초기화 (위험!)
+  node scripts/migrate-d1.js --remote --reset --force
+
+  # 로컬 환경에서 빈 스키마부터 전체 적용
+  node scripts/migrate-d1.js --local --from-empty
+
+주의사항:
+- --reset과 --force는 데이터 손실을 야기할 수 있습니다
+- 프로덕션 환경에서는 --force 없이 실행하여 안전을 확인하세요
+- 스크립트는 항상 빈 스키마에서 시작하여 전체 스키마를 적용합니다
+- Prisma가 자동으로 중복 테이블/컬럼 생성을 방지하므로 안전합니다
+*/
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const fs = require('fs/promises');
 const path = require('path');
 
-console.log('🚀 Prisma 스키마를 D1 데이터베이스에 동기화 중...\n');
+const execAsync = promisify(exec);
 
-// 이전 스키마 저장 파일 경로
-const lastSchemaFile = './scripts/last-schema.prisma';
-const tempSqlFile = './scripts/temp_migration.sql';
-const currentDbSchemaFile = './scripts/current-db-schema.sql';
+// --- 설정 ---
+const DB_CONFIGS = {
+  remote: { name: 'destiny-new', flags: '--remote' },
+  dev: { name: 'destiny-dev', flags: '--remote' },
+  local: { name: 'destiny-local', flags: '--local' },
+};
 
-try {
-  let migrationSql = '';
-  
-  // 1. 현재 D1 데이터베이스 스키마 추출 (--reset 플래그가 있는 경우)
-  if (process.argv.includes('--reset') || !fs.existsSync(lastSchemaFile)) {
-    console.log('🔄 1단계: 현재 D1 데이터베이스 스키마 추출 중...');
-    
-    try {
-      // 현재 D1의 테이블 스키마를 추출
-      const dbSchema = execSync(
-        `npx wrangler d1 execute destiny-new --remote --command ".schema"`,
-        { encoding: 'utf8' }
-      );
-      
-      // 스키마에서 실제 CREATE 문만 추출 (메타데이터 제거)
-      const cleanSchema = dbSchema
-        .split('\n')
-        .filter(line => line.trim().startsWith('CREATE'))
-        .join('\n');
-      
-      if (cleanSchema.trim()) {
-        fs.writeFileSync(currentDbSchemaFile, cleanSchema);
-        console.log('💾 현재 D1 스키마 추출 완료');
-        
-        // 현재 D1 스키마를 Prisma 스키마와 비교
-        migrationSql = execSync(
-          `npx prisma migrate diff --from-schema-datasource ${currentDbSchemaFile} --to-schema-datamodel prisma/schema.prisma --script`,
-          { encoding: 'utf8' }
-        );
-        
-        console.log('📊 현재 D1 상태와 Prisma 스키마 비교 완료');
-      } else {
-        // D1이 비어있는 경우
-        migrationSql = execSync(
-          'npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script',
-          { encoding: 'utf8' }
-        );
-      }
-      
-    } catch (error) {
-      console.log('⚠️  D1 스키마 추출 실패, 전체 스키마로 진행합니다.');
-      migrationSql = execSync(
-        'npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script',
-        { encoding: 'utf8' }
-      );
+const TEMP_FILES = {
+  tempSql: path.join(__dirname, 'temp_migration.sql'),
+  tempDropSql: path.join(__dirname, 'temp_drop.sql'),
+};
+
+// --- 로깅 유틸리티 ---
+const log = {
+  info: (message) => console.log(`[INFO] ${message}`),
+  warn: (message) => console.warn(`[WARN] ⚠️  ${message}`),
+  error: (message) => console.error(`[ERROR] ❌ ${message}`),
+  success: (message) => console.log(`[SUCCESS] ✅ ${message}`),
+  step: (message) => console.log(`
+🚀 ${message}`),
+};
+
+/**
+ * Wrangler D1 명령어를 실행하고 결과를 JSON으로 파싱합니다.
+ */
+async function executeD1(dbName, flags, { command, file }) {
+  const commandStr = command ? `--command "${command.replace(/"/g, '\"')}"` : `--file=${file}`;
+  const fullCommand = `npx wrangler d1 execute ${dbName} ${flags} ${commandStr} --json`;
+
+  try {
+    const { stdout } = await execAsync(fullCommand);
+    if (!stdout.trim()) return [];
+    const result = JSON.parse(stdout);
+    return result[0]?.results || [];
+  } catch (e) {
+    log.error(`D1 execution failed for command: ${fullCommand}`);
+    log.error(e.message);
+    // Stderr might be useful for debugging wrangler issues
+    if (e.stderr) {
+      log.error(`Stderr: ${e.stderr}`);
     }
-  } 
-  // 2. 로컬 D1의 실제 상태와 비교 (--local 플래그가 있는 경우)
-  else if (process.argv.includes('--local')) {
-    console.log('📊 1단계: 로컬 D1 실제 상태와 Prisma 스키마 비교 중...');
-    
-    try {
-      // 로컬 D1의 실제 테이블 목록 조회
-      const localTables = execSync(
-        `npx wrangler d1 execute destiny-local --command "SELECT name FROM sqlite_master WHERE type='table';"`,
-        { encoding: 'utf8' }
-      );
-      
-      console.log('📋 로컬 D1에 있는 테이블들:');
-      console.log(localTables);
-      
-      // 로컬 D1의 스키마를 추출
-      const localSchema = execSync(
-        `npx wrangler d1 execute destiny-local --command "SELECT sql FROM sqlite_master WHERE type='table';"`,
-        { encoding: 'utf8' }
-      );
-      
-      // CREATE 문들만 추출
-      const createStatements = localSchema
-        .split('\n')
-        .filter(line => line && line.trim().startsWith('CREATE TABLE'))
-        .join('\n');
-      
-      if (createStatements.trim()) {
-        fs.writeFileSync(currentDbSchemaFile, createStatements);
-        console.log('💾 로컬 D1 스키마 추출 완료');
-        
-        // 로컬 D1 스키마를 Prisma 스키마와 비교
-        migrationSql = execSync(
-          `npx prisma migrate diff --from-schema-datasource ${currentDbSchemaFile} --to-schema-datamodel prisma/schema.prisma --script`,
-          { encoding: 'utf8' }
-        );
-        
-        console.log('📊 로컬 D1 상태와 Prisma 스키마 비교 완료');
-      } else {
-        // 로컬 D1이 비어있는 경우
-        migrationSql = execSync(
-          'npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script',
-          { encoding: 'utf8' }
-        );
-      }
-      
-    } catch (error) {
-      console.log('⚠️  로컬 D1 스키마 추출 실패, 전체 스키마로 진행합니다.');
-      migrationSql = execSync(
-        'npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script',
-        { encoding: 'utf8' }
-      );
+    throw new Error(`Failed to execute D1 command.`);
+  }
+}
+
+/**
+ * 실행 인자를 파싱하여 대상 환경 설정을 반환합니다.
+ */
+function getTargetConfig() {
+  const args = process.argv.slice(2);
+  let env = 'remote'; // 기본값
+  if (args.includes('--local')) env = 'local';
+  if (args.includes('--dev')) env = 'dev';
+
+  log.info(`Target environment: ${env.toUpperCase()}`);
+  return DB_CONFIGS[env];
+}
+
+/**
+ * 데이터베이스를 초기화합니다 (모든 테이블 삭제).
+ * 스키마를 분석하여 의존성의 역순으로, 실제 존재하는 테이블만 삭제합니다.
+ */
+async function resetDatabase(config) {
+  log.step('RESETTING DATABASE...');
+  const { name, flags } = config;
+  const args = process.argv.slice(2);
+  const isForced = args.includes('--force');
+
+  if (!isForced) {
+    log.warn('The --reset flag is a DESTRUCTIVE operation.');
+    log.warn('All data in the database will be lost.');
+    log.warn('To proceed, run the script with the --force flag as well (e.g., --reset --force).');
+    throw new Error('Reset aborted for safety.');
+  }
+
+  const schemaContent = await fs.readFile('prisma/schema.prisma', 'utf-8');
+  const models = {};
+  const modelRegex = /model\s+(\w+)\s+\{([^}]+)\}/g;
+  let modelMatch;
+  while ((modelMatch = modelRegex.exec(schemaContent)) !== null) {
+    const modelName = modelMatch[1];
+    const modelBody = modelMatch[2];
+    models[modelName] = { dependencies: new Set() };
+
+    const relationRegex = /@relation\([^)]*fields:\s*\[[\w\s,]+\][^)]*references:\s*\[[\w\s,]+\][^)]*\)/g;
+    const relationFields = [...modelBody.matchAll(relationRegex)];
+
+    for (const rel of relationFields) {
+        const relationLine = modelBody.split('\n').find(line => line.includes(rel[0]));
+        if (relationLine) {
+            const referencedModelName = relationLine.match(/\s(\w+)\s+@relation/)?.[1];
+            if (referencedModelName && referencedModelName !== modelName) {
+                models[modelName].dependencies.add(referencedModelName);
+            }
+        }
     }
   }
-  // 3. 이전 스키마 상태와 비교
-  else if (fs.existsSync(lastSchemaFile)) {
-    console.log('📊 1단계: 이전 스키마와 현재 스키마 비교 중...');
+
+  const sorted = [];
+  const visited = new Set();
+  function visit(modelName) {
+    if (!modelName || visited.has(modelName)) return;
+    visited.add(modelName);
+    models[modelName]?.dependencies.forEach(dep => visit(dep));
+    sorted.push(modelName);
+  }
+  Object.keys(models).forEach(modelName => visit(modelName));
+  const idealDeletionOrder = sorted.reverse();
+
+  const existingTablesResult = await executeD1(name, flags, {
+    command: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%';",
+  });
+  const existingTableNames = new Set(existingTablesResult.map((t) => t.name));
+
+  const tableNamesToDrop = idealDeletionOrder.map(modelName => {
+    const mapRegex = new RegExp(`model\\s+${modelName}[^}]+@@map\\(\\"([^\\"]+)\"\\)`);
+    const mapMatch = schemaContent.match(mapRegex);
+    return mapMatch ? mapMatch[1] : modelName;
+  }).filter(tableName => existingTableNames.has(tableName));
+
+  if (tableNamesToDrop.length > 0) {
+    log.info(`Dropping tables in dependency order: ${tableNamesToDrop.join(', ')}`);
     
-    try {
-      // 이전 스키마와 현재 스키마의 차이를 계산
-      migrationSql = execSync(
-        `npx prisma migrate diff --from-schema-datamodel ${lastSchemaFile} --to-schema-datamodel prisma/schema.prisma --script`,
-        { encoding: 'utf8' }
-      );
-      
-      if (migrationSql.trim() === '') {
-        console.log('✅ 스키마에 변경사항이 없습니다.');
-        process.exit(0);
-      }
-      
-      console.log('📝 감지된 변경사항:');
-      console.log(migrationSql);
-      
-    } catch (error) {
-      console.log('⚠️  이전 스키마와 비교 실패, 전체 스키마로 진행합니다.');
-      migrationSql = execSync(
-        'npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script',
-        { encoding: 'utf8' }
-      );
+    // 각 테이블을 개별적으로 삭제 (트랜잭션 없이)
+    for (const tableName of tableNamesToDrop) {
+      log.info(`Dropping table: ${tableName}`);
+      await executeD1(name, flags, {
+        command: `DROP TABLE IF EXISTS "${tableName}";`
+      });
     }
+    
+    log.success('All tables dropped successfully.');
   } else {
-    console.log('📝 1단계: 초기 스키마 생성 중...');
-    migrationSql = execSync(
-      'npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script',
-      { encoding: 'utf8' }
-    );
+    log.info('No tables found to drop.');
   }
-  
-  // 3. SQL을 안전한 형태로 변환
-  console.log('🔄 2단계: SQL을 안전한 형태로 변환 중...');
-  let safeSql = migrationSql;
-  
-  // CREATE 문들을 IF NOT EXISTS로 변환 (기존 테이블 보호)
-  safeSql = safeSql
-    .replace(/CREATE TABLE "([^"]+)"/g, 'CREATE TABLE IF NOT EXISTS "$1"')
-    .replace(/CREATE UNIQUE INDEX "([^"]+)"/g, 'CREATE UNIQUE INDEX IF NOT EXISTS "$1"')
-    .replace(/CREATE INDEX "([^"]+)"/g, 'CREATE INDEX IF NOT EXISTS "$1"');
-  
-  // DROP 문들을 IF EXISTS로 변환 (테이블이 없어도 오류 방지)
-  safeSql = safeSql
-    .replace(/DROP TABLE "([^"]+)"/g, 'DROP TABLE IF EXISTS "$1"')
-    .replace(/DROP INDEX "([^"]+)"/g, 'DROP INDEX IF EXISTS "$1"');
+  log.success('Database has been reset.');
+}
 
-  // 4. 변경사항이 있는지 확인
-  if (safeSql.trim() === '') {
-    console.log('✅ 적용할 변경사항이 없습니다.');
-    // 임시 파일 정리
-    if (fs.existsSync(currentDbSchemaFile)) {
-      fs.unlinkSync(currentDbSchemaFile);
-    }
-    process.exit(0);
-  }
-  
-  // 5. 임시 SQL 파일 생성
-  fs.writeFileSync(tempSqlFile, safeSql);
-  console.log('✅ 마이그레이션 SQL 파일 생성 완료');
-  console.log('📄 적용될 SQL:');
-  console.log('---');
-  console.log(safeSql);
-  console.log('---\n');
 
-  // 6. 사용자 확인 (위험한 변경사항이 있는 경우)
-  if (safeSql.includes('DROP TABLE') || safeSql.includes('DROP COLUMN')) {
-    console.log('⚠️  위험한 변경사항이 감지되었습니다!');
-    console.log('   데이터가 손실될 수 있는 DROP 작업이 포함되어 있습니다.');
-    console.log('   계속하려면 --force 플래그를 사용하세요.');
-    
-    if (!process.argv.includes('--force')) {
-      console.log('❌ 안전을 위해 마이그레이션을 중단합니다.');
-      fs.unlinkSync(tempSqlFile);
-      if (fs.existsSync(currentDbSchemaFile)) {
-        fs.unlinkSync(currentDbSchemaFile);
-      }
-      process.exit(1);
-    }
-    
-    console.log('⚠️  --force 플래그가 지정되어 위험한 변경사항을 진행합니다.\n');
+/**
+ * Prisma를 사용하여 마이그레이션 SQL을 생성합니다.
+ */
+async function generateMigrationSql(config) {
+  log.step('1. Generating migration SQL...');
+  const args = process.argv.slice(2);
+  const useEmpty = args.includes('--from-empty') || args.includes('--reset');
+
+  let diffCommand;
+
+  // 항상 빈 스키마에서 시작하여 전체 스키마 적용
+  // Prisma가 자동으로 중복 테이블/컬럼 생성을 방지합니다
+  log.info('Comparing from empty schema to current schema.prisma');
+  diffCommand = `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script`;
+
+  const { stdout } = await execAsync(diffCommand);
+  log.success('Migration SQL generated successfully.');
+  return stdout;
+}
+
+/**
+ * 생성된 SQL을 D1 데이터베이스에 적용합니다.
+ */
+async function applySqlToD1(config, sql) {
+  log.step('2. Applying SQL to D1 database...');
+  const { name, flags } = config;
+  const args = process.argv.slice(2);
+  const isForced = args.includes('--force');
+
+  if (sql.includes('DROP') && !isForced) {
+    log.warn('Destructive "DROP" operation detected.');
+    log.warn('To proceed, run the script with the --force flag.');
+    throw new Error('Migration aborted for safety. Use --force to proceed.');
   }
 
-  // 4. D1에 SQL 적용
-  if (process.argv.includes('--remote') || !process.argv.includes('--local')) {
-    console.log('☁️  4단계: 원격 D1에 적용 중...');
-    execSync(`npx wrangler d1 execute destiny-new --remote --file=${tempSqlFile}`, { stdio: 'inherit' });
-    console.log('✅ 원격 D1 적용 완료');
+  // SQL을 안전하게 변환
+  let safeSql = sql;
+  
+  // CREATE TABLE을 CREATE TABLE IF NOT EXISTS로 변환 (이미 IF NOT EXISTS가 없는 경우만)
+  safeSql = safeSql.replace(/CREATE TABLE (?!IF NOT EXISTS )"([^"]+)"/g, 'CREATE TABLE IF NOT EXISTS "$1"');
+  safeSql = safeSql.replace(/CREATE TABLE (?!IF NOT EXISTS )`([^`]+)`/g, 'CREATE TABLE IF NOT EXISTS `$1`');
+  safeSql = safeSql.replace(/CREATE TABLE (?!IF NOT EXISTS )(\w+)/g, 'CREATE TABLE IF NOT EXISTS $1');
+  
+  // DROP TABLE을 DROP TABLE IF EXISTS로 변환 (이미 IF EXISTS가 없는 경우만)
+  safeSql = safeSql.replace(/DROP TABLE (?!IF EXISTS )"([^"]+)"/g, 'DROP TABLE IF EXISTS "$1"');
+  safeSql = safeSql.replace(/DROP TABLE (?!IF EXISTS )`([^`]+)`/g, 'DROP TABLE IF EXISTS `$1`');
+  safeSql = safeSql.replace(/DROP TABLE (?!IF EXISTS )(\w+)/g, 'DROP TABLE IF EXISTS $1');
+  
+  // CREATE INDEX를 CREATE INDEX IF NOT EXISTS로 변환 (이미 IF NOT EXISTS가 없는 경우만)
+  safeSql = safeSql.replace(/CREATE (UNIQUE )?INDEX (?!IF NOT EXISTS )"([^"]+)" ON "([^"]+)"/g, 'CREATE $1INDEX IF NOT EXISTS "$2" ON "$3"');
+  safeSql = safeSql.replace(/CREATE (UNIQUE )?INDEX (?!IF NOT EXISTS )`([^`]+)` ON `([^`]+)`/g, 'CREATE $1INDEX IF NOT EXISTS `$2` ON `$3`');
+  safeSql = safeSql.replace(/CREATE (UNIQUE )?INDEX (?!IF NOT EXISTS )(\w+) ON (\w+)/g, 'CREATE $1INDEX IF NOT EXISTS $2 ON $3');
+
+  // 변환된 SQL이 원본과 다른 경우 로그
+  if (safeSql !== sql) {
+    log.info('SQL has been made safe with IF NOT EXISTS / IF EXISTS clauses.');
+    log.info('Transformed SQL preview:');
+    console.log('─'.repeat(50));
+    console.log(safeSql.substring(0, 500) + '...');
+    console.log('─'.repeat(50));
   } else {
-    console.log('🏠 4단계: 로컬 D1에 적용 중...');
-    execSync(`npx wrangler d1 execute destiny-local --file=${tempSqlFile}`, { stdio: 'inherit' });
-    console.log('✅ 로컬 D1 적용 완료');
+    log.warn('SQL transformation did not occur. Original SQL will be used.');
   }
 
-  // 9. Prisma 클라이언트 재생성
-  console.log('🔄 5단계: Prisma 클라이언트 재생성 중...');
-  execSync('npx prisma generate', { stdio: 'inherit' });
-  console.log('✅ Prisma 클라이언트 재생성 완료');
+  await fs.writeFile(TEMP_FILES.tempSql, safeSql);
+  log.info(`Executing migration on D1 database: ${name}`);
+  await execAsync(`npx wrangler d1 execute ${name} ${flags} --file=${TEMP_FILES.tempSql}`);
+  log.success('SQL applied to D1 successfully.');
+}
 
-  // 10. 현재 스키마를 이전 스키마로 저장
-  fs.copyFileSync('prisma/schema.prisma', lastSchemaFile);
-  console.log('💾 현재 스키마 상태 저장 완료');
+/**
+ * 임시 파일을 정리합니다.
+ */
+async function cleanup() {
+  log.step('5. Cleaning up temporary files...');
+  try {
+    await fs.rm(TEMP_FILES.tempSql, { force: true });
+    await fs.rm(TEMP_FILES.tempDropSql, { force: true });
+    log.success('Temporary files cleaned up.');
+  } catch (error) {
+    log.warn(`Could not clean up temporary files: ${error.message}`);
+  }
+}
 
-  // 11. 임시 파일 정리
-  fs.unlinkSync(tempSqlFile);
-  if (fs.existsSync(currentDbSchemaFile)) {
-    fs.unlinkSync(currentDbSchemaFile);
-  }
-  console.log('🧹 임시 파일 정리 완료');
+/**
+ * 메인 실행 함수
+ */
+async function main() {
+  const config = getTargetConfig();
+  const args = process.argv.slice(2);
+  const isReset = args.includes('--reset');
 
-  console.log('\n🎉 D1 마이그레이션 완료!');
-  console.log('💡 스키마 변경사항이 성공적으로 동기화되었습니다.');
-  
-} catch (error) {
-  console.error('❌ 마이그레이션 중 오류 발생:', error.message);
-  
-  // 임시 파일이 있다면 정리
-  if (fs.existsSync(tempSqlFile)) {
-    fs.unlinkSync(tempSqlFile);
+  try {
+    if (isReset) {
+      await resetDatabase(config);
+    }
+
+    const migrationSql = await generateMigrationSql(config);
+
+    if (!migrationSql.trim() || migrationSql.includes('-- This is an empty migration.')) {
+      log.success('Schema is already up to date. No changes needed.');
+      return;
+    }
+
+    log.info('Detected schema changes:');
+    console.log(migrationSql);
+
+    await applySqlToD1(config, migrationSql);
+
+    log.step('3. Generating Prisma Client...');
+    await execAsync('npx prisma generate');
+    log.success('Prisma Client generated successfully.');
+
+    log.step('4. Migration completed successfully.');
+    log.success('Database schema is now up to date.');
+
+    console.log('\n🎉 D1 migration completed successfully!');
+  } catch (error) {
+    log.error('The migration process failed.');
+    // error 객체에 더 많은 정보가 있을 수 있으므로 전체를 로깅
+    console.error(error);
+    process.exit(1);
+  } finally {
+    await cleanup();
   }
-  if (fs.existsSync(currentDbSchemaFile)) {
-    fs.unlinkSync(currentDbSchemaFile);
-  }
-  
-  process.exit(1);
-} 
+}
+
+main();

@@ -184,3 +184,5 @@ scripts/last-schema.prisma
 scripts/temp_migration.sql
 scripts/current-db-schema.sql
 prisma/backup/
+
+prisma/dev.db

@@ -10,14 +10,14 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  url      = "file:./dev.db" // local db 사용함. dev.db
 }
 
 /// 사용자 테이블 - Google OAuth로 로그인한 사용자 정보 저장
 /// Google 계정과 연동된 사용자 관리 시스템
 model User {
   id        Int      @id @default(autoincrement()) /// 사용자 고유 ID (자동 증가)
-  googleId  String   @unique @map("google_id") /// Google 계정 고유 ID (Google에서 제공)
+  googleId  String   @unique /// Google 계정 고유 ID (Google에서 제공)
   email     String   @unique /// 사용자 이메일 주소 (Google 계정 이메일)
   name      String /// 사용자 이름 (Google 계정 이름)
   userName  String? /// 사용자 프로필 이름 (선택사항)
@@ -26,17 +26,17 @@ model User {
   point     Int      @default(3000) /// 사용자 포인트 (기본값: 3000)
   
   // 개인정보 동의 관련 필드들
-  privacyConsent Boolean @default(false) @map("privacy_consent") /// 개인정보 수집 및 이용 동의 여부
-  privacyConsentVersion String @default("1.0") @map("privacy_consent_version") /// 개인정보 수집 및 이용 동의 버전
-  privacyConsentAt DateTime? @map("privacy_consent_at") /// 개인정보 수집 및 이용 동의 일시
-  reportStorageConsent Boolean @default(false) @map("report_storage_consent") /// 분석 리포트 저장 동의 여부
-  reportStorageConsentVersion String @default("1.0") @map("report_storage_consent_version") /// 분석 리포트 저장 동의 버전
-  reportStorageConsentAt DateTime? @map("report_storage_consent_at") /// 분석 리포트 저장 동의 일시
-  lastConsentAt DateTime? @map("last_consent_at") /// 전체 동의 일시 (가장 최근 동의 시점)
-  consentStatus String @default("none") @map("consent_status") /// 동의 상태 (none, partial, complete)
+  privacyConsent Boolean @default(false) /// 개인정보 수집 및 이용 동의 여부
+  privacyConsentVersion String @default("1.0") /// 개인정보 수집 및 이용 동의 버전
+  privacyConsentAt DateTime? /// 개인정보 수집 및 이용 동의 일시
+  reportStorageConsent Boolean @default(false) /// 분석 리포트 저장 동의 여부
+  reportStorageConsentVersion String @default("1.0") /// 분석 리포트 저장 동의 버전
+  reportStorageConsentAt DateTime? /// 분석 리포트 저장 동의 일시
+  lastConsentAt DateTime? /// 전체 동의 일시 (가장 최근 동의 시점)
+  consentStatus String @default("none") /// 동의 상태 (none, partial, complete)
   
-  createdAt DateTime @default(now()) @map("created_at") /// 계정 생성 시간
-  updatedAt DateTime @updatedAt @map("updated_at") /// 계정 정보 마지막 업데이트 시간
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 계정 생성 시간
+  updatedAt DateTime @updatedAt /// 계정 정보 마지막 업데이트 시간
   sessions Session[] /// 관계: 한 사용자는 여러 세션을 가질 수 있음
   sajuProfiles SajuProfile[] /// 관계: 한 사용자는 여러 사주 프로필을 가질 수 있음
   celebrityComments CelebrityComment[] /// 관계: 한 사용자는 여러 유명인물 댓글을 작성할 수 있음
@@ -61,10 +61,10 @@ model User {
 /// 사용자 로그인 상태와 토큰 유효성을 관리
 model Session {
   id        Int      @id @default(autoincrement()) /// 세션 고유 ID (자동 증가)
-  userId    Int      @map("user_id") /// 세션 소유자의 사용자 ID
-  jwtToken  String   @unique @map("jwt_token") /// JWT 토큰 문자열 (고유해야 함)
-  expiresAt DateTime @map("expires_at") /// 토큰 만료 시간
-  createdAt DateTime @default(now()) @map("created_at") /// 세션 생성 시간
+  userId    Int      /// 세션 소유자의 사용자 ID
+  jwtToken  String   @unique /// JWT 토큰 문자열 (고유해야 함)
+  expiresAt DateTime /// 토큰 만료 시간
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 세션 생성 시간
   user User @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 세션은 하나의 사용자에 속함 (사용자 삭제 시 세션도 삭제)
   @@map("sessions")
 }
@@ -73,7 +73,7 @@ model Session {
 /// 한 사용자는 여러 개의 사주 프로필을 가질 수 있음 (가족, 친구 등)
 model SajuProfile {
   id        Int      @id @default(autoincrement()) /// 사주 프로필 고유 ID (자동 증가)
-  userId    Int      @map("user_id") /// 프로필 소유자의 사용자 ID (User 테이블과 연결)
+  userId    Int      /// 프로필 소유자의 사용자 ID (User 테이블과 연결)
   name      String /// 이름
   year      String /// 출생년도 (4자리)
   month     String /// 출생월 (2자리)
@@ -85,8 +85,8 @@ model SajuProfile {
   country   String? /// 국가
   city      String? /// 도시
   calculationMethod String? /// 계산 방법
-  createdAt DateTime @default(now()) @map("created_at") /// 프로필 생성 시간
-  updatedAt DateTime @updatedAt @map("updated_at") /// 프로필 마지막 업데이트 시간
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 프로필 생성 시간
+  updatedAt DateTime @updatedAt /// 프로필 마지막 업데이트 시간
   /// 관계: 사주 프로필은 하나의 사용자에 속함 (사용자 삭제 시 프로필도 삭제)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@map("saju_profiles")
@@ -95,21 +95,21 @@ model SajuProfile {
 /// 유명인물 테이블 - 유명인물 기본 정보 관리
 model Celebrity {
   id           String    @id @unique /// 유명인물 고유 ID (슬러그, 예: "lee-jae-myung")
-  birthYear    Int       @map("birth_year")
-  birthMonth   Int       @map("birth_month")
-  birthDay     Int       @map("birth_day")
-  birthHour    Int?      @map("birth_hour")
-  birthMinute  Int?      @map("birth_minute")
+  birthYear    Int
+  birthMonth   Int
+  birthDay     Int
+  birthHour    Int?
+  birthMinute  Int?
   calendar     String    /// 달력 종류 ("SOLAR" 또는 "LUNAR")
   gender       String    /// 성별 ("MALE" 또는 "FEMALE")
-  imageUrl     String?   @map("image_url")
+  imageUrl     String?
 
   translations CelebrityTranslation[]
   comments     CelebrityComment[]
   viewCount    CelebrityViewCount?
 
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  createdAt    DateTime  @default(dbgenerated("(datetime('now', 'utc'))"))
+  updatedAt    DateTime  @updatedAt
   
   @@map("celebrities")
 }
@@ -117,8 +117,8 @@ model Celebrity {
 /// 유명인물 다국어 정보 테이블
 model CelebrityTranslation {
   id            Int      @id @default(autoincrement())
-  celebrityId   String   @map("celebrity_id")
-  languageCode  String   @map("language_code") /// "ko", "en", "ja" 등 언어 코드
+  celebrityId   String
+  languageCode  String   /// "ko", "en", "ja" 등 언어 코드
   name          String   /// 번역된 이름
   occupation    String   /// 직업
   description   String   /// 설명
@@ -132,10 +132,10 @@ model CelebrityTranslation {
 /// 유명인물 조회수 테이블 - 유명인물별 조회수만 관리
 model CelebrityViewCount {
   id          Int      @id @default(autoincrement())
-  celebrityId String   @unique @map("celebrity_id") /// 유명인물 고유 ID (문자열, 예: "lee-seung-man")
-  viewCount   Int      @default(0) @map("view_count") /// 조회수
-  createdAt   DateTime @default(now()) @map("created_at") /// 생성 시간
-  updatedAt   DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  celebrityId String   @unique /// 유명인물 고유 ID (문자열, 예: "lee-seung-man")
+  viewCount   Int      @default(0) /// 조회수
+  createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
+  updatedAt   DateTime @updatedAt /// 마지막 업데이트 시간
 
   celebrity   Celebrity @relation(fields: [celebrityId], references: [id], onDelete: Cascade)
 
@@ -146,13 +146,13 @@ model CelebrityViewCount {
 /// 대댓글 기능을 지원하는 계층형 댓글 시스템
 model CelebrityComment {
   id            Int       @id @default(autoincrement()) /// 댓글 고유 ID (자동 증가)
-  celebrityId   String    @map("celebrity_id") /// 댓글이 달린 유명인물 ID
-  userId        Int       @map("user_id") /// 댓글 작성자 ID
+  celebrityId   String    /// 댓글이 달린 유명인물 ID
+  userId        Int       /// 댓글 작성자 ID
   content       String /// 댓글 내용
-  likeCount     Int       @default(0) @map("like_count") /// 댓글 추천수
-  parentId      Int?      @map("parent_id") /// 부모 댓글 ID (대댓글의 경우, null이면 최상위 댓글)
-  createdAt     DateTime  @default(now()) @map("created_at") /// 댓글 생성 시간
-  updatedAt     DateTime  @updatedAt @map("updated_at") /// 댓글 마지막 업데이트 시간
+  likeCount     Int       @default(0) /// 댓글 추천수
+  parentId      Int?      /// 부모 댓글 ID (대댓글의 경우, null이면 최상위 댓글)
+  createdAt     DateTime  @default(dbgenerated("(datetime('now', 'utc'))")) /// 댓글 생성 시간
+  updatedAt     DateTime  @updatedAt /// 댓글 마지막 업데이트 시간
   user          User @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 댓글은 하나의 사용자에 속함
   parent        CelebrityComment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade) /// 관계: 부모 댓글 (대댓글의 경우)
   replies       CelebrityComment[] @relation("CommentReplies") /// 관계: 자식 댓글들 (대댓글들)
@@ -166,9 +166,9 @@ model CelebrityComment {
 /// 중복 추천 방지를 위한 테이블
 model CelebrityCommentLike {
   id        Int      @id @default(autoincrement()) /// 추천 기록 고유 ID (자동 증가)
-  userId    Int      @map("user_id") /// 추천한 사용자 ID
-  commentId Int      @map("comment_id") /// 추천된 댓글 ID
-  createdAt DateTime @default(now()) @map("created_at") /// 추천 시간
+  userId    Int      /// 추천한 사용자 ID
+  commentId Int      /// 추천된 댓글 ID
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 추천 시간
   user      User @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 추천은 하나의 사용자에 속함
   comment   CelebrityComment @relation(fields: [commentId], references: [id], onDelete: Cascade) /// 관계: 추천은 하나의 댓글에 속함
 
@@ -182,11 +182,11 @@ model CelebrityRequest {
   id          Int      @id @default(autoincrement()) /// 요청 고유 ID (자동 증가)
   name        String /// 유명인물 이름
   description String /// 유명인물 설명
-  birthDate   String   @map("birth_date") /// 생년월일 (YYYY-MM-DD 형식)
+  birthDate   String   /// 생년월일 (YYYY-MM-DD 형식)
   occupation  String /// 직업
-  status      String   @default("PENDING") @map("status") /// 요청 상태 (PENDING, APPROVED, REJECTED)
-  createdAt   DateTime @default(now()) @map("created_at") /// 요청 생성 시간
-  updatedAt   DateTime @updatedAt @map("updated_at") /// 요청 마지막 업데이트 시간
+  status      String   @default("PENDING") /// 요청 상태 (PENDING, APPROVED, REJECTED)
+  createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 요청 생성 시간
+  updatedAt   DateTime @updatedAt /// 요청 마지막 업데이트 시간
   @@map("celebrity_requests")
 }
 
@@ -195,8 +195,8 @@ model Document {
   id        Int      @id @default(autoincrement()) /// 문서 고유 ID (자동 증가)
   text      String   @unique /// 문서 원본 텍스트
   metadata  String?  /// JSON 형식의 메타데이터 (선택사항)
-  createdAt DateTime @default(now()) @map("created_at") /// 문서 생성 시간
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") /// 문서 마지막 업데이트 시간
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 문서 생성 시간
+  updatedAt DateTime @default(now()) @updatedAt /// 문서 마지막 업데이트 시간
 
   @@map("documents")
 }
@@ -204,11 +204,11 @@ model Document {
 /// 대화 기록 테이블 - AI와의 채팅 내역을 저장
 model ConversationHistory {
   id              Int      @id @default(autoincrement()) /// 메시지 고유 ID
-  conversationId  String   @map("conversation_id") /// 대화 세션 ID (UUID)
-  userId          Int      @map("user_id") /// 대화 소유자 ID
+  conversationId  String   /// 대화 세션 ID (UUID)
+  userId          Int      /// 대화 소유자 ID
   role            String   /// 메시지 역할 ('user' 또는 'assistant')
   content         String   /// 메시지 내용
-  createdAt       DateTime @default(now()) @map("created_at") /// 메시지 생성 시간
+  createdAt       DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 메시지 생성 시간
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
@@ -218,9 +218,9 @@ model ConversationHistory {
 /// 로그인/로그아웃 기록 테이블
 model LoginHistory {
   id        Int      @id @default(autoincrement()) /// 기록 고유 ID (자동 증가)
-  userId    Int      @map("user_id") /// 사용자 ID
+  userId    Int      /// 사용자 ID
   action    String   /// 활동 종류 ('login', 'logout')
-  createdAt DateTime @default(now()) @map("created_at") /// 활동 시간
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 활동 시간
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 기록은 하나의 사용자에 속함
 
   @@map("login_histories")
@@ -229,12 +229,12 @@ model LoginHistory {
 /// AI 사용량 기록 테이블
 model AiUsageLog {
   id Int @id @default(autoincrement()) /// 로그 고유 ID (자동 증가)
-  userId Int @map("user_id") /// 사용자 ID
+  userId Int /// 사용자 ID
   model String /// 사용된 AI 모델
-  promptTokens Int @map("prompt_tokens") /// 프롬프트 토큰 수
-  completionTokens Int @map("completion_tokens") /// 응답 토큰 수
-  totalTokens Int @map("total_tokens") /// 총 토큰 수
-  createdAt DateTime @default(now()) @map("created_at") /// 기록 생성 시간
+  promptTokens Int /// 프롬프트 토큰 수
+  completionTokens Int /// 응답 토큰 수
+  totalTokens Int /// 총 토큰 수
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 기록 생성 시간
   user User @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 로그는 하나의 사용자에 속함
 
   @@map("ai_usage_logs")
@@ -243,13 +243,13 @@ model AiUsageLog {
 /// 포인트 거래 기록 테이블 - 사용자의 포인트 차감/증가 내역
 model PointTransaction {
   id          Int      @id @default(autoincrement()) /// 거래 고유 ID (자동 증가)
-  userId      Int      @map("user_id") /// 사용자 ID
+  userId      Int      /// 사용자 ID
   amount      Int      /// 거래 금액 (양수: 증가, 음수: 차감)
   description String   /// 거래 설명
   type        String   /// 거래 유형 ('DEBIT': 차감, 'CREDIT': 증가)
   reference   String?  /// 참조 정보 (예: 사주 분석 ID)
-  analysisId  Int?     @map("analysis_id") /// 분석 결과 ID (SajuAnalysis와 연결)
-  createdAt   DateTime @default(now()) @map("created_at") /// 거래 시간
+  analysisId  Int?     /// 분석 결과 ID (SajuAnalysis와 연결)
+  createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 거래 시간
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 거래는 하나의 사용자에 속함
 
   @@map("point_transactions")
@@ -258,11 +258,11 @@ model PointTransaction {
 /// 푸시 구독 정보 테이블 - 사용자 기기별 푸시 알림 구독 정보 저장
 model PushSubscription {
   id        Int      @id @default(autoincrement()) /// 구독 고유 ID
-  userId    Int      @map("user_id") /// 사용자 ID
+  userId    Int      /// 사용자 ID
   endpoint  String   @unique /// 푸시 서비스 엔드포인트 URL
   p256dh    String   /// P-256 DH 공개 키
   auth      String   /// 인증 시크릿
-  createdAt DateTime @default(now()) @map("created_at") /// 구독 생성 시간
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 구독 생성 시간
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 구독은 하나의 사용자에 속함
 
   @@map("push_subscriptions")
@@ -274,10 +274,10 @@ model Board {
   name        String   @unique /// 게시판 식별자 ('bug-report', 'free-discussion')
   displayName String   /// 게시판 표시 이름 ('버그 제보', '자유 토론')
   description String?  /// 게시판 설명
-  sortOrder   Int      @default(0) @map("sort_order") /// 정렬 순서
+  sortOrder   Int      @default(0) /// 정렬 순서
   isActive    Boolean  @default(true) /// 게시판 활성화 여부
-  createdAt   DateTime @default(now()) @map("created_at") /// 생성 시간
-  updatedAt   DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
+  updatedAt   DateTime @updatedAt /// 마지막 업데이트 시간
   posts       Post[] /// 관계: 게시판에 속한 게시글들
   categories  BoardCategory[] /// 관계: 게시판에 속한 카테고리들
   @@map("boards")
@@ -286,12 +286,12 @@ model Board {
 /// 게시판 카테고리 테이블 - 게시판별 카테고리 관리
 model BoardCategory {
   id        Int      @id @default(autoincrement()) /// 카테고리 고유 ID
-  boardId   Int      @map("board_id") /// 소속 게시판 ID
+  boardId   Int      /// 소속 게시판 ID
   name      String   /// 카테고리 이름 ('치명적 버그', '사소한 버그', '일상', '정보 공유' 등)
-  sortOrder Int      @default(0) @map("sort_order") /// 정렬 순서
+  sortOrder Int      @default(0) /// 정렬 순서
   isActive  Boolean  @default(true) /// 카테고리 활성화 여부
-  createdAt DateTime @default(now()) @map("created_at") /// 생성 시간
-  updatedAt DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
+  updatedAt DateTime @updatedAt /// 마지막 업데이트 시간
   board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade) /// 관계: 카테고리는 하나의 게시판에 속함
   posts     Post[] /// 관계: 카테고리에 속한 게시글들
   @@map("board_categories")
@@ -300,21 +300,21 @@ model BoardCategory {
 /// 게시글 테이블 - 커뮤니티 게시글 관리
 model Post {
   id          Int      @id @default(autoincrement()) /// 게시글 고유 ID
-  boardId     Int      @map("board_id") /// 소속 게시판 ID
-  categoryId  Int      @map("category_id") /// 소속 카테고리 ID
-  authorId    Int?     @map("author_id") /// 작성자 ID (로그인 사용자의 경우)
-  authorName  String?  @map("author_name") /// 작성자 이름 (익명 사용자의 경우)
-  authorImage String?  @map("author_image") /// 작성자 이미지 URL (로그인 사용자의 경우)
-  password    String?  @map("password") /// 비밀번호 (익명 사용자의 경우, 해시된 값)
+  boardId     Int      /// 소속 게시판 ID
+  categoryId  Int      /// 소속 카테고리 ID
+  authorId    Int?     /// 작성자 ID (로그인 사용자의 경우)
+  authorName  String?  /// 작성자 이름 (익명 사용자의 경우)
+  authorImage String?  /// 작성자 이미지 URL (로그인 사용자의 경우)
+  password    String?  /// 비밀번호 (익명 사용자의 경우, 해시된 값)
   title       String   /// 게시글 제목
   content     String   /// 게시글 내용 (HTML content from QuillEditor)
-  viewCount   Int      @default(0) @map("view_count") /// 조회수
-  likeCount   Int      @default(0) @map("like_count") /// 추천수
-  commentCount Int     @default(0) @map("comment_count") /// 댓글수
-  isNotice    Boolean  @default(false) @map("is_notice") /// 공지사항 여부
-  isDeleted   Boolean  @default(false) @map("is_deleted") /// 삭제 여부
-  createdAt   DateTime @default(now()) @map("created_at") /// 생성 시간
-  updatedAt   DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  viewCount   Int      @default(0) /// 조회수
+  likeCount   Int      @default(0) /// 추천수
+  commentCount Int     @default(0) /// 댓글수
+  isNotice    Boolean  @default(false) /// 공지사항 여부
+  isDeleted   Boolean  @default(false) /// 삭제 여부
+  createdAt   DateTime @default(now()) /// 생성 시간
+  updatedAt   DateTime @updatedAt /// 마지막 업데이트 시간
   
   // Relations
   board       Board    @relation(fields: [boardId], references: [id], onDelete: Cascade) /// 관계: 게시글은 하나의 게시판에 속함
@@ -329,17 +329,17 @@ model Post {
 /// 댓글 테이블 - 게시글 댓글 관리
 model Comment {
   id          Int      @id @default(autoincrement()) /// 댓글 고유 ID
-  postId      Int      @map("post_id") /// 소속 게시글 ID
-  authorId    Int?     @map("author_id") /// 작성자 ID (로그인 사용자의 경우)
-  authorName  String?  @map("author_name") /// 작성자 이름 (익명 사용자의 경우)
-  authorImage String?  @map("author_image") /// 작성자 이미지 URL (로그인 사용자의 경우)
-  password    String?  @map("password") /// 비밀번호 (익명 사용자의 경우, 해시된 값)
-  parentId    Int?     @map("parent_id") /// 부모 댓글 ID (대댓글용)
+  postId      Int      /// 소속 게시글 ID
+  authorId    Int?     /// 작성자 ID (로그인 사용자의 경우)
+  authorName  String?  /// 작성자 이름 (익명 사용자의 경우)
+  authorImage String?  /// 작성자 이미지 URL (로그인 사용자의 경우)
+  password    String?  /// 비밀번호 (익명 사용자의 경우, 해시된 값)
+  parentId    Int?     /// 부모 댓글 ID (대댓글용)
   content     String   /// 댓글 내용
-  likeCount   Int      @default(0) @map("like_count") /// 추천수
-  isDeleted   Boolean  @default(false) @map("is_deleted") /// 삭제 여부
-  createdAt   DateTime @default(now()) @map("created_at") /// 생성 시간
-  updatedAt   DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  likeCount   Int      @default(0) /// 추천수
+  isDeleted   Boolean  @default(false) /// 삭제 여부
+  createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
+  updatedAt   DateTime @updatedAt /// 마지막 업데이트 시간
   
   // Relations
   post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade) /// 관계: 댓글은 하나의 게시글에 속함
@@ -353,9 +353,9 @@ model Comment {
 /// 게시글 추천 테이블 - 게시글 추천 관리
 model PostLike {
   id        Int      @id @default(autoincrement()) /// 추천 기록 고유 ID
-  postId    Int      @map("post_id") /// 추천된 게시글 ID
-  userId    Int      @map("user_id") /// 추천한 사용자 ID
-  createdAt DateTime @default(now()) @map("created_at") /// 추천 시간
+  postId    Int      /// 추천된 게시글 ID
+  userId    Int      /// 추천한 사용자 ID
+  createdAt DateTime @default(now()) /// 추천 시간
   
   // Relations
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade) /// 관계: 추천은 하나의 게시글에 속함
@@ -368,9 +368,9 @@ model PostLike {
 /// 댓글 추천 테이블 - 댓글 추천 관리
 model CommentLike {
   id        Int      @id @default(autoincrement()) /// 추천 기록 고유 ID
-  commentId Int      @map("comment_id") /// 추천된 댓글 ID
-  userId    Int      @map("user_id") /// 추천한 사용자 ID
-  createdAt DateTime @default(now()) @map("created_at") /// 추천 시간
+  commentId Int      /// 추천된 댓글 ID
+  userId    Int      /// 추천한 사용자 ID
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 추천 시간
   
   // Relations
   comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade) /// 관계: 추천은 하나의 댓글에 속함
@@ -384,7 +384,7 @@ model CommentLike {
 model Tag {
   id        Int      @id @default(autoincrement()) /// 태그 고유 ID
   name      String   @unique /// 태그 이름
-  createdAt DateTime @default(now()) @map("created_at") /// 생성 시간
+  createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
   postTags  PostTag[] /// 관계: 태그가 연결된 게시글들
   @@map("tags")
 }
@@ -392,8 +392,8 @@ model Tag {
 /// 게시글-태그 연결 테이블 - 게시글과 태그의 다대다 관계
 model PostTag {
   id     Int @id @default(autoincrement()) /// 연결 고유 ID
-  postId Int @map("post_id") /// 게시글 ID
-  tagId  Int @map("tag_id") /// 태그 ID
+  postId Int /// 게시글 ID
+  tagId  Int /// 태그 ID
   
   // Relations
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade) /// 관계: 연결은 하나의 게시글에 속함
@@ -406,23 +406,23 @@ model PostTag {
 /// 사주 분석 결과 테이블 - 사용자의 사주 분석 결과 저장
 model SajuAnalysis {
   id              Int      @id @default(autoincrement()) /// 분석 고유 ID
-  userId          Int      @map("user_id") /// 분석 요청한 사용자 ID
-  analysisType    String   @map("analysis_type") /// 프론트에서 정의한 분석 유형 (자유로운 값)
-  type            String   @map("type") /// 표준화된 분석 유형 ('individual', 'compatibility')
+  userId          Int      /// 분석 요청한 사용자 ID
+  analysisType    String   /// 프론트에서 정의한 분석 유형 (자유로운 값)
+  type            String   /// 표준화된 분석 유형 ('individual', 'compatibility')
   title           String   /// 분석 제목 (사용자가 설정)
   sajuData        String   /// 사주 데이터 (JSON 문자열)
-  userPrompt      String   @map("user_prompt") /// 사용자 질문
-  systemPrompt    String?  @map("system_prompt") /// 시스템 프롬프트
-  aiResponse      String   @map("ai_response") /// AI 응답 내용
-  modelUsed       String   @map("model_used") /// 사용된 AI 모델
-  pointsSpent     Int      @map("points_spent") /// 사용된 포인트
-  isFavorite      Boolean  @default(false) @map("is_favorite") /// 즐겨찾기 여부
+  userPrompt      String   /// 사용자 질문
+  systemPrompt    String?  /// 시스템 프롬프트
+  aiResponse      String   /// AI 응답 내용
+  modelUsed       String   /// 사용된 AI 모델
+  pointsSpent     Int      /// 사용된 포인트
+  isFavorite      Boolean  @default(false) /// 즐겨찾기 여부
   i18n            String?  /// 언어 설정 (ko, en, ja, zh, vi 등)
   timezone        String?  /// 시간대 설정 (Asia/Seoul, America/New_York 등)
-  analysisStartedAt DateTime? @map("analysis_started_at") /// 분석 시작 시간
-  analysisCompletedAt DateTime? @map("analysis_completed_at") /// 분석 완료 시간
-  createdAt       DateTime @default(now()) @map("created_at") /// 분석 생성 시간
-  updatedAt       DateTime @updatedAt @map("updated_at") /// 마지막 업데이트 시간
+  analysisStartedAt DateTime? /// 분석 시작 시간
+  analysisCompletedAt DateTime? /// 분석 완료 시간
+  createdAt       DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 분석 생성 시간
+  updatedAt       DateTime @updatedAt /// 마지막 업데이트 시간
   
   // Relations
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 분석은 하나의 사용자에 속함

@@ -12,6 +12,16 @@
       "database_name": "destiny-new",
       "binding": "DB",
       "database_id": "d15b4855-83f8-49e5-9156-b9c2f99134c8"
+    },
+    {
+      "database_name": "destiny-local",
+      "binding": "DB_LOCAL",
+      "database_id": "b9c839c9-2356-4bb9-ab20-46e32a85aa2b"
+    },
+    {
+      "database_name": "destiny-dev",
+      "binding": "DB_DEV",
+      "database_id": "46554c0a-1866-4ae8-8a5a-3722e0fdf2d0"
     }
   ],
   "kv_namespaces": [

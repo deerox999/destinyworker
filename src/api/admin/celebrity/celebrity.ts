@@ -8,8 +8,7 @@ export async function createCelebritiesBatch(
   c: Context,
 ): Promise<Response> {
   try {
-    const isUserAdmin = await isAdmin(c);
-    if (!isUserAdmin) {
+    if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
@@ -126,8 +125,7 @@ export async function createCelebrity(
   c: Context,
 ): Promise<Response> {
   try {
-    const isUserAdmin = await isAdmin(c);
-    if (!isUserAdmin) {
+    if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
@@ -207,8 +205,7 @@ export async function updateCelebrity(
   c: Context,
 ): Promise<Response> {
   try {
-    const isUserAdmin = await isAdmin(c);
-    if (!isUserAdmin) {
+    if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
@@ -283,8 +280,7 @@ export async function deleteCelebrity(
   c: Context
 ): Promise<Response> {
   try {
-    const isUserAdmin = await isAdmin(c);
-    if (!isUserAdmin) {
+    if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
     }
 
