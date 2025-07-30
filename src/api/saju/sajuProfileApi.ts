@@ -188,41 +188,64 @@ export async function updateSajuProfile(
   }
 }
 
-// 프로필 삭제
-export async function deleteSajuProfile(
+// 프로필 다중 삭제
+export async function deleteSajuProfiles(
   c: Context
 ): Promise<Response> {
   try {
     const user = await getUserFromToken(c);
     if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const profileId = Number(c.req.param("id"));
-    if (!profileId) return c.json({ error: "잘못된 ID입니다." }, 400);
+    const body = await c.req.json();
+    const { ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return c.json({ error: "삭제할 프로필 ID 배열이 필요합니다." }, 400);
+    }
+
+    if (!ids.every(id => typeof id === 'number' && Number.isInteger(id) && id > 0)) {
+      return c.json({ error: "잘못된 ID 형식입니다." }, 400);
+    }
 
     const prisma = createPrismaClient(c.env.DB);
 
-    // 소유권 확인
-    const existing = await prisma.sajuProfile.findUnique({
-      where: { id: profileId },
-      select: { userId: true },
+    // 사용자가 소유한 프로필만 조회
+    const userProfiles = await prisma.sajuProfile.findMany({
+      where: {
+        id: { in: ids },
+        userId: user.id
+      },
+      select: { id: true }
     });
 
-    if (!existing) {
+    const userProfileIds = userProfiles.map(profile => profile.id);
+    const failedIds = ids.filter(id => !userProfileIds.includes(id));
+
+    if (userProfileIds.length === 0) {
       await prisma.$disconnect();
-      return c.json({ error: "프로필을 찾을 수 없습니다." }, 404);
+      return c.json({ 
+        error: "삭제할 수 있는 프로필이 없습니다.",
+        failedIds 
+      }, 400);
     }
 
-    if (existing.userId !== user.id) {
-      await prisma.$disconnect();
-      return c.json({ error: "권한이 없습니다." }, 403);
-    }
+    // 프로필 삭제
+    await prisma.sajuProfile.deleteMany({
+      where: {
+        id: { in: userProfileIds }
+      }
+    });
 
-    await prisma.sajuProfile.delete({ where: { id: profileId } });
     await prisma.$disconnect();
 
-    return c.json({ success: true, message: "삭제 완료" });
+    return c.json({
+      success: true,
+      message: "삭제 완료",
+      deletedCount: userProfileIds.length,
+      failedIds: failedIds.length > 0 ? failedIds : undefined
+    });
   } catch (error) {
-    console.error("사주 프로필 삭제 실패:", error);
+    console.error("사주 프로필 다중 삭제 실패:", error);
     return c.json(
       {
         error: "삭제 실패",

@@ -1,7 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
   createSajuProfile,
-  deleteSajuProfile,
+  deleteSajuProfiles,
   getSajuProfile,
   getSajuProfiles,
   updateSajuProfile,
@@ -181,15 +181,26 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
     },
   });
 
-  const deleteSajuProfileRoute = createRoute({
+  const deleteSajuProfilesRoute = createRoute({
     method: "delete",
-    path: "/{id}",
-    summary: "사주 프로필 삭제",
-    description: "사주 프로필을 삭제합니다.",
+    path: "/",
+    summary: "사주 프로필 다중 삭제",
+    description: "여러 사주 프로필을 한 번에 삭제합니다.",
     tags: ["사주 프로필"],
     security: [{ BearerAuth: [] }],
     request: {
-      // params: SajuProfileIdParamSchema,
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              ids: z.array(z.number().int().positive()).openapi({ 
+                description: "삭제할 프로필 ID 배열", 
+                example: [1, 2, 3] 
+              }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -197,15 +208,15 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
         content: {
           "application/json": {
             schema: SuccessSchema.extend({
-              message: z.string().openapi({ example: "프로필이 성공적으로 삭제되었습니다." }),
+              message: z.string().openapi({ example: "프로필들이 성공적으로 삭제되었습니다." }),
+              deletedCount: z.number().int().openapi({ example: 3 }),
+              failedIds: z.array(z.number()).optional().openapi({ example: [] }),
             }).openapi({ type: 'object' }),
           },
         },
       },
-      400: { description: "잘못된 ID" },
+      400: { description: "잘못된 데이터 형식" },
       401: { description: "인증 실패" },
-      403: { description: "권한 없음" },
-      404: { description: "프로필을 찾을 수 없음" },
       500: { description: "서버 오류" },
     },
   });
@@ -214,7 +225,7 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
   app.openapi(getSajuProfilesRoute, (c) => getSajuProfiles(c));
   app.openapi(createSajuProfileRoute, (c) => createSajuProfile(c));
   app.openapi(getSajuProfileRoute, (c) => getSajuProfile(c));
-  app.openapi(updateSajuProfileRoute, (c) => updateSajuProfile(c)); // 안됨
-  app.openapi(deleteSajuProfileRoute, (c) => deleteSajuProfile(c)); // 안됨
+  app.openapi(updateSajuProfileRoute, (c) => updateSajuProfile(c));
+  app.openapi(deleteSajuProfilesRoute, (c) => deleteSajuProfiles(c));
   return app;
 }

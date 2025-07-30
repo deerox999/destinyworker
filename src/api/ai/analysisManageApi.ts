@@ -55,16 +55,14 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
           type: true,
           title: true,
           aiResponse: true,
+          modelUsed: true,
           pointsSpent: true,
           isFavorite: true,
           createdAt: true,
           analysisStartedAt: true,
           analysisCompletedAt: true,
         },
-        orderBy: [
-          { isFavorite: 'desc' },
-          { createdAt: 'desc' }
-        ],
+        orderBy: [{ isFavorite: "desc" }, { createdAt: "desc" }],
         take: limit,
         skip: offset,
       }),
@@ -80,6 +78,7 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
       type: analysis.type,
       title: analysis.title,
       aiResponse: analysis.aiResponse,
+      modelUsed: analysis.modelUsed,
       pointsSpent: analysis.pointsSpent,
       isFavorite: analysis.isFavorite,
       createdAt: toUTC(analysis.createdAt),
@@ -141,8 +140,6 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         type: true,
         title: true,
         sajuData: true,
-        userPrompt: true,
-        systemPrompt: true,
         aiResponse: true,
         modelUsed: true,
         pointsSpent: true,
@@ -174,8 +171,6 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         analysisType: analysis.analysisType,
         type: analysis.type,
         title: analysis.title,
-        userPrompt: analysis.userPrompt,
-        systemPrompt: analysis.systemPrompt,
         aiResponse: analysis.aiResponse,
         modelUsed: analysis.modelUsed,
         pointsSpent: analysis.pointsSpent,
@@ -341,7 +336,7 @@ export async function updateSajuAnalysisTitle(c: Context): Promise<Response> {
 }
 
 /**
- * 사주 분석 결과를 삭제하는 API
+ * 사주 분석 결과를 다중 삭제하는 API
  */
 export async function deleteSajuAnalysis(c: Context): Promise<Response> {
   const user = await getUserFromToken(c);
@@ -350,36 +345,57 @@ export async function deleteSajuAnalysis(c: Context): Promise<Response> {
   }
 
   try {
-    const analysisId = c.req.param("id");
-    if (!analysisId) {
-      return c.json({ error: "분석 ID가 필요합니다." }, 400);
+    const body = await c.req.json();
+    const { ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return c.json({ error: "삭제할 분석 결과 ID 배열이 필요합니다." }, 400);
+    }
+
+    if (!ids.every(id => typeof id === 'number' && Number.isInteger(id) && id > 0)) {
+      return c.json({ error: "잘못된 ID 형식입니다." }, 400);
     }
 
     const prisma = createPrismaClient(c.env.DB);
 
+    // 사용자가 소유한 분석 결과만 조회
+    const userAnalyses = await prisma.sajuAnalysis.findMany({
+      where: {
+        id: { in: ids },
+        userId: user.id
+      },
+      select: { id: true }
+    });
+
+    const userAnalysisIds = userAnalyses.map(analysis => analysis.id);
+    const failedIds = ids.filter(id => !userAnalysisIds.includes(id));
+
+    if (userAnalysisIds.length === 0) {
+      await prisma.$disconnect();
+      return c.json({ 
+        error: "삭제할 수 있는 분석 결과가 없습니다.",
+        failedIds 
+      }, 400);
+    }
+
     // 분석 결과 삭제
     const result = await prisma.sajuAnalysis.deleteMany({
       where: {
-        id: parseInt(analysisId),
+        id: { in: userAnalysisIds },
         userId: user.id,
       },
     });
 
     await prisma.$disconnect();
 
-    if (result.count === 0) {
-      return c.json({ error: "분석 결과를 찾을 수 없습니다." }, 404);
-    }
-
-    return c.json(
-      {
-        success: true,
-        message: "분석 결과가 성공적으로 삭제되었습니다.",
-      },
-      200
-    );
+    return c.json({
+      success: true,
+      message: "분석 결과가 성공적으로 삭제되었습니다.",
+      deletedCount: result.count,
+      failedIds: failedIds.length > 0 ? failedIds : undefined
+    }, 200);
   } catch (error) {
-    console.error("분석 결과 삭제 오류:", error);
+    console.error("분석 결과 다중 삭제 오류:", error);
     return c.json(
       {
         error: "분석 결과를 삭제하는 중 오류가 발생했습니다.",

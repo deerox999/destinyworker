@@ -396,15 +396,24 @@ export function createAnalysisRouter(authMiddleware: MiddlewareHandler): OpenAPI
 
   const SajuAnalysisDeleteRoute = createRoute({
     method: "delete",
-    path: "/saju-analyses/{id}",
-    summary: "사주 분석 결과 삭제",
-    description: "사주 분석 결과를 삭제합니다.",
+    path: "/saju-analyses",
+    summary: "사주 분석 결과 다중 삭제",
+    description: "여러 사주 분석 결과를 한 번에 삭제합니다.",
     tags: ["AI - 사주 분석 결과"],
     security: [{ BearerAuth: [] }],
     request: {
-      params: z.object({
-        id: z.coerce.number().int().positive(),
-      }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              ids: z.array(z.number().int().positive()).openapi({ 
+                description: "삭제할 분석 결과 ID 배열", 
+                example: [1, 2, 3] 
+              }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -414,12 +423,14 @@ export function createAnalysisRouter(authMiddleware: MiddlewareHandler): OpenAPI
             schema: z.object({
               success: z.boolean(),
               message: z.string(),
+              deletedCount: z.number().int().openapi({ example: 3 }),
+              failedIds: z.array(z.number()).optional().openapi({ example: [] }),
             }),
           },
         },
       },
+      400: { description: "잘못된 데이터 형식" },
       401: { description: "인증 실패" },
-      404: { description: "분석 결과를 찾을 수 없음" },
       500: { description: "서버 오류" },
     },
   });

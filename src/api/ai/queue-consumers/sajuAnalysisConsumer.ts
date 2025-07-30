@@ -28,11 +28,25 @@ export async function saju_analysis_queue_handler(
   batch: MessageBatch<SajuAnalysisMessage>,
   env: any
 ): Promise<void> {
-  for (const message of batch.messages) {
+  // 병렬 처리를 위한 Promise 배열 생성
+  const processingPromises = batch.messages.map(async (message) => {
+    let initialSaveResult: { success: boolean; analysisId?: number; error?: string } | null = null;
+    
     try {
-      console.log(
-        `Processing job ${message.body.jobId} for user ${message.body.userId}`
+      // 분석 시작 시 DB에 미리 저장
+      const analysisStartedAt = new Date();
+      const title = generateTitle(message.body);
+      
+      initialSaveResult = await saveSajuAnalysisInitial(
+        message.body,
+        title,
+        analysisStartedAt,
+        env
       );
+
+      if (!initialSaveResult.success) {
+        throw new Error(`분석 작업 초기화에 실패했습니다: ${initialSaveResult.error}`);
+      }
 
       // Gemini API 호출
       const ai = new GoogleGenAI({
@@ -48,100 +62,33 @@ export async function saju_analysis_queue_handler(
 
       const text = result.text || "죄송합니다. 답변을 생성할 수 없습니다.";
       const analysisCompletedAt = new Date();
-      const title = generateTitle(message.body);
-
-      // DB에 저장
-      const saveResult = await saveSajuAnalysis(
-        message.body,
+      
+      // 분석 완료 후 DB 업데이트
+      const updateResult = await updateSajuAnalysis(
+        initialSaveResult.analysisId!,
         text,
-        title,
         analysisCompletedAt,
         env
       );
 
-      if (!saveResult.success) {
-        throw new Error("분석 결과 저장에 실패했습니다.");
+      if (!updateResult.success) {
+        throw new Error(`분석 결과 업데이트에 실패했습니다: ${updateResult.error}`);
       }
-
-      // Durable Object에 완료 상태 업데이트
-      const durableObjectId = env.SAJU_ANALYSIS_WORKER.idFromString(
-        message.body.durableObjectId
-      );
-      const durableObject = env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
-
-      console.log(`[Queue] Durable Object 업데이트 시도: ${message.body.jobId}`);
-
-      const updateResponse = await durableObject.fetch("http://localhost/update-status", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobId: message.body.jobId,
-          status: "completed",
-          result: {
-            answer: text,
-            analysisId: saveResult.analysisId,
-            metadata: {
-              modelUsed: message.body.model,
-              timestamp: new Date().toISOString(),
-              responseType: getResponseType(message.body.type),
-              ...(message.body.type === "compatibility" && {
-                person1Name: message.body.sajuData?.person1?.name,
-                person2Name: message.body.sajuData?.person2?.name,
-              }),
-              ...(message.body.type === "yearly_fortune" && {
-                serviceType: "paid",
-                fortuneType: message.body.fortuneType,
-              }),
-            },
-            points: {
-              deducted: message.body.pointsCost,
-              remaining: null,
-              message: null,
-            },
-          },
-        }),
-      });
-
-      if (!updateResponse.ok) {
-        console.error(`[Queue] Durable Object 업데이트 실패: ${message.body.jobId}`);
-      } else {
-        console.log(`[Queue] Durable Object 업데이트 성공: ${message.body.jobId}`);
-      }
-
-      console.log(`Job ${message.body.jobId} completed successfully`);
     } catch (error) {
       console.error(`Error processing job ${message.body.jobId}:`, error);
 
-      // Durable Object에 실패 상태 업데이트
-      try {
-        const durableObjectId = env.SAJU_ANALYSIS_WORKER.idFromString(
-          message.body.durableObjectId
-        );
-        const durableObject = env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
-
-        console.log(`[Queue] 실패 상태 업데이트 시도: ${message.body.jobId}`);
-
-        const updateResponse = await durableObject.fetch("http://localhost/update-status", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            jobId: message.body.jobId,
-            status: "failed",
-            error: error instanceof Error ? error.message : "Unknown error",
-          }),
-        });
-
-        if (!updateResponse.ok) {
-          console.error(`[Queue] 실패 상태 업데이트 실패: ${message.body.jobId}`);
-        } else {
-          console.log(`[Queue] 실패 상태 업데이트 성공: ${message.body.jobId}`);
+      // 실패 시 DB 업데이트 (에러 메시지로)
+      if (initialSaveResult?.analysisId) {
+        try {
+          await updateSajuAnalysis(
+            initialSaveResult.analysisId,
+            `분석 실패: ${error instanceof Error ? error.message : "Unknown error"}`,
+            new Date(),
+            env
+          );
+        } catch (updateError) {
+          console.error("[Queue] 실패 상태 DB 업데이트 실패:", updateError);
         }
-      } catch (updateError) {
-        console.error("[Queue] Failed to update job status:", updateError);
       }
 
       // 실패 시 포인트 환불
@@ -158,7 +105,10 @@ export async function saju_analysis_queue_handler(
         console.error("[Queue] 포인트 환불 실패:", refundError);
       }
     }
-  }
+  });
+
+  // 모든 작업을 병렬로 실행하고 완료 대기
+  await Promise.all(processingPromises);
 }
 
 /**
@@ -325,6 +275,7 @@ async function saveSajuAnalysis(
   message: SajuAnalysisMessage,
   aiResponse: string,
   title: string,
+  analysisStartedAt: Date,
   analysisCompletedAt: Date,
   env: any
 ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
@@ -361,7 +312,7 @@ async function saveSajuAnalysis(
         pointsSpent: message.pointsCost,
         i18n: message.i18n,
         timezone: message.timezone,
-        analysisStartedAt: new Date(),
+        analysisStartedAt: analysisStartedAt,
         analysisCompletedAt: analysisCompletedAt
       }
     });
@@ -373,7 +324,104 @@ async function saveSajuAnalysis(
       analysisId: analysis.id,
     };
   } catch (error) {
-    console.error("사주 분석 결과 저장 실패:", error);
+    console.error("[DB] 사주 분석 결과 저장 실패:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * 사주 분석 초기 데이터를 DB에 저장하는 함수 (분석 시작 시)
+ */
+async function saveSajuAnalysisInitial(
+  message: SajuAnalysisMessage,
+  title: string,
+  analysisStartedAt: Date,
+  env: any
+): Promise<{ success: boolean; analysisId?: number; error?: string }> {
+  try {
+    let birthData = null;
+    if (message.sajuData) {
+      if (message.sajuData.정보 && message.sajuData.정보.생년월일) {
+        birthData = message.sajuData.정보.생년월일;
+      } else if (
+        message.sajuData.person1 &&
+        message.sajuData.person1.정보 &&
+        message.sajuData.person1.정보.생년월일
+      ) {
+        birthData = {
+          person1: message.sajuData.person1.정보.생년월일,
+          person2: message.sajuData.person2?.정보?.생년월일 || null,
+        };
+      }
+    }
+
+    const prisma = createPrismaClient(env.DB);
+    
+    const analysis = await prisma.sajuAnalysis.create({
+      data: {
+        userId: message.userId,
+        analysisType: message.analysisType,
+        type: message.type,
+        title: title,
+        sajuData: JSON.stringify(birthData),
+        userPrompt: message.userPrompt,
+        systemPrompt: message.systemPrompt || null,
+        aiResponse: "분석 중... 처리중이오니, 잠시만 기다려주세요.", // 초기값
+        modelUsed: message.model,
+        pointsSpent: message.pointsCost,
+        i18n: message.i18n,
+        timezone: message.timezone,
+        analysisStartedAt: analysisStartedAt,
+        analysisCompletedAt: null // 완료 시 업데이트
+      }
+    });
+
+    await prisma.$disconnect();
+
+    return {
+      success: true,
+      analysisId: analysis.id,
+    };
+  } catch (error) {
+    console.error("[DB] 사주 분석 초기 저장 실패:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * 사주 분석 결과를 DB에서 업데이트하는 함수 (분석 완료 시)
+ */
+async function updateSajuAnalysis(
+  analysisId: number,
+  aiResponse: string,
+  analysisCompletedAt: Date,
+  env: any
+): Promise<{ success: boolean; analysisId?: number; error?: string }> {
+  try {
+    const prisma = createPrismaClient(env.DB);
+    
+    const analysis = await prisma.sajuAnalysis.update({
+      where: { id: analysisId },
+      data: {
+        aiResponse: aiResponse,
+        analysisCompletedAt: analysisCompletedAt
+      }
+    });
+
+    await prisma.$disconnect();
+
+    return {
+      success: true,
+      analysisId: analysis.id,
+    };
+  } catch (error) {
+    console.error("[DB] 사주 분석 결과 업데이트 실패:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
