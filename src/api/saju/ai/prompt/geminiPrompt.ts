@@ -480,42 +480,4 @@ ${설정.출력형식}
 위 형식에 맞춰 상세하고 전문적인 궁합 분석을 제공해주세요.`;
 
   return { systemPrompt, userPrompt };
-};
-
-/**
- * 토큰 값 추정 함수
- * @param systemPrompt 시스템 프롬프트
- * @param userPrompt 사용자 프롬프트
- * @returns 토큰 추정값
- */
-export const estimateTokens = (systemPrompt: string, userPrompt: string) => {
-  // 더 정확한 토큰 추정 함수
-  const 텍스트토큰추정 = (text: string): number => {
-    // 한국어/한자: 1.5자당 1토큰 정도
-    const 한국어패턴 = /[\u3131-\u3163\uac00-\ud7a3\u4e00-\u9fff]/g;
-    const 한국어글자수 = (text.match(한국어패턴) || []).length;
-
-    // 영어/숫자: 4자당 1토큰 정도
-    const 영어패턴 = /[a-zA-Z0-9]/g;
-    const 영어글자수 = (text.match(영어패턴) || []).length;
-
-    // 공백/특수문자: 2자당 1토큰 정도
-    const 나머지글자수 = text.length - 한국어글자수 - 영어글자수;
-
-    // JSON 구조 토큰 (중괄호, 쉼표, 콜론 등): 대략 전체의 10% 추가
-    const 기본토큰 = 한국어글자수 / 1.5 + 영어글자수 / 4 + 나머지글자수 / 2;
-    const JSON구조보정 = text.includes("{") ? 기본토큰 * 0.1 : 0;
-
-    return Math.ceil(기본토큰 + JSON구조보정);
-  };
-
-  const systemPromptTokens = 텍스트토큰추정(systemPrompt);
-  const userPromptTokens = 텍스트토큰추정(userPrompt);
-  const totalTokens = systemPromptTokens + userPromptTokens;
-
-  return {
-    systemPromptTokens: Math.round(systemPromptTokens),
-    userPromptTokens: Math.round(userPromptTokens),
-    totalTokens: Math.round(totalTokens),
-  };
-};
+}

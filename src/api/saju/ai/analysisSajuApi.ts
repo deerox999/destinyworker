@@ -1,86 +1,23 @@
-/**
- * 통합 사주 분석 API 작동 흐름
- * 
- * 1. 사용자 요청 → API 엔드포인트
- *    - POST /api/ai/analysis (통합 사주 분석)
- *    - type 파라미터로 분석 유형 구분:
- *      - "individual": 일반 사주 분석
- *      - "compatibility": 궁합 분석  
- *      - "yearly_fortune": 연간운세 분석
- * 
- * 2. 인증 및 검증
- *    - JWT 토큰으로 사용자 인증
- *    - 필수 필드 검증 (sajuData 등)
- *    - 궁합 분석의 경우 person1, person2 데이터 검증
- * 
- * 3. 포인트 차감
- *    - 분석 타입에 따른 포인트 비용 결정
- *    - usePoints() 함수로 포인트 차감
- *    - 실패 시 즉시 402 에러 반환
- * 
- * 4. 서버에서 프롬프트 생성
- *    - 프론트엔드에서 받은 파라미터로 안전하게 프롬프트 생성
- *    - 모델 관련 설정은 서버에서 고정값 사용
- * 
- * 5. Durable Object 작업 등록
- *    - 사용자별 고유 Durable Object 생성/접근
- *    - 작업 정보를 Durable Object에 등록
- *    - jobId 생성 및 작업 상태를 'pending'으로 설정
- * 
- * 6. Queue 작업 전송
- *    - Cloudflare Queue에 분석 작업 전송
- *    - 백그라운드에서 Queue Consumer가 처리
- * 
- * 7. 즉시 응답
- *    - jobId와 함께 성공 응답 반환
- *    - 사용자는 jobId로 상태 조회 가능
- * 
- * 8. 백그라운드 처리 (Queue Consumer)
- *    - Gemini API 호출
- *    - AI 분석 결과 생성
- *    - DB에 분석 결과 저장
- *    - Durable Object 상태 업데이트
- * 
- * 9. 상태 조회
- *    - GET /api/ai/analysis/status?jobId=xxx
- *    - Durable Object에서 작업 상태 조회
- *    - pending → processing → completed/failed
- * 
- * 10. 에러 처리
- *    - 각 단계별 실패 시 포인트 환불
- *    - 상세한 에러 메시지 제공
- * 
- * 주요 특징:
- * - 통합 API: 하나의 엔드포인트로 모든 분석 유형 처리
- * - 즉시 응답: 사용자는 jobId를 받고 대기
- * - 비동기 처리: Queue를 통한 안정적인 백그라운드 처리
- * - 상태 추적: Durable Object로 작업 상태 관리
- * - 자동 저장: 완료된 분석은 DB에 자동 저장
- * - 포인트 관리: 실패 시 자동 환불 처리
- * - 안전한 프롬프트 생성: 서버에서 프롬프트 생성으로 조작 방지
- */
-
 import { Context } from "hono";
-import { getUserFromToken } from "../../common/utils";
-import { usePoints, refundPoints } from "../../common/paymentUtils";
-import { POINT_COSTS } from "../../common/paymentUtils";
-import { 
-  generateAnalysisPrompts, 
+import { POINT_COSTS, refundPoints, usePoints } from "../../../common/paymentUtils";
+import { getUserFromToken } from "../../../common/utils";
+import {
+  generateAnalysisPrompts,
   generateCompatibilityPrompts,
   type 분석관점,
+  type 분석요소,
   type 이해도레벨,
-  type 분석요소
 } from "./prompt/geminiPrompt";
 
 // API 사용자가 보내는 요청 본문 타입 정의 (안전한 파라미터만 허용)
 interface AnalysisSajuRequest {
   // 사주 데이터 (필수)
   sajuData: any;
-  
+
   // 분석 설정
   analysisType?: string; // '종합운세', '대운', '연애', '직업', '사업' 등
   type?: string; // 'individual', 'compatibility', 'yearly_fortune'
-  
+
   // 프롬프트 생성 파라미터
   해설유형?: string; // '대운', '연애', '직업', '사업' 등
   궁합유형?: string; // '연인궁합', '부부궁합', '친구궁합' 등
@@ -89,7 +26,7 @@ interface AnalysisSajuRequest {
   타겟년도?: number; // 연간운세용
   이해도레벨?: 이해도레벨; // '초보', '중수', '전문가'
   선택된분석요소?: 분석요소[]; // ['십성', '신살', '십이신살']
-  
+
   // 기타 설정
   i18n?: string; // 언어 설정
   timezone?: string; // 시간대 설정
@@ -104,20 +41,20 @@ const SERVER_MODEL_CONFIG = {
     temperature: 0.4,
     topP: 0.4,
     topK: 40,
-    maxOutputTokens: 65535
+    maxOutputTokens: 65535,
   },
-  
+
   // 안전 설정 (고정값)
   safetySettings: [
     {
       category: "HARM_CATEGORY_HARASSMENT",
-      threshold: "BLOCK_MEDIUM_AND_ABOVE"
+      threshold: "BLOCK_MEDIUM_AND_ABOVE",
     },
     {
       category: "HARM_CATEGORY_HATE_SPEECH",
-      threshold: "BLOCK_MEDIUM_AND_ABOVE"
-    }
-  ]
+      threshold: "BLOCK_MEDIUM_AND_ABOVE",
+    },
+  ],
 };
 
 /**
@@ -136,7 +73,7 @@ function generateServerPrompts(
     이해도레벨 = "중수",
     선택된분석요소 = [],
     i18n = "ko",
-    stream = false
+    stream = false,
   } = request;
 
   let prompts: { systemPrompt: string; userPrompt: string };
@@ -185,7 +122,7 @@ function generateServerPrompts(
   return {
     systemPrompt: prompts.systemPrompt,
     userPrompt: prompts.userPrompt,
-    model
+    model,
   };
 }
 
@@ -193,7 +130,6 @@ function generateServerPrompts(
  * 통합 사주 분석 API - 모든 분석 유형을 하나의 엔드포인트로 처리
  */
 export async function AnalysisSaju(c: Context): Promise<Response> {
-  
   const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
@@ -207,7 +143,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
 
     // 분석 타입 결정 및 검증
     const type = body.type || "individual";
-    
+
     // 궁합 분석의 경우 추가 검증
     if (type === "compatibility") {
       if (!body.sajuData.person1 || !body.sajuData.person2) {
@@ -254,14 +190,20 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     }
 
     // 서버에서 안전하게 프롬프트 생성
-    const { systemPrompt, userPrompt, model } = generateServerPrompts(body, type);
-    // Durable Object에 작업 제출
-    const durableObjectId = c.env.SAJU_ANALYSIS_WORKER.idFromName(`user_${user.id}`);
-    const durableObject = c.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
+    const { systemPrompt, userPrompt, model } = generateServerPrompts(
+      body,
+      type
+    );
 
     const jobId = `job_${Date.now()}_${Math.random()
       .toString(36)
       .substr(2, 9)}`;
+
+    // Durable Object에 작업 제출 - jobId를 포함하여 고유한 Durable Object 생성
+    const durableObjectId = c.env.SAJU_ANALYSIS_WORKER.idFromName(
+      `user_${user.id}_${jobId}`
+    );
+    const durableObject = c.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
 
     const jobData = {
       userId: user.id,
@@ -315,16 +257,19 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     // 스트리밍 요청인지 확인
     if (body.stream) {
       // 스트리밍 응답 처리
-      const streamResponse = await durableObject.fetch("http://localhost/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...jobData,
-          jobId,
-        }),
-      });
+      const streamResponse = await durableObject.fetch(
+        "http://localhost/stream",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...jobData,
+            jobId,
+          }),
+        }
+      );
 
       if (!streamResponse.ok) {
         // 실패 시 포인트 환불
@@ -370,7 +315,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
           await c.env.QUEUE.send({
             ...jobData,
             jobId,
-            durableObjectId: durableObjectId.toString(),
+            // durableObjectId 제거 - Queue Consumer에서 직접 처리
           });
           console.log(`[Queue] 작업 전송 성공: ${jobId}`);
         } catch (queueError) {
@@ -416,9 +361,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
 /**
  * 사주 분석 작업 상태 조회 API
  */
-export async function GetAnalysisSajuStatus(
-  c: Context
-): Promise<Response> {
+export async function GetAnalysisSajuStatus(c: Context): Promise<Response> {
   const user = await getUserFromToken(c);
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);

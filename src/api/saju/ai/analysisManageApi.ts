@@ -1,6 +1,6 @@
 import { Context } from "hono";
-import { createPrismaClient } from "../../common/prismaUtils";
-import { getUserFromToken } from "../../common/utils";
+import { createPrismaClient } from "../../../common/prismaUtils";
+import { getUserFromToken } from "../../../common/utils";
 
 // UTC 변환 유틸리티 함수
 const toUTC = (date: Date | string | null): string | null => {

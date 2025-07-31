@@ -1,6 +1,6 @@
 import { Context } from "hono";
-import { createPrismaClient } from "../../common/prismaUtils";
-import { getUserFromToken } from "../../common/utils";
+import { createPrismaClient } from "../../../common/prismaUtils";
+import { getUserFromToken } from "../../../common/utils";
 
 // 한글 -> 영어 필드 변환
 const toDbFields = (data: any) => ({

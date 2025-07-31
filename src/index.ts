@@ -2,8 +2,8 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
-import { SajuAnalysisWorker } from "./api/ai/durable-objects/SajuAnalysisWorker";
-import { saju_analysis_queue_handler } from "./api/ai/queue-consumers/sajuAnalysisConsumer";
+import { SajuAnalysisWorker } from "./api/saju/ai/durable-objects/SajuAnalysisWorker";
+import { saju_analysis_queue_handler } from "./api/saju/ai/queue-consumers/sajuAnalysisConsumer";
 
 type Env = {
   Bindings: {

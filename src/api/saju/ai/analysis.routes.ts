@@ -2,7 +2,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { MiddlewareHandler } from "hono";
 import {
   PaginationResponseSchema
-} from "../../common/schemas";
+} from "../../../common/schemas";
 import {
   deleteSajuAnalysis,
   getSajuAnalysisDetail,

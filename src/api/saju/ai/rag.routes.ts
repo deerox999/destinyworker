@@ -10,7 +10,7 @@ import { MiddlewareHandler } from "hono";
 import {
   PaginationResponseSchema,
   SuccessSchema,
-} from "../../common/schemas";
+} from "../../../common/schemas";
 
 export function createRagRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();

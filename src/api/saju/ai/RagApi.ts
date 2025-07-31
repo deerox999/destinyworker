@@ -1,6 +1,6 @@
 import { Context } from "hono";
-import { createEmbedding, createEmbeddings } from "../../common/ragUtils";
-import { createPrismaClient } from "../../common/prismaUtils";
+import { createEmbedding, createEmbeddings } from "../../../common/ragUtils";
+import { createPrismaClient } from "../../../common/prismaUtils";
 
 /**
  * RAG 문서에 대한 사주 프로젝트용 표준 메타데이터 스키마.

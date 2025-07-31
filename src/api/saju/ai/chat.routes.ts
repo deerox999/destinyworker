@@ -3,7 +3,7 @@ import { MiddlewareHandler } from "hono";
 import {
   ConversationIdParamSchema,
   SuccessSchema,
-} from "../../common/schemas";
+} from "../../../common/schemas";
 import {
   SajuChat,
   SajuChatDelete,

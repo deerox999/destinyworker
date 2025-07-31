@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
-import { POINT_COSTS } from "../../../common/paymentUtils";
-import { createPrismaClient } from "../../../common/prismaUtils";
+import { POINT_COSTS } from "../../../../common/paymentUtils";
+import { createPrismaClient } from "../../../../common/prismaUtils";
 
 // 분석 작업 상태
 interface AnalysisJob {

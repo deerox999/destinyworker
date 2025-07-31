@@ -1,0 +1,96 @@
+# Cloudflare Workers 설정 파일
+
+# 호환성 날짜 (Workers 런타임 버전)
+compatibility_date = "2025-07-29"
+
+# 메인 진입점 파일
+main = "src/index.ts"
+
+# Worker 이름
+name = "destinyworker"
+
+# 소스맵 업로드 활성화
+upload_source_maps = true
+
+# 리소스 제한 설정
+[limits]
+cpu_ms = 30000      # CPU 사용 시간 제한 (30초)
+memory_mb = 128     # 메모리 사용량 제한 (128MB)
+
+# D1 데이터베이스 설정
+[[d1_databases]]
+database_name = "destiny-new"    # 프로덕션 데이터베이스
+binding = "DB"
+database_id = "d15b4855-83f8-49e5-9156-b9c2f99134c8"
+
+[[d1_databases]]
+database_name = "destiny-local"  # 로컬 개발용 데이터베이스
+binding = "DB_LOCAL"
+database_id = "b9c839c9-2356-4bb9-ab20-46e32a85aa2b"
+
+[[d1_databases]]
+database_name = "destiny-dev"    # 개발 환경 데이터베이스
+binding = "DB_DEV"
+database_id = "46554c0a-1866-4ae8-8a5a-3722e0fdf2d0"
+
+# KV 네임스페이스 설정 (캐시 저장소)
+[[kv_namespaces]]
+binding = "VIEW_CACHE_KV"        # 뷰 캐시용 KV
+id = "f76d441ea2524c58a72e355fb4df71b2"
+preview_id = "68d8ef3bc1644f2f81cca8b57f842267"
+experimental_remote = true
+
+# AI 서비스 설정
+[ai]
+binding = "AI"                   # AI 모델 바인딩
+experimental_remote = true
+
+# Vectorize 인덱스 설정 (벡터 검색용)
+[[vectorize]]
+binding = "VECTORIZE_INDEX"      # 사주 지식 검색용 벡터 인덱스
+index_name = "saju-index"
+experimental_remote = true
+
+# R2 스토리지 설정
+[[r2_buckets]]
+binding = "DESTINY_R2"           # 파일 저장용 R2 버킷
+bucket_name = "destiny"
+preview_bucket_name = "destiny-dev"
+experimental_remote = true
+
+
+[queues] # 큐 설정 (비동기 작업 처리)
+[[queues.producers]] # 프로듀서 설정 (작업 생성)
+binding = "QUEUE"
+queue = "analysis"               # 사주 분석 작업 큐
+experimental_remote = true
+
+[[queues.consumers]] # 컨슈머 설정 (작업 처리)
+queue = "analysis"          # 분석 작업 처리
+batch_size = 10             # 배치 크기
+batch_timeout = 30          # 배치 타임아웃 (초)
+max_retries = 3             # 최대 재시도 횟수
+max_concurrency = 10        # 병렬 처리량 증가 (로컬에선 1개로 제한적임)
+
+[durable_objects] # Durable Objects 설정 (상태 유지 객체)
+[[durable_objects.bindings]] # 바인딩 설정
+name = "SAJU_ANALYSIS_WORKER"   # 사주 분석 워커 객체
+class_name = "SajuAnalysisWorker"
+
+[[durable_objects.classes]] # 클래스 정의
+name = "SajuAnalysisWorker"      # 사주 분석 워커 클래스
+script_name = "destinyworker"
+experimental_remote = true
+
+[[migrations]] # 마이그레이션 설정
+tag = "v1"
+new_classes = ["SajuAnalysisWorker"]  # 새로운 Durable Object 클래스
+
+[vars] # 환경 변수
+ENVIRONMENT = "development"       # 환경 설정
+
+[observability] # 관찰성 설정 (모니터링)
+enabled = true                   # 관찰성 기능 활성화
+
+[dev] # 개발 서버 설정
+port = 9393                      # 로컬 개발 서버 포트 

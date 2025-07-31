@@ -1,12 +1,12 @@
 import { GoogleGenAI } from '@google/genai';
-import { createPrismaClient } from "../../common/prismaUtils";
+import { createPrismaClient } from "../../../common/prismaUtils";
 import { Context } from "hono";
 import {
   createEmbedding,
   findSimilarVectors,
   getDocumentsFromD1
-} from "../../common/ragUtils";
-import { getUserFromToken } from "../../common/utils";
+} from "../../../common/ragUtils";
+import { getUserFromToken } from "../../../common/utils";
 import {
   getPersonaPrompt,
   getRejectionMessage,

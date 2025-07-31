@@ -1,6 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { PrismaClient } from "@prisma/client";
-import { createPrismaClient } from "../../../common/prismaUtils";
+import { createPrismaClient } from "../../../../common/prismaUtils";
 
 // Queue 메시지 타입
 interface SajuAnalysisMessage {
@@ -18,7 +17,7 @@ interface SajuAnalysisMessage {
   conversationHistory?: any[];
   model: string;
   fortuneType?: string;
-  durableObjectId: string;
+  // durableObjectId 제거 - Queue Consumer에서 직접 처리
 }
 
 /**
@@ -48,7 +47,7 @@ export async function saju_analysis_queue_handler(
         throw new Error(`분석 작업 초기화에 실패했습니다: ${initialSaveResult.error}`);
       }
 
-      // Gemini API 호출
+      // Gemini API 직접 호출 (Durable Object 거치지 않음)
       const ai = new GoogleGenAI({
         apiKey: env.GOOGLE_GEMINI_API_KEY,
       });
@@ -74,6 +73,8 @@ export async function saju_analysis_queue_handler(
       if (!updateResult.success) {
         throw new Error(`분석 결과 업데이트에 실패했습니다: ${updateResult.error}`);
       }
+
+      console.log(`[Queue] 작업 완료: ${message.body.jobId}`);
     } catch (error) {
       console.error(`Error processing job ${message.body.jobId}:`, error);
 
@@ -93,7 +94,7 @@ export async function saju_analysis_queue_handler(
 
       // 실패 시 포인트 환불
       try {
-        const { refundPoints } = await import("../../../common/paymentUtils");
+        const { refundPoints } = await import("../../../../common/paymentUtils");
         await refundPoints(
           env.DB,
           message.body.userId,
@@ -251,84 +252,6 @@ function getFortuneTypeTitle(fortuneType: string): string {
       return "내년운세";
     default:
       return "연간운세";
-  }
-}
-
-/**
- * 응답 타입 결정 함수
- */
-function getResponseType(type: string): string {
-  switch (type) {
-    case "compatibility":
-      return "compatibility_analysis";
-    case "yearly_fortune":
-      return "yearly_fortune";
-    default:
-      return "text";
-  }
-}
-
-/**
- * 사주 분석 결과를 DB에 저장하는 함수
- */
-async function saveSajuAnalysis(
-  message: SajuAnalysisMessage,
-  aiResponse: string,
-  title: string,
-  analysisStartedAt: Date,
-  analysisCompletedAt: Date,
-  env: any
-): Promise<{ success: boolean; analysisId?: number; error?: string }> {
-  try {
-    let birthData = null;
-    if (message.sajuData) {
-      if (message.sajuData.정보 && message.sajuData.정보.생년월일) {
-        birthData = message.sajuData.정보.생년월일;
-      } else if (
-        message.sajuData.person1 &&
-        message.sajuData.person1.정보 &&
-        message.sajuData.person1.정보.생년월일
-      ) {
-        birthData = {
-          person1: message.sajuData.person1.정보.생년월일,
-          person2: message.sajuData.person2?.정보?.생년월일 || null,
-        };
-      }
-    }
-
-    const prisma = createPrismaClient(env.DB);
-    
-    const analysis = await prisma.sajuAnalysis.create({
-      data: {
-        userId: message.userId,
-        analysisType: message.analysisType,
-        type: message.type,
-        title: title,
-        sajuData: JSON.stringify(birthData),
-        userPrompt: message.userPrompt,
-        systemPrompt: message.systemPrompt || null,
-        aiResponse: aiResponse,
-        modelUsed: message.model,
-        pointsSpent: message.pointsCost,
-        i18n: message.i18n,
-        timezone: message.timezone,
-        analysisStartedAt: analysisStartedAt,
-        analysisCompletedAt: analysisCompletedAt
-      }
-    });
-
-    await prisma.$disconnect();
-
-    return {
-      success: true,
-      analysisId: analysis.id,
-    };
-  } catch (error) {
-    console.error("[DB] 사주 분석 결과 저장 실패:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
   }
 }
 

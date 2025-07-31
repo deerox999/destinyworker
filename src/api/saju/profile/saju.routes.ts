@@ -8,7 +8,7 @@ import {
 } from "./sajuProfileApi";
 
 import { MiddlewareHandler } from "hono";
-import { SuccessSchema } from "../../common/schemas";
+import { SuccessSchema } from "../../../common/schemas";
 
 export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
