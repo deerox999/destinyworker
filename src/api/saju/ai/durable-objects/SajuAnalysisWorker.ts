@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
-import { POINT_COSTS } from "../../../../common/paymentUtils";
+import { getAnalysisTypePoints } from "../../../../common/paymentUtils";
 import { createPrismaClient } from "../../../../common/prismaUtils";
+import { updatePointTransactionAnalysisId } from "../../../../common/paymentUtils";
 
 // 분석 작업 상태
 interface AnalysisJob {
@@ -99,7 +100,7 @@ export class SajuAnalysisWorker implements DurableObject {
         userId: body.userId,
         analysisType: body.analysisType || "general",
         type: body.type || "individual",
-        pointsCost: body.pointsCost || this.getPointsCost(body.type || "individual"),
+        pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
         reference: body.reference,
         i18n: body.i18n || "ko",
         timezone: body.timezone || "Asia/Seoul",
@@ -206,7 +207,7 @@ export class SajuAnalysisWorker implements DurableObject {
         userId: body.userId,
         analysisType: body.analysisType || "general",
         type: body.type || "individual",
-        pointsCost: body.pointsCost || this.getPointsCost(body.type || "individual"),
+        pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
         reference: body.reference,
         i18n: body.i18n || "ko",
         timezone: body.timezone || "Asia/Seoul",
@@ -247,6 +248,11 @@ export class SajuAnalysisWorker implements DurableObject {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // 로컬 환경에서만 콘솔 로그 출력
+    if (this.env.NODE_ENV === 'development' || this.env.NODE_ENV === 'local') {
+      console.log(`[SajuAnalysisWorker] 스트리밍 작업 시작: ${jobId}`);
     }
 
     try {
@@ -293,6 +299,25 @@ export class SajuAnalysisWorker implements DurableObject {
                 analysisCompletedAt
               );
               if (saveResult.success) {
+                // 포인트 거래 기록의 analysisId 업데이트
+                try {
+                  
+                  const updateTransactionResult = await updatePointTransactionAnalysisId(
+                    self.env.DB,
+                    job.userId,
+                    job.reference,
+                    saveResult.analysisId!
+                  );
+                  
+                  if (updateTransactionResult) {
+                    console.log(`[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 성공: ${saveResult.analysisId}`);
+                  } else {
+                    console.warn(`[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 실패: ${saveResult.analysisId}`);
+                  }
+                } catch (updateTransactionError) {
+                  console.error("[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 오류:", updateTransactionError);
+                }
+
                 job.status = "completed";
                 job.result = {
                   answer: fullResponse,
@@ -350,17 +375,6 @@ export class SajuAnalysisWorker implements DurableObject {
     }
   }
 
-  private getPointsCost(type: string): number {
-    switch (type) {
-      case "compatibility":
-        return POINT_COSTS.COMPATIBILITY_ANALYSIS;
-      case "yearly_fortune":
-        return POINT_COSTS.YEARLY_FORTUNE;
-      default:
-        return POINT_COSTS.SAJU_ANALYSIS;
-    }
-  }
-
   private buildGeminiPayload(job: AnalysisJob): any {
     const contents: any[] = [];
 
@@ -387,15 +401,15 @@ export class SajuAnalysisWorker implements DurableObject {
           role: "user",
           parts: [
             {
-              text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람 (${
-                job.sajuData.person1.name
-              }):\n${JSON.stringify(
-                job.sajuData.person1.sajuData,
+              text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람:\n${JSON.stringify(
+                job.sajuData.person1,
                 null,
                 2
-              )}\n\n두 번째 사람 (${
-                job.sajuData.person2.name
-              }):\n${JSON.stringify(job.sajuData.person2.sajuData, null, 2)}`,
+              )}\n\n두 번째 사람:\n${JSON.stringify(
+                job.sajuData.person2,
+                null,
+                2
+              )}`,
             },
           ],
         });
@@ -426,7 +440,7 @@ export class SajuAnalysisWorker implements DurableObject {
       temperature: 0.4,
       topP: 0.4,
       topK: 40,
-      maxOutputTokens: 65535
+      maxOutputTokens: 65535,
     };
 
     const safetySettings = job.safetySettings || [
@@ -506,8 +520,6 @@ export class SajuAnalysisWorker implements DurableObject {
     switch (type) {
       case "compatibility":
         return "compatibility_analysis";
-      case "yearly_fortune":
-        return "yearly_fortune";
       default:
         return "text";
     }
@@ -537,7 +549,7 @@ export class SajuAnalysisWorker implements DurableObject {
       }
 
       const prisma = createPrismaClient(this.env.DB);
-      
+
       const result = await prisma.sajuAnalysis.create({
         data: {
           userId: job.userId,

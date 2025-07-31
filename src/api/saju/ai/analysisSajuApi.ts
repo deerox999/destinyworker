@@ -1,5 +1,5 @@
 import { Context } from "hono";
-import { POINT_COSTS, refundPoints, usePoints } from "../../../common/paymentUtils";
+import { getAnalysisTypePoints, refundPoints, usePoints } from "../../../common/paymentUtils";
 import { getUserFromToken } from "../../../common/utils";
 import {
   generateAnalysisPrompts,
@@ -14,24 +14,24 @@ interface AnalysisSajuRequest {
   // 사주 데이터 (필수)
   sajuData: any;
 
-  // 분석 설정
-  analysisType?: string; // '종합운세', '대운', '연애', '직업', '사업' 등
-  type?: string; // 'individual', 'compatibility', 'yearly_fortune'
+  // 분석 옵션
+  options?: {
+    // 분석 설정
+    analysisType?: string; // '종합운세', '대운', '연애', '직업', '사업', '연간운세' 등
+    type?: string; // 'individual', 'compatibility'
 
-  // 프롬프트 생성 파라미터
-  해설유형?: string; // '대운', '연애', '직업', '사업' 등
-  궁합유형?: string; // '연인궁합', '부부궁합', '친구궁합' 등
-  사용자질문?: string; // 사용자 추가 질문
-  톤옵션?: 분석관점; // '현실적', '약간긍정', '약간부정'
-  타겟년도?: number; // 연간운세용
-  이해도레벨?: 이해도레벨; // '초보', '중수', '전문가'
-  선택된분석요소?: 분석요소[]; // ['십성', '신살', '십이신살']
+    // 프롬프트 생성 파라미터
+    userQuestion?: string; // 사용자 추가 질문
+    toneOption?: 분석관점; // '현실적', '약간긍정', '약간부정'
+    targetYear?: number; // 연간운세용
+    understandingLevel?: 이해도레벨; // '초보', '중수', '전문가'
+    selectedAnalysisElements?: 분석요소[]; // ['십성', '신살', '십이신살']
 
-  // 기타 설정
-  i18n?: string; // 언어 설정
-  timezone?: string; // 시간대 설정
-  stream?: boolean; // 스트리밍 여부
-  conversationHistory?: any[]; // 대화 히스토리
+    // 기타 설정
+    i18n?: string; // 언어 설정
+    timezone?: string; // 시간대 설정
+    stream?: boolean; // 스트리밍 여부
+  };
 }
 
 // 서버에서 고정할 모델 설정
@@ -64,17 +64,17 @@ function generateServerPrompts(
   request: AnalysisSajuRequest,
   type: string
 ): { systemPrompt: string; userPrompt: string; model: string } {
+  const options = request.options || {};
   const {
-    해설유형 = "대운",
-    궁합유형 = "연인궁합",
-    사용자질문 = "",
-    톤옵션 = "현실적",
-    타겟년도,
-    이해도레벨 = "중수",
-    선택된분석요소 = [],
+    analysisType,
+    userQuestion = "",
+    toneOption = "현실적",
+    targetYear,
+    understandingLevel = "중수",
+    selectedAnalysisElements = [],
     i18n = "ko",
     stream = false,
-  } = request;
+  } = options;
 
   let prompts: { systemPrompt: string; userPrompt: string };
   let model: string;
@@ -86,35 +86,23 @@ function generateServerPrompts(
     // 궁합 분석
     prompts = generateCompatibilityPrompts(
       i18n,
-      궁합유형,
-      사용자질문,
-      톤옵션,
-      이해도레벨,
-      선택된분석요소
-    );
-    model = baseModel;
-  } else if (type === "yearly_fortune") {
-    // 연간운세 분석
-    prompts = generateAnalysisPrompts(
-      i18n,
-      해설유형,
-      사용자질문,
-      톤옵션,
-      타겟년도,
-      이해도레벨,
-      선택된분석요소
+      analysisType,
+      userQuestion,
+      toneOption,
+      understandingLevel,
+      selectedAnalysisElements
     );
     model = baseModel;
   } else {
-    // 일반 분석
+    // 일반 분석 (연간운세 포함)
     prompts = generateAnalysisPrompts(
       i18n,
-      해설유형,
-      사용자질문,
-      톤옵션,
-      타겟년도,
-      이해도레벨,
-      선택된분석요소
+      analysisType,
+      userQuestion,
+      toneOption,
+      targetYear,
+      understandingLevel,
+      selectedAnalysisElements
     );
     model = baseModel;
   }
@@ -141,15 +129,17 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       return c.json({ error: "sajuData는 필수입니다." }, 400);
     }
 
+    const options = body.options || {};
+    
     // 분석 타입 결정 및 검증
-    const type = body.type || "individual";
+    const type = options.type || "individual";
 
     // 궁합 분석의 경우 추가 검증
     if (type === "compatibility") {
       if (!body.sajuData.person1 || !body.sajuData.person2) {
         return c.json(
           {
-            error: "궁합 분석을 위해서는 두 사람의 사주 데이터가 필요합니다.",
+            error: "궁합 분석을 위해서는 person1과 person2 데이터가 필요합니다.",
             details: "sajuData에 person1과 person2가 포함되어야 합니다.",
           },
           400
@@ -158,13 +148,12 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     }
 
     // 분석 타입에 따른 포인트 비용 결정
-    const analysisType = body.analysisType || "general";
-    let pointsCost: number = POINT_COSTS.SAJU_ANALYSIS;
-
-    if (type === "compatibility") {
-      pointsCost = POINT_COSTS.COMPATIBILITY_ANALYSIS;
-    } else if (type === "yearly_fortune") {
-      pointsCost = POINT_COSTS.YEARLY_FORTUNE;
+    const analysisType = options.analysisType || "종합운세";
+    let pointsCost = getAnalysisTypePoints(analysisType);
+    
+    // streaming이 false일 때 (더 비싼 모델 사용) 포인트 가격을 1.5배로 조정
+    if (!options.stream) {
+      pointsCost = Math.round(pointsCost * 1.5);
     }
 
     // 포인트 검증
@@ -211,16 +200,15 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       type,
       pointsCost,
       reference,
-      i18n: body.i18n || "ko",
-      timezone: body.timezone || "Asia/Seoul",
+      i18n: options.i18n || "ko",
+      timezone: options.timezone || "Asia/Seoul",
       userPrompt,
       systemPrompt,
       sajuData: body.sajuData,
-      conversationHistory: body.conversationHistory,
       model,
       generationConfig: SERVER_MODEL_CONFIG.generationConfig,
       safetySettings: SERVER_MODEL_CONFIG.safetySettings,
-    };
+    }
 
     // Durable Object에 작업 등록
     const response = await durableObject.fetch("http://localhost/submit", {
@@ -255,7 +243,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     }
 
     // 스트리밍 요청인지 확인
-    if (body.stream) {
+    if (options.stream) {
       // 스트리밍 응답 처리
       const streamResponse = await durableObject.fetch(
         "http://localhost/stream",

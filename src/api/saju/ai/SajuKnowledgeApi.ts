@@ -189,44 +189,44 @@ export async function SajuChatList(
     }
 
     const results: {
-      conversation_id: string;
-      first_message: string;
-      last_activity: string;
+      conversationId: string;
+      firstMessage: string;
+      lastActivity: string;
     }[] = await prisma.$queryRawUnsafe(
       `
         WITH FirstMessages AS (
             SELECT
-                conversation_id,
+                conversationId,
                 content,
-                ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at ASC) as rn
+                ROW_NUMBER() OVER(PARTITION BY conversationId ORDER BY createdAt ASC) as rn
             FROM conversation_histories
-            WHERE user_id = ? AND role = 'user'
+            WHERE userId = ? AND role = 'user'
         ),
         LastActivity AS (
             SELECT
-                conversation_id,
-                MAX(created_at) as last_activity
+                conversationId,
+                MAX(createdAt) as lastActivity
             FROM conversation_histories
-            WHERE user_id = ?
-            GROUP BY conversation_id
+            WHERE userId = ?
+            GROUP BY conversationId
         )
         SELECT
-            fm.conversation_id,
-            fm.content as first_message,
-            la.last_activity
+            fm.conversationId,
+            fm.content as firstMessage,
+            la.lastActivity
         FROM FirstMessages fm
-        JOIN LastActivity la ON fm.conversation_id = la.conversation_id
+        JOIN LastActivity la ON fm.conversationId = la.conversationId
         WHERE fm.rn = 1
-        ORDER BY la.last_activity DESC;
+        ORDER BY la.lastActivity DESC;
         `,
       user.id,
       user.id
     );
 
     const conversations = results.map((r) => ({
-      id: r.conversation_id,
-      title: r.first_message.substring(0, 80),
-      updatedAt: r.last_activity,
+      id: r.conversationId,
+      title: r.firstMessage.substring(0, 80),
+      updatedAt: r.lastActivity,
     }));
 
     return c.json(

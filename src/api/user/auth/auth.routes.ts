@@ -100,7 +100,7 @@ export function createAuthRouter(): OpenAPIHono {
                 picture: z.string().url().openapi({ example: "https://example.com/profile.jpg" }),
                 role: z.string().openapi({ example: "user" }),
                 point: z.number().openapi({ example: 3000 }),
-                created_at: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
               }).openapi({ type: 'object' }),
             }).openapi({ type: 'object' }),
           },

@@ -74,6 +74,25 @@ export async function saju_analysis_queue_handler(
         throw new Error(`분석 결과 업데이트에 실패했습니다: ${updateResult.error}`);
       }
 
+      // 포인트 거래 기록의 analysisId 업데이트
+      try {
+        const { updatePointTransactionAnalysisId } = await import("../../../../common/paymentUtils");
+        const updateTransactionResult = await updatePointTransactionAnalysisId(
+          env.DB,
+          message.body.userId,
+          message.body.reference,
+          initialSaveResult.analysisId!
+        );
+        
+        if (updateTransactionResult) {
+          console.log(`[Queue] 포인트 거래 analysisId 업데이트 성공: ${initialSaveResult.analysisId}`);
+        } else {
+          console.warn(`[Queue] 포인트 거래 analysisId 업데이트 실패: ${initialSaveResult.analysisId}`);
+        }
+      } catch (updateTransactionError) {
+        console.error("[Queue] 포인트 거래 analysisId 업데이트 오류:", updateTransactionError);
+      }
+
       console.log(`[Queue] 작업 완료: ${message.body.jobId}`);
     } catch (error) {
       console.error(`Error processing job ${message.body.jobId}:`, error);

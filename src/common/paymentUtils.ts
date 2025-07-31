@@ -1,12 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import { createPrismaClient } from './prismaUtils';
 
-// 포인트 상수 정의
-export const POINT_COSTS = {
-  SAJU_ANALYSIS: 1000,
-  COMPATIBILITY_ANALYSIS: 1500,
-  YEARLY_FORTUNE: 200,
-} as const;
+// analysisType에 따른 포인트 계산 함수
+export function getAnalysisTypePoints(analysisType: string): number {
+  switch (analysisType) {
+    case "연간운세": return 200;
+    case "종합운세": return 1000;
+    default: return 1000;
+  }
+}
 
 // 포인트 관련 인터페이스
 export interface PointTransaction {
@@ -15,7 +17,7 @@ export interface PointTransaction {
   description: string;
   type: "DEBIT" | "CREDIT"; // DEBIT: 차감, CREDIT: 증가
   reference?: string; // 참조 정보 (예: 사주 분석 ID)
-  analysisId?: number; // 분석 결과 ID (새로 추가)
+  analysisId?: number | null; // 분석 결과 ID (새로 추가)
 }
 
 export interface PointValidationResult {
@@ -161,7 +163,7 @@ export async function deductPoints(
       description,
       type: "DEBIT",
       reference,
-      analysisId,
+      analysisId: analysisId || null,
     };
 
     await savePointTransaction(prisma, transaction);
@@ -210,7 +212,7 @@ export async function addPoints(
       description,
       type: "CREDIT",
       reference,
-      analysisId,
+      analysisId: analysisId || null,
     };
 
     await savePointTransaction(prisma, transaction);
@@ -244,8 +246,8 @@ export async function getPointTransactions(
     description: string;
     type: string;
     reference?: string;
-    analysis_id?: number;
-    created_at: string;
+    analysisId?: number;
+    createdAt: string;
   }>
 > {
   const prisma = createPrismaClient(db);
@@ -272,8 +274,8 @@ export async function getPointTransactions(
       description: t.description,
       type: t.type,
       reference: t.reference || undefined,
-      analysis_id: t.analysisId || undefined,
-      created_at: t.createdAt.toISOString(),
+      analysisId: t.analysisId || undefined,
+      createdAt: t.createdAt.toISOString(),
     }));
   } catch (error) {
     console.error("Get point transactions error:", error);
@@ -389,7 +391,7 @@ export async function refundPoints(
 }
 
 /**
- * 포인트 거래의 analysis_id를 업데이트합니다.
+ * 포인트 거래의 analysisId를 업데이트합니다.
  */
 export async function updatePointTransactionAnalysisId(
   db: D1Database,
@@ -412,7 +414,7 @@ export async function updatePointTransactionAnalysisId(
 
     return result.count > 0;
   } catch (error) {
-    console.error("Update point transaction analysis_id error:", error);
+    console.error("Update point transaction analysisId error:", error);
     return false;
   } finally {
     await prisma.$disconnect();

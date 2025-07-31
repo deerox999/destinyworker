@@ -451,15 +451,12 @@ export const generateCompatibilityPrompts = (
     전문가궁합: get궁합기본구조("전문가궁합", 톤옵션),
   };
 
-  const 설정 =
-    궁합유형별설정[궁합유형 as keyof typeof 궁합유형별설정] ||
-    궁합유형별설정["연인궁합"];
-
+  const 설정 = 궁합유형별설정[궁합유형 as keyof typeof 궁합유형별설정] || 궁합유형별설정["연인궁합"];
   const userPrompt = `다음 두 사람의 사주 데이터를 ${궁합유형} 관점에서 분석하여 마크다운 형식으로 결과를 제공해주세요:
 
 **제공된 데이터 구조:**
-- person1: 첫 번째 사람의 사주 데이터 (이름: {person1.name})
-- person2: 두 번째 사람의 사주 데이터 (이름: {person2.name})
+- person1: 첫 번째 사람의 사주 데이터 (person1.정보.생년월일에 이름과 개인정보 포함)
+- person2: 두 번째 사람의 사주 데이터 (person2.정보.생년월일에 이름과 개인정보 포함)
 
 ${설정.분석순서}
 

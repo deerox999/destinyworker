@@ -309,14 +309,14 @@ export async function getAiUsageStatsByModel(
   const prisma = createPrismaClient(c.env.DB);
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
-  const sort = c.req.query("sort") || "total_tokens";
+  const sort = c.req.query("sort") || "totalTokens";
   const allowedSortColumns = [
     "model",
-    "total_tokens",
-    "total_calls",
-    "unique_users",
+    "totalTokens",
+    "totalCalls",
+    "uniqueUsers",
   ];
-  const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
+  const sortColumn = allowedSortColumns.includes(sort) ? sort : "totalTokens";
   const order =
     c.req.query("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
   const startDate = c.req.query("startDate");
@@ -327,13 +327,13 @@ export async function getAiUsageStatsByModel(
     const whereClauses: string[] = [];
     const bindings: any[] = [];
     if (startDate) {
-      whereClauses.push("created_at >= ?");
+      whereClauses.push("createdAt >= ?");
       bindings.push(new Date(startDate).toISOString());
     }
     if (endDate) {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
-      whereClauses.push("created_at <= ?");
+      whereClauses.push("createdAt <= ?");
       bindings.push(end.toISOString());
     }
     const whereClause =
@@ -342,9 +342,9 @@ export async function getAiUsageStatsByModel(
     const dataQuery = `
       SELECT
         model,
-        SUM(total_tokens) as total_tokens,
-        COUNT(id) as total_calls,
-        COUNT(DISTINCT user_id) as unique_users
+        SUM(totalTokens) as totalTokens,
+        COUNT(id) as totalCalls,
+        COUNT(DISTINCT userId) as uniqueUsers
       FROM ai_usage_logs
       ${whereClause}
       GROUP BY model
@@ -369,9 +369,9 @@ export async function getAiUsageStatsByModel(
 
     const formattedStats = stats.map((row: any) => ({
       model: row.model,
-      total_tokens: Number(row.total_tokens),
-      total_calls: Number(row.total_calls),
-      unique_users: Number(row.unique_users),
+      totalTokens: Number(row.totalTokens),
+      totalCalls: Number(row.totalCalls),
+      uniqueUsers: Number(row.uniqueUsers),
     }));
 
     await prisma.$disconnect();
@@ -411,9 +411,9 @@ export async function getAiUsageStatsByUser(
   const prisma = createPrismaClient(c.env.DB);
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
-  const sort = c.req.query("sort") || "total_tokens";
-  const allowedSortColumns = ["total_tokens", "total_calls"];
-  const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
+  const sort = c.req.query("sort") || "totalTokens";
+  const allowedSortColumns = ["totalTokens", "totalCalls"];
+  const sortColumn = allowedSortColumns.includes(sort) ? sort : "totalTokens";
   const order =
     c.req.query("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
   const startDate = c.req.query("startDate");
@@ -424,20 +424,20 @@ export async function getAiUsageStatsByUser(
     const whereClauses: string[] = [];
     const bindings: any[] = [];
     if (startDate) {
-      whereClauses.push("l.created_at >= ?");
+      whereClauses.push("l.createdAt >= ?");
       bindings.push(new Date(startDate).toISOString());
     }
     if (endDate) {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
-      whereClauses.push("l.created_at <= ?");
+      whereClauses.push("l.createdAt <= ?");
       bindings.push(end.toISOString());
     }
     const whereClause =
       whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
     // 1. Get total count of users
-    const countQuery = `SELECT COUNT(DISTINCT user_id) as totalItems FROM ai_usage_logs as l ${whereClause}`;
+    const countQuery = `SELECT COUNT(DISTINCT userId) as totalItems FROM ai_usage_logs as l ${whereClause}`;
     const countResult = (await prisma.$queryRawUnsafe(
       countQuery,
       ...bindings
@@ -462,12 +462,12 @@ export async function getAiUsageStatsByUser(
     // 2. Get a paginated list of user IDs, sorted by their total usage
     const userIdsQuery = `
       SELECT
-        user_id,
-        SUM(total_tokens) as total_tokens,
-        COUNT(id) as total_calls
+        userId,
+        SUM(totalTokens) as totalTokens,
+        COUNT(id) as totalCalls
       FROM ai_usage_logs as l
       ${whereClause}
-      GROUP BY user_id
+      GROUP BY userId
       ORDER BY ${sortColumn} ${order}
       LIMIT ? OFFSET ?
     `;
@@ -477,7 +477,7 @@ export async function getAiUsageStatsByUser(
       limit,
       offset
     )) as any[];
-    const userIds = paginatedUserStats.map((u) => u.user_id);
+    const userIds = paginatedUserStats.map((u) => u.userId);
 
     if (userIds.length === 0) {
       await prisma.$disconnect();
@@ -496,23 +496,23 @@ export async function getAiUsageStatsByUser(
     // 3. Get model-specific usage for those users
     const userIdsPlaceholder = userIds.map(() => "?").join(",");
     const detailedWhereClauses = [...whereClauses];
-    detailedWhereClauses.push(`l.user_id IN (${userIdsPlaceholder})`);
+    detailedWhereClauses.push(`l.userId IN (${userIdsPlaceholder})`);
     const detailedBindings = [...bindings, ...userIds];
     const detailedWhereClause = `WHERE ${detailedWhereClauses.join(" AND ")}`;
 
     const detailedUsageQuery = `
       SELECT
-        u.id as user_id,
-        u.name as user_name,
-        u.email as user_email,
+        u.id as userId,
+        u.name as userName,
+        u.email as userEmail,
         l.model,
-        SUM(l.total_tokens) as total_tokens,
-        COUNT(l.id) as total_calls
+        SUM(l.totalTokens) as totalTokens,
+        COUNT(l.id) as totalCalls
       FROM ai_usage_logs as l
-      JOIN users as u ON l.user_id = u.id
+      JOIN users as u ON l.userId = u.id
       ${detailedWhereClause}
       GROUP BY u.id, u.name, u.email, l.model
-      ORDER BY u.id, total_tokens DESC;
+      ORDER BY u.id, totalTokens DESC;
     `;
     const detailedUsage = (await prisma.$queryRawUnsafe(
       detailedUsageQuery,
@@ -522,27 +522,27 @@ export async function getAiUsageStatsByUser(
     // 4. Reconstruct the response
     const userStatsMap = new Map();
     for (const row of detailedUsage) {
-      const userId = row.user_id;
+      const userId = row.userId;
       if (!userStatsMap.has(userId)) {
         userStatsMap.set(userId, {
-          user: { id: userId, name: row.user_name, email: row.user_email },
+          user: { id: userId, name: row.userName, email: row.userEmail },
           totalUsage: { tokens: 0, calls: 0 }, // will be populated next
           modelUsage: [],
         });
       }
       userStatsMap.get(userId).modelUsage.push({
         model: row.model,
-        total_tokens: Number(row.total_tokens),
-        total_calls: Number(row.total_calls),
+        totalTokens: Number(row.totalTokens),
+        totalCalls: Number(row.totalCalls),
       });
     }
 
     for (const u of paginatedUserStats) {
-      if (userStatsMap.has(u.user_id)) {
-        const stats = userStatsMap.get(u.user_id);
+      if (userStatsMap.has(u.userId)) {
+        const stats = userStatsMap.get(u.userId);
         stats.totalUsage = {
-          tokens: Number(u.total_tokens),
-          calls: Number(u.total_calls),
+          tokens: Number(u.totalTokens),
+          calls: Number(u.totalCalls),
         };
       }
     }
@@ -593,11 +593,11 @@ export async function getAiUsageLogsForUser(
 
   try {
     const baseWhereClauses: { clause: string; binding: any }[] = [
-      { clause: "user_id = ?", binding: userId },
+      { clause: "userId = ?", binding: userId },
     ];
     if (startDate) {
       baseWhereClauses.push({
-        clause: "created_at >= ?",
+        clause: "createdAt >= ?",
         binding: new Date(startDate).toISOString(),
       });
     }
@@ -605,7 +605,7 @@ export async function getAiUsageLogsForUser(
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
       baseWhereClauses.push({
-        clause: "created_at <= ?",
+        clause: "createdAt <= ?",
         binding: end.toISOString(),
       });
     }
@@ -646,15 +646,15 @@ export async function getAiUsageStatsForModel(
   const prisma = createPrismaClient(c.env.DB);
   const page = parseInt(c.req.query("page") || "1");
   const limit = parseInt(c.req.query("limit") || "20");
-  const sort = c.req.query("sort") || "total_tokens";
+  const sort = c.req.query("sort") || "totalTokens";
   // Whitelist sortable columns to prevent SQL injection
   const allowedSortColumns = [
-    "total_tokens",
-    "total_prompt_tokens",
-    "total_completion_tokens",
-    "total_calls",
+    "totalTokens",
+    "totalPromptTokens",
+    "totalCompletionTokens",
+    "totalCalls",
   ];
-  const sortColumn = allowedSortColumns.includes(sort) ? sort : "total_tokens";
+  const sortColumn = allowedSortColumns.includes(sort) ? sort : "totalTokens";
   const order =
     c.req.query("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
   const startDate = c.req.query("startDate");
@@ -666,28 +666,28 @@ export async function getAiUsageStatsForModel(
     const bindings: any[] = [model];
 
     if (startDate) {
-      whereClauses.push("l.created_at >= ?");
+      whereClauses.push("l.createdAt >= ?");
       bindings.push(new Date(startDate).toISOString());
     }
     if (endDate) {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
-      whereClauses.push("l.created_at <= ?");
+      whereClauses.push("l.createdAt <= ?");
       bindings.push(end.toISOString());
     }
     const whereClause = `WHERE ${whereClauses.join(" AND ")}`;
 
     const dataQuery = `
       SELECT
-        u.id as user_id,
-        u.name as user_name,
-        u.email as user_email,
-        SUM(l.prompt_tokens) as total_prompt_tokens,
-        SUM(l.completion_tokens) as total_completion_tokens,
-        SUM(l.total_tokens) as total_tokens,
-        COUNT(l.id) as total_calls
+        u.id as userId,
+        u.name as userName,
+        u.email as userEmail,
+        SUM(l.promptTokens) as totalPromptTokens,
+        SUM(l.completionTokens) as totalCompletionTokens,
+        SUM(l.totalTokens) as totalTokens,
+        COUNT(l.id) as totalCalls
       FROM ai_usage_logs as l
-      JOIN users as u ON l.user_id = u.id
+      JOIN users as u ON l.userId = u.id
       ${whereClause}
       GROUP BY u.id, u.name, u.email
       ORDER BY ${sortColumn} ${order}
@@ -696,7 +696,7 @@ export async function getAiUsageStatsForModel(
 
     const countQuery = `
       SELECT COUNT(*) as totalItems FROM (
-        SELECT 1 FROM ai_usage_logs as l ${whereClause} GROUP BY l.user_id
+        SELECT 1 FROM ai_usage_logs as l ${whereClause} GROUP BY l.userId
       )
     `;
 
@@ -709,13 +709,13 @@ export async function getAiUsageStatsForModel(
       countResult.length > 0 ? Number(countResult[0].totalItems) : 0;
 
     const formattedData = data.map((row: any) => ({
-      user_id: row.user_id,
-      user_name: row.user_name,
-      user_email: row.user_email,
-      total_prompt_tokens: Number(row.total_prompt_tokens),
-      total_completion_tokens: Number(row.total_completion_tokens),
-      total_tokens: Number(row.total_tokens),
-      total_calls: Number(row.total_calls),
+      userId: row.userId,
+      userName: row.userName,
+      userEmail: row.userEmail,
+      totalPromptTokens: Number(row.totalPromptTokens),
+      totalCompletionTokens: Number(row.totalCompletionTokens),
+      totalTokens: Number(row.totalTokens),
+      totalCalls: Number(row.totalCalls),
     }));
 
     await prisma.$disconnect();
@@ -912,7 +912,7 @@ export async function getUserPointTransactions(
 
     const transactions = await getPointTransactions(c.env.DB, userId, limit, offset);
 
-    // analysis_id 컬럼이 이미 있으므로 그대로 사용
+    // analysisId 컬럼이 이미 있으므로 그대로 사용
     const transactionsWithAnalysisId = transactions;
 
     return c.json({
@@ -920,13 +920,13 @@ export async function getUserPointTransactions(
       userId,
       transactions: transactionsWithAnalysisId.map((t: any) => ({
         id: t.id,
-        userId: t.user_id,
+        userId: t.userId,
         amount: t.amount,
         description: t.description,
         type: t.type,
         reference: t.reference,
-        analysisId: t.analysis_id,
-        createdAt: toUTC(t.created_at),
+        analysisId: t.analysisId,
+        createdAt: toUTC(t.createdAt),
       })),
       pagination: {
         currentPage: page,
@@ -970,26 +970,24 @@ export async function getUserAnalysisTransactions(
     // 분석 결과가 있는 거래만 조회
     const query = `
       SELECT 
-        pt.id, pt.user_id, pt.amount, pt.description, pt.type, pt.reference, pt.created_at,
-        sa.id as analysis_id, sa.analysis_type, sa.type as analysis_type_detail, sa.title
+        pt.id, pt.userId, pt.amount, pt.description, pt.type, pt.reference, pt.createdAt,
+        sa.id as analysisId, sa.analysis_type, sa.type as analysis_type_detail, sa.title
       FROM point_transactions pt
       LEFT JOIN saju_analyses sa ON (
         CASE 
           WHEN pt.reference LIKE 'saju_analysis_%' THEN CAST(SUBSTR(pt.reference, 14) AS INTEGER)
           WHEN pt.reference LIKE 'compatibility_analysis_%' THEN CAST(SUBSTR(pt.reference, 22) AS INTEGER)
-          WHEN pt.reference LIKE 'yearly_fortune_analysis_%' THEN CAST(SUBSTR(pt.reference, 25) AS INTEGER)
           ELSE NULL
         END = sa.id
       )
-      WHERE pt.user_id = ? 
+      WHERE pt.userId = ? 
         AND pt.reference IS NOT NULL
         AND (
           pt.reference LIKE 'saju_analysis_%' OR
-          pt.reference LIKE 'compatibility_analysis_%' OR
-          pt.reference LIKE 'yearly_fortune_analysis_%'
+          pt.reference LIKE 'compatibility_analysis_%'
         )
         AND sa.id IS NOT NULL
-      ORDER BY pt.created_at DESC 
+      ORDER BY pt.createdAt DESC 
       LIMIT ? OFFSET ?
     `;
 
@@ -1003,16 +1001,14 @@ export async function getUserAnalysisTransactions(
         CASE 
           WHEN pt.reference LIKE 'saju_analysis_%' THEN CAST(SUBSTR(pt.reference, 14) AS INTEGER)
           WHEN pt.reference LIKE 'compatibility_analysis_%' THEN CAST(SUBSTR(pt.reference, 22) AS INTEGER)
-          WHEN pt.reference LIKE 'yearly_fortune_analysis_%' THEN CAST(SUBSTR(pt.reference, 25) AS INTEGER)
           ELSE NULL
         END = sa.id
       )
-      WHERE pt.user_id = ? 
+      WHERE pt.userId = ? 
         AND pt.reference IS NOT NULL
         AND (
           pt.reference LIKE 'saju_analysis_%' OR
-          pt.reference LIKE 'compatibility_analysis_%' OR
-          pt.reference LIKE 'yearly_fortune_analysis_%'
+          pt.reference LIKE 'compatibility_analysis_%'
         )
         AND sa.id IS NOT NULL
     `;
@@ -1031,9 +1027,9 @@ export async function getUserAnalysisTransactions(
         description: t.description,
         type: t.type,
         reference: t.reference,
-        createdAt: toUTC(t.created_at),
+        createdAt: toUTC(t.createdAt),
         analysis: {
-          id: t.analysis_id,
+          id: t.analysisId,
           analysisType: t.analysis_type,
           type: t.analysis_type_detail,
           title: t.title

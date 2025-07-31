@@ -57,10 +57,10 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   });
 
   const AiUsageSortQuerySchema = z.object({
-    sort: z.string().default("total_tokens").optional().openapi({
+    sort: z.string().default("totalTokens").optional().openapi({
       param: { name: "sort", in: "query" },
       description: "정렬 필드",
-      example: "total_tokens",
+      example: "totalTokens",
     }),
     order: z
       .enum(["asc", "desc"])
@@ -510,8 +510,8 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
                   description: z.string().openapi({ example: "관리자 포인트 추가: 이벤트 보상" }),
                   type: z.string().openapi({ example: "CREDIT" }),
                   reference: z.string().nullable().openapi({ example: "admin_add_1234567890" }),
-                  created_at: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-                  analysis_id: z.number().int().nullable().openapi({ example: 1234567890, description: "분석 결과 ID (분석 거래인 경우)" }),
+                  createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                  analysisId: z.number().int().nullable().openapi({ example: 1234567890, description: "분석 결과 ID (분석 거래인 경우)" }),
                 }).openapi({ type: 'object' })
               ),
               pagination: z.object({

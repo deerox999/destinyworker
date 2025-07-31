@@ -7,8 +7,8 @@ export interface DocumentWithMetadata {
   text: string;
   metadata: Record<string, any> | null;
   // 스키마에 정의된 다른 필드들도 여기에 추가할 수 있습니다.
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**
@@ -134,16 +134,16 @@ export async function getDocumentsFromD1(
  * @param db D1 Database 인스턴스
  * @param userId 사용자 ID
  * @param model 사용된 AI 모델
- * @param usage 토큰 사용량 정보 { prompt_tokens: number, completion_tokens: number, total_tokens: number }
+ * @param usage 토큰 사용량 정보 { promptTokens: number, completionTokens: number, totalTokens: number }
  */
 export async function logAiUsage(
   db: D1Database,
   userId: number,
   model: string,
   usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
   }
 ): Promise<void> {
   // 로깅 실패가 주요 기능에 영향을 주지 않도록 try-catch로 감쌉니다.
@@ -154,9 +154,9 @@ export async function logAiUsage(
       data: {
         userId: userId,
         model: model,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
-        totalTokens: usage.total_tokens,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: usage.totalTokens,
       },
     });
     // 사용 후 즉시 연결을 해제합니다.
