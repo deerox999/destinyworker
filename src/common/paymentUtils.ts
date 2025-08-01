@@ -392,6 +392,7 @@ export async function refundPoints(
 
 /**
  * 포인트 거래의 analysisId를 업데이트합니다.
+ * Prisma 대신 직접 D1 쿼리를 사용합니다.
  */
 export async function updatePointTransactionAnalysisId(
   db: D1Database,
@@ -399,24 +400,17 @@ export async function updatePointTransactionAnalysisId(
   reference: string,
   analysisId: number
 ): Promise<boolean> {
-  const prisma = createPrismaClient(db);
   try {
-    const result = await prisma.pointTransaction.updateMany({
-      where: {
-        userId,
-        reference,
-        analysisId: null,
-      },
-      data: {
-        analysisId,
-      },
-    });
+    const result = await db
+      .prepare(
+        "UPDATE PointTransaction SET analysisId = ? WHERE userId = ? AND reference = ? AND analysisId IS NULL"
+      )
+      .bind(analysisId, userId, reference)
+      .run();
 
-    return result.count > 0;
+    return (result.meta?.changes ?? 0) > 0;
   } catch (error) {
     console.error("Update point transaction analysisId error:", error);
     return false;
-  } finally {
-    await prisma.$disconnect();
   }
 }
