@@ -1,31 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
-import { getAnalysisTypePoints } from "../../../../common/paymentUtils";
-import { createPrismaClient } from "../../../../common/prismaUtils";
-import { updatePointTransactionAnalysisId } from "../../../../common/paymentUtils";
-
-// 분석 작업 상태
-interface AnalysisJob {
-  id: string;
-  userId: number;
-  analysisType: string;
-  type: string;
-  pointsCost: number;
-  reference: string;
-  i18n: string;
-  timezone: string;
-  userPrompt: string;
-  systemPrompt?: string;
-  sajuData?: any;
-  conversationHistory?: any[];
-  model: string;
-  fortuneType?: string;
-  generationConfig?: any;
-  safetySettings?: any[];
-  createdAt: string;
-  status: "pending" | "processing" | "completed" | "failed";
-  result?: any;
-  error?: string;
-}
+import { getAnalysisTypePoints, updatePointTransactionAnalysisId } from "../../../../common/paymentUtils";
+import {
+  buildGeminiPayload,
+  generateTitle,
+  getResponseType,
+  saveSajuAnalysis,
+  type AnalysisJob,
+} from "../utils";
 
 export class SajuAnalysisWorker implements DurableObject {
   private state: DurableObjectState;
@@ -251,7 +232,7 @@ export class SajuAnalysisWorker implements DurableObject {
     }
 
     // 로컬 환경에서만 콘솔 로그 출력
-    if (this.env.NODE_ENV === 'development' || this.env.NODE_ENV === 'local') {
+    if (this.env.NODE_ENV === "development" || this.env.NODE_ENV === "local") {
       console.log(`[SajuAnalysisWorker] 스트리밍 작업 시작: ${jobId}`);
     }
 
@@ -261,7 +242,7 @@ export class SajuAnalysisWorker implements DurableObject {
         apiKey: this.env.GOOGLE_GEMINI_API_KEY,
       });
 
-      const payload = this.buildGeminiPayload(job);
+      const payload = buildGeminiPayload(job);
       const streamingResp = await ai.models.generateContentStream(payload);
 
       if (!streamingResp) {
@@ -289,33 +270,41 @@ export class SajuAnalysisWorker implements DurableObject {
 
             // 스트리밍 완료 후 DB 저장
             const analysisCompletedAt = new Date();
-            const title = self.generateTitle(job);
+            const title = generateTitle(job);
 
             try {
-              const saveResult = await self.saveSajuAnalysis(
+              const saveResult = await saveSajuAnalysis(
                 job,
                 fullResponse,
                 title,
-                analysisCompletedAt
+                analysisCompletedAt,
+                self.env
               );
               if (saveResult.success) {
                 // 포인트 거래 기록의 analysisId 업데이트
                 try {
-                  
-                  const updateTransactionResult = await updatePointTransactionAnalysisId(
-                    self.env.DB,
-                    job.userId,
-                    job.reference,
-                    saveResult.analysisId!
-                  );
-                  
+                  const updateTransactionResult =
+                    await updatePointTransactionAnalysisId(
+                      self.env.DB,
+                      job.userId,
+                      job.reference,
+                      saveResult.analysisId!
+                    );
+
                   if (updateTransactionResult) {
-                    console.log(`[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 성공: ${saveResult.analysisId}`);
+                    console.log(
+                      `[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 성공: ${saveResult.analysisId}`
+                    );
                   } else {
-                    console.warn(`[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 실패: ${saveResult.analysisId}`);
+                    console.warn(
+                      `[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 실패: ${saveResult.analysisId}`
+                    );
                   }
                 } catch (updateTransactionError) {
-                  console.error("[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 오류:", updateTransactionError);
+                  console.error(
+                    "[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 오류:",
+                    updateTransactionError
+                  );
                 }
 
                 job.status = "completed";
@@ -325,7 +314,7 @@ export class SajuAnalysisWorker implements DurableObject {
                   metadata: {
                     modelUsed: job.model,
                     timestamp: new Date().toISOString(),
-                    responseType: self.getResponseType(job.type),
+                    responseType: getResponseType(job.type),
                   },
                 };
               }
@@ -372,213 +361,6 @@ export class SajuAnalysisWorker implements DurableObject {
           headers: { "Content-Type": "application/json" },
         }
       );
-    }
-  }
-
-  private buildGeminiPayload(job: AnalysisJob): any {
-    const contents: any[] = [];
-
-    // 시스템 프롬프트 구성
-    let systemPrompt =
-      job.systemPrompt ||
-      "당신은 전문 사주명리학자입니다. 사용자의 사주 정보를 바탕으로 상세하고 친절하게 운세를 분석해주세요.";
-
-    if (job.i18n && job.i18n !== "ko") {
-      const languagePrompts: { [key: string]: string } = {
-        en: "You are a professional fortune teller and astrologer. Please provide detailed and friendly fortune analysis based on the user's birth chart information.",
-        ja: "あなたは専門の占い師・占星術師です。ユーザーの生年月日情報に基づいて、詳細で親切な運勢分析を提供してください。",
-        zh: "您是一位专业的算命师和占星师。请根据用户的生辰八字信息提供详细而友好的运势分析。",
-        vi: "Bạn là một nhà chiêm tinh và thầy bói chuyên nghiệp. Vui lòng cung cấp phân tích vận mệnh chi tiết và thân thiện dựa trên thông tin lá số tử vi của người dùng.",
-      };
-      systemPrompt =
-        job.systemPrompt || languagePrompts[job.i18n] || systemPrompt;
-    }
-
-    // 사주 데이터 추가
-    if (job.sajuData) {
-      if (job.sajuData.person1 && job.sajuData.person2) {
-        contents.push({
-          role: "user",
-          parts: [
-            {
-              text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람:\n${JSON.stringify(
-                job.sajuData.person1,
-                null,
-                2
-              )}\n\n두 번째 사람:\n${JSON.stringify(
-                job.sajuData.person2,
-                null,
-                2
-              )}`,
-            },
-          ],
-        });
-      } else {
-        contents.push({
-          role: "user",
-          parts: [
-            { text: `사주 데이터: ${JSON.stringify(job.sajuData, null, 2)}` },
-          ],
-        });
-      }
-    }
-
-    // 대화 기록 추가
-    if (job.conversationHistory && job.conversationHistory.length > 0) {
-      contents.push(...job.conversationHistory);
-    }
-
-    // 현재 사용자 프롬프트와 시스템 프롬프트 합치기
-    const combinedPrompt = `${systemPrompt}\n\n${job.userPrompt}`;
-    contents.push({
-      role: "user",
-      parts: [{ text: combinedPrompt }],
-    });
-
-    // API에서 전송한 설정을 우선 사용하고, 없으면 기본값 사용
-    const generationConfig = job.generationConfig || {
-      temperature: 0.4,
-      topP: 0.4,
-      topK: 40,
-      maxOutputTokens: 65535,
-    };
-
-    const safetySettings = job.safetySettings || [
-      {
-        category: "HARM_CATEGORY_HARASSMENT",
-        threshold: "BLOCK_MEDIUM_AND_ABOVE",
-      },
-      {
-        category: "HARM_CATEGORY_HATE_SPEECH",
-        threshold: "BLOCK_MEDIUM_AND_ABOVE",
-      },
-      {
-        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        threshold: "BLOCK_MEDIUM_AND_ABOVE",
-      },
-      {
-        category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-        threshold: "BLOCK_MEDIUM_AND_ABOVE",
-      },
-    ];
-
-    return {
-      model: job.model,
-      contents,
-      ...generationConfig,
-      safetySettings,
-    };
-  }
-
-  private generateTitle(job: AnalysisJob): string {
-    let title = `[${job.analysisType}]`;
-
-    if (job.fortuneType) {
-      title = `[${this.getFortuneTypeTitle(job.fortuneType)}]`;
-    }
-
-    if (job.sajuData) {
-      if (
-        job.sajuData.정보 &&
-        job.sajuData.정보.생년월일 &&
-        job.sajuData.정보.생년월일.이름
-      ) {
-        title += ` ${job.sajuData.정보.생년월일.이름}님`;
-      } else if (
-        job.sajuData.person1 &&
-        job.sajuData.person1.정보 &&
-        job.sajuData.person1.정보.생년월일 &&
-        job.sajuData.person1.정보.생년월일.이름
-      ) {
-        title += ` ${job.sajuData.person1.정보.생년월일.이름}님`;
-        if (
-          job.sajuData.person2 &&
-          job.sajuData.person2.정보 &&
-          job.sajuData.person2.정보.생년월일 &&
-          job.sajuData.person2.정보.생년월일.이름
-        ) {
-          title += ` & ${job.sajuData.person2.정보.생년월일.이름}님`;
-        }
-      }
-    }
-
-    return title;
-  }
-
-  private getFortuneTypeTitle(fortuneType: string): string {
-    switch (fortuneType) {
-      case "this_year":
-        return "올해운세";
-      case "next_year":
-        return "내년운세";
-      default:
-        return "연간운세";
-    }
-  }
-
-  private getResponseType(type: string): string {
-    switch (type) {
-      case "compatibility":
-        return "compatibility_analysis";
-      default:
-        return "text";
-    }
-  }
-
-  private async saveSajuAnalysis(
-    job: AnalysisJob,
-    aiResponse: string,
-    title: string,
-    analysisCompletedAt: Date
-  ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
-    try {
-      let birthData = null;
-      if (job.sajuData) {
-        if (job.sajuData.정보 && job.sajuData.정보.생년월일) {
-          birthData = job.sajuData.정보.생년월일;
-        } else if (
-          job.sajuData.person1 &&
-          job.sajuData.person1.정보 &&
-          job.sajuData.person1.정보.생년월일
-        ) {
-          birthData = {
-            person1: job.sajuData.person1.정보.생년월일,
-            person2: job.sajuData.person2?.정보?.생년월일 || null,
-          };
-        }
-      }
-
-      const prisma = createPrismaClient(this.env.DB);
-
-      const result = await prisma.sajuAnalysis.create({
-        data: {
-          userId: job.userId,
-          analysisType: job.analysisType,
-          type: job.type,
-          title: title,
-          sajuData: JSON.stringify(birthData),
-          userPrompt: job.userPrompt,
-          systemPrompt: job.systemPrompt || null,
-          aiResponse: aiResponse,
-          modelUsed: job.model,
-          pointsSpent: job.pointsCost,
-          i18n: job.i18n,
-          timezone: job.timezone,
-          analysisStartedAt: new Date(job.createdAt),
-          analysisCompletedAt: analysisCompletedAt,
-        },
-      });
-
-      return {
-        success: true,
-        analysisId: result.id,
-      };
-    } catch (error) {
-      console.error("사주 분석 결과 저장 실패:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
     }
   }
 }

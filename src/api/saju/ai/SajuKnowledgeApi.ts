@@ -30,7 +30,7 @@ export interface Env {
  */
 async function isQuerySajuRelated(ai: any, query: string): Promise<boolean> {
   try {
-    const { response } = await ai.run("@cf/meta/llama-3-8b-instruct", {
+    const { response } = await ai.run("@hf/google/gemma-7b-it", {
       prompt: `Is the following user query about "saju", "fortune-telling", "destiny", "tarot", "astrology", or other esoteric/divination topics? Answer with only "yes" or "no". Query: "${query}"`,
       max_tokens: 5,
     });

@@ -1,7 +1,7 @@
 # Cloudflare Workers 설정 파일
 
 # 호환성 날짜 (Workers 런타임 버전)
-compatibility_date = "2025-07-29"
+compatibility_date = "2025-07-26"
 
 # 메인 진입점 파일
 main = "src/index.ts"

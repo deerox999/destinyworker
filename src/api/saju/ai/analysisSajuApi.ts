@@ -1,13 +1,19 @@
 import { Context } from "hono";
-import { getAnalysisTypePoints, refundPoints, usePoints } from "../../../common/paymentUtils";
+import {
+  getAnalysisTypePoints,
+  refundPoints,
+  usePoints,
+} from "../../../common/paymentUtils";
 import { getUserFromToken } from "../../../common/utils";
 import {
   generateAnalysisPrompts,
   generateCompatibilityPrompts,
+  type PromptParams,
   type 분석관점,
   type 분석요소,
   type 이해도레벨,
 } from "./prompt/geminiPrompt";
+import { SERVER_MODEL_CONFIG } from "./utils";
 
 // API 사용자가 보내는 요청 본문 타입 정의 (안전한 파라미터만 허용)
 interface AnalysisSajuRequest {
@@ -22,6 +28,7 @@ interface AnalysisSajuRequest {
 
     // 프롬프트 생성 파라미터
     userQuestion?: string; // 사용자 추가 질문
+    userContext?: string; // 사용자 맥락정보
     toneOption?: 분석관점; // '현실적', '약간긍정', '약간부정'
     targetYear?: number; // 연간운세용
     understandingLevel?: 이해도레벨; // '초보', '중수', '전문가'
@@ -34,40 +41,19 @@ interface AnalysisSajuRequest {
   };
 }
 
-// 서버에서 고정할 모델 설정
-const SERVER_MODEL_CONFIG = {
-  // 생성 설정 (고정값)
-  generationConfig: {
-    temperature: 0.4,
-    topP: 0.4,
-    topK: 40,
-    maxOutputTokens: 65535,
-  },
-
-  // 안전 설정 (고정값)
-  safetySettings: [
-    {
-      category: "HARM_CATEGORY_HARASSMENT",
-      threshold: "BLOCK_MEDIUM_AND_ABOVE",
-    },
-    {
-      category: "HARM_CATEGORY_HATE_SPEECH",
-      threshold: "BLOCK_MEDIUM_AND_ABOVE",
-    },
-  ],
-};
-
 /**
  * 서버에서 안전하게 프롬프트 생성
  */
 function generateServerPrompts(
   request: AnalysisSajuRequest,
-  type: string
+  type: string,
+  user: any
 ): { systemPrompt: string; userPrompt: string; model: string } {
   const options = request.options || {};
   const {
     analysisType,
     userQuestion = "",
+    userContext = "",
     toneOption = "현실적",
     targetYear,
     understandingLevel = "중수",
@@ -75,42 +61,32 @@ function generateServerPrompts(
     i18n = "ko",
     stream = false,
   } = options;
-
-  let prompts: { systemPrompt: string; userPrompt: string };
-  let model: string;
-
   // stream 파라미터에 따라 모델 선택
   const baseModel = stream ? "gemini-2.5-flash" : "gemini-2.5-pro";
+  // 통합된 파라미터 객체 생성
+  const promptParams: PromptParams = {
+    language: i18n,
+    해설유형: analysisType,
+    사용자질문: userQuestion,
+    사용자맥락정보: userContext,
+    톤옵션: toneOption,
+    타겟년도: targetYear,
+    이해도레벨: understandingLevel,
+    선택된분석요소: selectedAnalysisElements,
+    user,
+  };
 
+  let prompts: { systemPrompt: string; userPrompt: string };
   if (type === "compatibility") {
-    // 궁합 분석
-    prompts = generateCompatibilityPrompts(
-      i18n,
-      analysisType,
-      userQuestion,
-      toneOption,
-      understandingLevel,
-      selectedAnalysisElements
-    );
-    model = baseModel;
+    prompts = generateCompatibilityPrompts(promptParams);
   } else {
-    // 일반 분석 (연간운세 포함)
-    prompts = generateAnalysisPrompts(
-      i18n,
-      analysisType,
-      userQuestion,
-      toneOption,
-      targetYear,
-      understandingLevel,
-      selectedAnalysisElements
-    );
-    model = baseModel;
+    prompts = generateAnalysisPrompts(promptParams);
   }
 
   return {
     systemPrompt: prompts.systemPrompt,
     userPrompt: prompts.userPrompt,
-    model,
+    model: baseModel,
   };
 }
 
@@ -130,7 +106,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     }
 
     const options = body.options || {};
-    
+
     // 분석 타입 결정 및 검증
     const type = options.type || "individual";
 
@@ -139,7 +115,8 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       if (!body.sajuData.person1 || !body.sajuData.person2) {
         return c.json(
           {
-            error: "궁합 분석을 위해서는 person1과 person2 데이터가 필요합니다.",
+            error:
+              "궁합 분석을 위해서는 person1과 person2 데이터가 필요합니다.",
             details: "sajuData에 person1과 person2가 포함되어야 합니다.",
           },
           400
@@ -150,7 +127,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     // 분석 타입에 따른 포인트 비용 결정
     const analysisType = options.analysisType || "종합운세";
     let pointsCost = getAnalysisTypePoints(analysisType);
-    
+
     // streaming이 false일 때 (더 비싼 모델 사용) 포인트 가격을 1.5배로 조정
     if (!options.stream) {
       pointsCost = Math.round(pointsCost * 1.5);
@@ -181,7 +158,8 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     // 서버에서 안전하게 프롬프트 생성
     const { systemPrompt, userPrompt, model } = generateServerPrompts(
       body,
-      type
+      type,
+      user
     );
 
     const jobId = `job_${Date.now()}_${Math.random()
@@ -208,7 +186,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       model,
       generationConfig: SERVER_MODEL_CONFIG.generationConfig,
       safetySettings: SERVER_MODEL_CONFIG.safetySettings,
-    }
+    };
 
     // Durable Object에 작업 등록
     const response = await durableObject.fetch("http://localhost/submit", {
