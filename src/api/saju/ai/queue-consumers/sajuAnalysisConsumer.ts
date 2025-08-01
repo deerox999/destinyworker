@@ -101,36 +101,49 @@ export async function saju_analysis_queue_handler(
     } catch (error) {
       console.error(`Error processing job ${message.body.jobId}:`, error);
 
-      // 실패 시 DB 업데이트 (에러 메시지로)
-      if (initialSaveResult?.analysisId) {
-        try {
-          await updateSajuAnalysis(
-            initialSaveResult.analysisId,
-            `분석 실패: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-            new Date(),
-            env
-          );
-        } catch (updateError) {
-          console.error("[Queue] 실패 상태 DB 업데이트 실패:", updateError);
-        }
-      }
-
       // 실패 시 포인트 환불
+      let refundSuccess = false;
+      let refundMessage = "";
       try {
         const { refundPoints } = await import(
           "../../../../common/paymentUtils"
         );
-        await refundPoints(
+        const refundResult = await refundPoints(
           env.DB,
           message.body.userId,
           message.body.pointsCost,
           `사주 분석 작업 실패로 인한 포인트 환불 (${message.body.type})`,
           `analysis_saju_${message.body.type}_refund_${Date.now()}`
         );
+        
+        if (refundResult.success) {
+          refundSuccess = true;
+          refundMessage = `포인트 환불 완료: ${message.body.pointsCost}포인트가 환불되었습니다.`;
+          console.log(`[Queue] 포인트 환불 성공: ${message.body.pointsCost}포인트`);
+        } else {
+          refundMessage = `포인트 환불 실패: ${refundResult.message}`;
+          console.error(`[Queue] 포인트 환불 실패: ${refundResult.message}`);
+        }
       } catch (refundError) {
+        refundMessage = `포인트 환불 중 오류 발생: ${refundError instanceof Error ? refundError.message : "Unknown error"}`;
         console.error("[Queue] 포인트 환불 실패:", refundError);
+      }
+
+      // 실패 시 DB 업데이트 (에러 메시지 + 환불 정보)
+      if (initialSaveResult?.analysisId) {
+        try {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          const failureMessage = `분석 실패: ${errorMessage}\n\n${refundMessage}`;
+          
+          await updateSajuAnalysis(
+            initialSaveResult.analysisId,
+            failureMessage,
+            new Date(),
+            env
+          );
+        } catch (updateError) {
+          console.error("[Queue] 실패 상태 DB 업데이트 실패:", updateError);
+        }
       }
     }
   });
