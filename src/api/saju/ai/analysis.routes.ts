@@ -42,38 +42,28 @@ export function createAnalysisRouter(
                     description: "분석 유형",
                     example: "종합운세",
                   }),
-                  type: z
-                    .enum(["individual", "compatibility"])
-                    .optional()
-                    .openapi({
-                      description:
-                        "분석 타입 (individual: 일반 분석, compatibility: 궁합 분석)",
-                      example: "individual",
-                    }),
+                  type: z.string().optional().openapi({
+                    description: "분석 타입 (예: individual, compatibility)",
+                    example: "individual",
+                  }),
                   userQuestion: z.string().optional().openapi({
                     description: "사용자 추가 질문",
                     example: "특별히 궁금한 점이 있나요?",
                   }),
-                  toneOption: z
-                    .enum(["현실적", "약간긍정", "약간부정"])
-                    .optional()
-                    .openapi({
-                      description: "분석 톤 옵션",
-                      example: "현실적",
-                    }),
+                  toneOption: z.string().optional().openapi({
+                    description: "분석 톤 옵션 (예: 현실적, 약간긍정, 약간부정)",
+                    example: "현실적",
+                  }),
                   targetYear: z.number().optional().openapi({
                     description: "타겟 년도 (연간운세용)",
-                    example: 2024,
+                    example: 2025,
                   }),
-                  understandingLevel: z
-                    .enum(["초보", "중수", "전문가"])
-                    .optional()
-                    .openapi({
-                      description: "사용자 이해도 레벨",
-                      example: "중수",
-                    }),
+                  understandingLevel: z.string().optional().openapi({
+                    description: "사용자 이해도 레벨 (예: 초보, 중수, 전문가)",
+                    example: "중수",
+                  }),
                   selectedAnalysisElements: z
-                    .array(z.enum(["십성", "신살", "십이신살"]))
+                    .array(z.string())
                     .optional()
                     .openapi({
                       description: "선택된 분석 요소들",
