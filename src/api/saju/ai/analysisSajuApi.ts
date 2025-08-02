@@ -83,11 +83,18 @@ function generateServerPrompts(
     prompts = generateAnalysisPrompts(promptParams);
   }
 
-  return {
+  const result = {
     systemPrompt: prompts.systemPrompt,
     userPrompt: prompts.userPrompt,
     model: baseModel,
   };
+
+  if (process.env.NODE_ENV === "development") {
+    console.log("promptParams", promptParams);
+    console.log("systemPrompt", result.systemPrompt);
+    console.log("userPrompt", result.userPrompt);
+  }
+  return result;
 }
 
 /**

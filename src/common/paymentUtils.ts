@@ -403,7 +403,7 @@ export async function updatePointTransactionAnalysisId(
   try {
     const result = await db
       .prepare(
-        "UPDATE PointTransaction SET analysisId = ? WHERE userId = ? AND reference = ? AND analysisId IS NULL"
+        "UPDATE point_transactions SET analysisId = ? WHERE userId = ? AND reference = ? AND analysisId IS NULL"
       )
       .bind(analysisId, userId, reference)
       .run();

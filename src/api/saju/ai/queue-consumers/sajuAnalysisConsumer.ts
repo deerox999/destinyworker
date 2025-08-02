@@ -75,7 +75,7 @@ export async function saju_analysis_queue_handler(
           "../../../../common/paymentUtils"
         );
         const updateTransactionResult = await updatePointTransactionAnalysisId(
-          env,
+          env.DB,
           message.body.userId,
           message.body.reference,
           initialSaveResult.analysisId!
