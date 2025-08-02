@@ -1105,9 +1105,12 @@ export async function getAnalysisById(
     // 사주 데이터를 JSON으로 파싱
     let sajuData = null;
     try {
-      sajuData = JSON.parse(analysis.sajuData);
+      if (analysis.sajuData && analysis.sajuData.trim() !== '') {
+        sajuData = JSON.parse(analysis.sajuData);
+      }
     } catch (e) {
       console.error("사주 데이터 파싱 오류:", e);
+      console.error("원본 sajuData:", analysis.sajuData);
     }
 
     return c.json({
