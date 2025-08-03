@@ -23,22 +23,24 @@ export class SajuAnalysisWorker implements DurableObject {
     const path = url.pathname;
 
     switch (path) {
-      case "/status":
-        return this.handleStatus(request);
-      case "/submit":
-        return this.handleSubmit(request);
-      case "/update-status":
-        return this.handleUpdateStatus(request);
-      case "/stream":
-        return this.handleStream(request);
-      case "/process-background":
-        return this.handleProcessBackground(request);
+      case "/jobs/status":
+        return this.handleJobStatus(request);
+      case "/jobs/create":
+        return this.handleJobCreate(request);
+      case "/jobs/update":
+        return this.handleJobUpdate(request);
+      case "/jobs/stream":
+        return this.handleJobStream(request);
       default:
         return new Response("Not Found", { status: 404 });
     }
   }
 
-  private async handleStatus(request: Request): Promise<Response> {
+  /**
+   * Job 상태 조회
+   * GET /jobs/status?jobId=xxx
+   */
+  private async handleJobStatus(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const jobId = url.searchParams.get("jobId");
 
@@ -71,7 +73,11 @@ export class SajuAnalysisWorker implements DurableObject {
     );
   }
 
-  private async handleSubmit(request: Request): Promise<Response> {
+  /**
+   * Job 생성 (Queue Consumer가 호출)
+   * POST /jobs/create
+   */
+  private async handleJobCreate(request: Request): Promise<Response> {
     try {
       const body = (await request.json()) as any;
       const jobId =
@@ -125,7 +131,11 @@ export class SajuAnalysisWorker implements DurableObject {
     }
   }
 
-  private async handleUpdateStatus(request: Request): Promise<Response> {
+  /**
+   * Job 상태 업데이트 (Queue Consumer가 호출)
+   * POST /jobs/update
+   */
+  private async handleJobUpdate(request: Request): Promise<Response> {
     try {
       const body = (await request.json()) as any;
       const { jobId, status, result, error } = body;
@@ -177,7 +187,11 @@ export class SajuAnalysisWorker implements DurableObject {
     }
   }
 
-  private async handleStream(request: Request): Promise<Response> {
+  /**
+   * 실시간 스트리밍 처리
+   * POST /jobs/stream
+   */
+  private async handleJobStream(request: Request): Promise<Response> {
     try {
       const body = (await request.json()) as any;
       const jobId =
@@ -352,138 +366,6 @@ export class SajuAnalysisWorker implements DurableObject {
         }),
         {
           status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-    }
-  }
-
-  // 신규 백그라운드 처리 엔드포인트 (동기식 처리로 변경)
-  private async handleProcessBackground(request: Request): Promise<Response> {
-    try {
-      const body = (await request.json()) as any;
-      const jobId =
-        body.jobId || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      const job: AnalysisJob = {
-        id: jobId,
-        userId: body.userId,
-        analysisType: body.analysisType || "general",
-        type: body.type || "individual",
-        pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
-        reference: body.reference,
-        i18n: body.i18n || "ko",
-        timezone: body.timezone || "Asia/Seoul",
-        userPrompt: body.userPrompt,
-        systemPrompt: body.systemPrompt,
-        sajuData: body.sajuData,
-        conversationHistory: body.conversationHistory,
-        model: body.model,
-        fortuneType: body.fortuneType,
-        createdAt: new Date().toISOString(),
-        status: "processing",
-      };
-      this.jobs.set(jobId, job);
-
-      try {
-        // Gemini API 호출 (동기식)
-        const ai = new GoogleGenAI({ apiKey: this.env.GOOGLE_GEMINI_API_KEY });
-        const payload = buildGeminiPayload(job);
-        const result = await ai.models.generateContent(payload);
-        
-        if (!result) {
-          throw new Error("AI 응답을 받을 수 없습니다.");
-        }
-        
-        // Gemini API 응답에서 텍스트 추출
-        let text = "";
-        if (result.text) {
-          text = result.text;
-        } else {
-          // 응답 구조 확인을 위한 로깅
-          console.log("Gemini API 응답 구조:", JSON.stringify(result, null, 2));
-          text = "죄송합니다. 답변을 생성할 수 없습니다.";
-        }
-        
-        // DB 저장
-        const analysisCompletedAt = new Date();
-        const title = generateTitle(job);
-        
-        const saveResult = await saveSajuAnalysis(
-          job,
-          text,
-          title,
-          analysisCompletedAt,
-          this.env
-        );
-        
-        if (saveResult.success) {
-          // 포인트 거래 기록의 analysisId 업데이트
-          try {
-            await updatePointTransactionAnalysisId(
-              this.env.DB,
-              job.userId,
-              job.reference,
-              saveResult.analysisId!
-            );
-          } catch (updateTransactionError) {
-            console.error("포인트 거래 analysisId 업데이트 오류:", updateTransactionError);
-          }
-          
-          job.status = "completed";
-          job.result = {
-            answer: text,
-            analysisId: saveResult.analysisId,
-            metadata: {
-              modelUsed: job.model,
-              timestamp: new Date().toISOString(),
-              responseType: getResponseType(job.type),
-            },
-          };
-          
-          return new Response(
-            JSON.stringify({
-              success: true,
-              jobId: jobId,
-              status: "completed",
-              analysisId: saveResult.analysisId,
-              result: {
-                answer: text,
-                analysisId: saveResult.analysisId,
-              },
-            }),
-            {
-              headers: { "Content-Type": "application/json" },
-            }
-          );
-        } else {
-          throw new Error(`DB 저장 실패: ${saveResult.error}`);
-        }
-      } catch (error) {
-        job.status = "failed";
-        job.error = error instanceof Error ? error.message : "Unknown error";
-        
-        return new Response(
-          JSON.stringify({
-            success: false,
-            jobId: jobId,
-            status: "failed",
-            error: error instanceof Error ? error.message : "Unknown error",
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    } catch (error) {
-      return new Response(
-        JSON.stringify({
-          error: "Invalid request body",
-          details: error instanceof Error ? error.message : "Unknown error",
-        }),
-        {
-          status: 400,
           headers: { "Content-Type": "application/json" },
         }
       );

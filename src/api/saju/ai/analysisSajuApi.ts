@@ -113,6 +113,104 @@ function generateServerPrompts(
 }
 
 /**
+ * Durable Object와의 통신을 담당하는 헬퍼 함수
+ */
+class DurableObjectClient {
+  constructor(private env: any, private userId: number) {}
+
+  /**
+   * Job 생성
+   */
+  async createJob(jobData: any): Promise<{ success: boolean; jobId?: string; error?: string }> {
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const durableObjectId = this.env.SAJU_ANALYSIS_WORKER.idFromName(
+      `user_${this.userId}_${jobId}`
+    );
+    const durableObject = this.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
+
+    try {
+      const response = await durableObject.fetch("http://localhost/jobs/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...jobData, jobId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        return { success: false, error: errorData.error || "Unknown error" };
+      }
+
+      const result = await response.json();
+      return { success: true, jobId: result.jobId };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      };
+    }
+  }
+
+  /**
+   * Job 상태 조회
+   */
+  async getJobStatus(jobId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    const durableObjectId = this.env.SAJU_ANALYSIS_WORKER.idFromName(
+      `user_${this.userId}`
+    );
+    const durableObject = this.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
+
+    try {
+      const response = await durableObject.fetch(
+        `http://localhost/jobs/status?jobId=${jobId}`,
+        { method: "GET" }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        return { success: false, error: errorData.error || "Unknown error" };
+      }
+
+      const result = await response.json();
+      return { success: true, data: result };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      };
+    }
+  }
+
+  /**
+   * 스트리밍 처리
+   */
+  async startStreaming(jobData: any): Promise<Response> {
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const durableObjectId = this.env.SAJU_ANALYSIS_WORKER.idFromName(
+      `user_${this.userId}_${jobId}`
+    );
+    const durableObject = this.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
+
+    try {
+      const response = await durableObject.fetch("http://localhost/jobs/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...jobData, jobId }),
+      });
+
+      return response;
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          error: "스트리밍 시작 실패",
+          details: error instanceof Error ? error.message : "Unknown error",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }
+}
+
+/**
  * 통합 사주 분석 API - 모든 분석 유형을 하나의 엔드포인트로 처리
  */
 export async function AnalysisSaju(c: Context): Promise<Response> {
@@ -120,16 +218,16 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
   if (!user) {
     return c.json({ error: "Unauthorized: Invalid token" }, 401);
   }
+
   try {
     const body: AnalysisSajuRequest = await c.req.json();
+    
     // 필수 필드 검증
     if (!body.sajuData) {
       return c.json({ error: "sajuData는 필수입니다." }, 400);
     }
 
     const options = body.options || {};
-
-    // 분석 타입 결정 및 검증
     const type = options.type || "individual";
 
     // 궁합 분석의 경우 추가 검증
@@ -137,8 +235,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       if (!body.sajuData.person1 || !body.sajuData.person2) {
         return c.json(
           {
-            error:
-              "궁합 분석을 위해서는 person1과 person2 데이터가 필요합니다.",
+            error: "궁합 분석을 위해서는 person1과 person2 데이터가 필요합니다.",
             details: "sajuData에 person1과 person2가 포함되어야 합니다.",
           },
           400
@@ -185,78 +282,27 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       c
     );
 
-    const jobId = `job_${Date.now()}_${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-
-    // Durable Object에 작업 제출 - jobId를 포함하여 고유한 Durable Object 생성
-    const durableObjectId = c.env.SAJU_ANALYSIS_WORKER.idFromName(
-      `user_${user.id}_${jobId}`
-    );
-    const durableObject = c.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
-
-    const jobData = {
-      userId: user.id,
-      analysisType,
-      type,
-      pointsCost,
-      reference,
-      i18n: options.i18n || "ko",
-      timezone: options.timezone || "Asia/Seoul",
-      userPrompt,
-      systemPrompt,
-      sajuData: body.sajuData,
-      model,
-    };
-
-    // Durable Object에 작업 등록
-    const response = await durableObject.fetch("http://localhost/submit", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ...jobData,
-        jobId,
-      }),
-    });
-
-    if (!response.ok) {
-      // 실패 시 포인트 환불
-      await refundPoints(
-        c.env.DB,
-        user.id,
-        pointsCost,
-        `사주 분석 작업 제출 실패로 인한 포인트 환불 (${type})`,
-        `analysis_saju_${type}_refund_${Date.now()}`
-      );
-
-      const errorData = await response.json();
-      return c.json(
-        {
-          error: "분석 작업 제출에 실패했습니다.",
-          details: errorData.error || "Unknown error",
-        },
-        500
-      );
-    }
+    // Durable Object 클라이언트 생성
+    const doClient = new DurableObjectClient(c.env, user.id);
 
     // 스트리밍 요청인지 확인
     if (options.stream) {
-      // 스트리밍 응답 처리
-      const streamResponse = await durableObject.fetch(
-        "http://localhost/stream",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...jobData,
-            jobId,
-          }),
-        }
-      );
+      // 스트리밍 처리
+      const jobData = {
+        userId: user.id,
+        analysisType,
+        type,
+        pointsCost,
+        reference,
+        i18n: options.i18n || "ko",
+        timezone: options.timezone || "Asia/Seoul",
+        userPrompt,
+        systemPrompt,
+        sajuData: body.sajuData,
+        model,
+      };
+
+      const streamResponse = await doClient.startStreaming(jobData);
 
       if (!streamResponse.ok) {
         // 실패 시 포인트 환불
@@ -268,7 +314,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
           `analysis_saju_${type}_stream_refund_${Date.now()}`
         );
 
-        const errorData = await streamResponse.json();
+        const errorData:any = await streamResponse.json();
         return c.json(
           {
             error: "스트리밍 분석 작업 제출에 실패했습니다.",
@@ -292,35 +338,65 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
         headers: headers,
       });
     } else {
-      // 비동기 처리 (기존 방식)
-      // Queue가 있는 경우에만 전송
+      // 비동기 처리
+      const jobData = {
+        userId: user.id,
+        analysisType,
+        type,
+        pointsCost,
+        reference,
+        i18n: options.i18n || "ko",
+        timezone: options.timezone || "Asia/Seoul",
+        userPrompt,
+        systemPrompt,
+        sajuData: body.sajuData,
+        model,
+      };
+
+      // Job 생성
+      const createResult = await doClient.createJob(jobData);
+
+      if (!createResult.success) {
+        // 실패 시 포인트 환불
+        await refundPoints(
+          c.env.DB,
+          user.id,
+          pointsCost,
+          `사주 분석 작업 제출 실패로 인한 포인트 환불 (${type})`,
+          `analysis_saju_${type}_refund_${Date.now()}`
+        );
+
+        return c.json(
+          {
+            error: "분석 작업 제출에 실패했습니다.",
+            details: createResult.error || "Unknown error",
+          },
+          500
+        );
+      }
+
+      // Queue에 작업 전송
       if (c.env.QUEUE) {
         try {
           await c.env.QUEUE.send({
             ...jobData,
-            jobId,
-            useProcessBackground: true, // 신규 방식 사용 (기본값)
-            // durableObjectId 제거 - Queue Consumer에서 직접 처리
+            jobId: createResult.jobId,
           });
-          console.log(`[Queue] 작업 전송 성공: ${jobId} (신규 방식)`);
+          console.log(`[Queue] 작업 전송 성공: ${createResult.jobId}`);
         } catch (queueError) {
           console.error("[Queue] 전송 실패:", queueError);
-          // Queue 실패 시에도 작업은 등록되었으므로 계속 진행
-          // 하지만 사용자에게 알림
-          console.warn(`[Queue] Queue 전송 실패했지만 작업은 등록됨: ${jobId}`);
+          console.warn(`[Queue] Queue 전송 실패했지만 작업은 등록됨: ${createResult.jobId}`);
         }
       } else {
         console.warn("[Queue] QUEUE가 설정되지 않음");
       }
 
-      const result = await response.json();
-
       return c.json(
         {
           success: true,
-          jobId: result.jobId,
-          message: result.message,
-          status: result.status,
+          jobId: createResult.jobId,
+          message: "분석 작업이 등록되었습니다. Queue에서 처리됩니다.",
+          status: "pending",
           points: {
             deducted: pointsCost,
             remaining: pointValidation.remainingPoints || null,
@@ -360,40 +436,28 @@ export async function GetAnalysisSajuStatus(c: Context): Promise<Response> {
       return c.json({ error: "jobId 파라미터가 필요합니다." }, 400);
     }
 
-    // Durable Object에서 작업 상태 조회
-    const durableObjectId = c.env.SAJU_ANALYSIS_WORKER.idFromName(
-      `user_${user.id}`
-    );
-    const durableObject = c.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
+    // Durable Object 클라이언트 생성
+    const doClient = new DurableObjectClient(c.env, user.id);
+    const statusResult = await doClient.getJobStatus(jobId);
 
-    const response = await durableObject.fetch(
-      `http://localhost/status?jobId=${jobId}`,
-      {
-        method: "GET",
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
+    if (!statusResult.success) {
       return c.json(
         {
           error: "작업 상태 조회에 실패했습니다.",
-          details: errorData.error || "Unknown error",
+          details: statusResult.error || "Unknown error",
         },
-        response.status
+        500
       );
     }
-
-    const result = await response.json();
 
     return c.json(
       {
         success: true,
-        jobId: result.jobId,
-        status: result.status,
-        createdAt: result.createdAt,
-        result: result.result,
-        error: result.error,
+        jobId: statusResult.data.jobId,
+        status: statusResult.data.status,
+        createdAt: statusResult.data.createdAt,
+        result: statusResult.data.result,
+        error: statusResult.data.error,
       },
       200
     );
