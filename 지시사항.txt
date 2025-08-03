@@ -1,19 +1,35 @@
-2:24:44.945	found 0 vulnerabilities
-22:24:45.028	Executing user deploy command: npm run deploy
-22:24:45.245	
-22:24:45.245	> deploy
-22:24:45.245	> wrangler deploy
-22:24:45.245	
-22:24:46.129	
-22:24:46.129	 ⛅️ wrangler 4.26.1 (update available 4.27.0)
-22:24:46.129	─────────────────────────────────────────────
-22:24:46.136	
-22:24:47.183	✘ [ERROR] Processing wrangler.toml configuration:
-22:24:47.183	
-22:24:47.183	    - "send_email[0]" bindings should have a string "name" field but got {"binding":"EMAIL_SENDER"}.
-22:24:47.183	
-22:24:47.183	
-22:24:47.199	
-22:24:47.199	Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
-22:24:47.220	🪵  Logs were written to "/opt/buildhome/.config/.wrangler/logs/wrangler-2025-08-03_13-24-45_617.log"
-22:24:47.315	Failed: error occurred while running deploy command
+chunk-CcO9ZuuX.js:34 url : /api/auth/local/request-code {error: '인증 코드 이메일 전송에 실패했습니다.'}
+
+[wrangler:info] POST /api/auth/local/request-code 500 Internal Server Error (140ms)
+X [ERROR] Request auth code error: PrismaClientKnownRequestError: 
+
+  Invalid `prisma.emailAuthCode.upsert()` invocation:
+
+
+  The table `main.email_auth_codes` does not exist in the current database.
+      at br2.handleRequestError
+  (file:///C:/projects/destinyworker/node_modules/@prisma/client/runtime/wasm-engine-edge.js:21:7710)     
+      at br2.handleAndLogRequestError
+  (file:///C:/projects/destinyworker/node_modules/@prisma/client/runtime/wasm-engine-edge.js:21:7035)     
+      at br2.request
+  (file:///C:/projects/destinyworker/node_modules/@prisma/client/runtime/wasm-engine-edge.js:21:6748)     
+      at async f
+  (file:///C:/projects/destinyworker/node_modules/@prisma/client/runtime/wasm-engine-edge.js:30:9707)     
+      at async requestEmailAuthCode
+  (file:///C:/projects/destinyworker/src/api/user/auth/localAuthApi.ts:67:5)
+      at async dispatch (file:///C:/projects/destinyworker/node_modules/hono/dist/compose.js:22:17)       
+      at null.<anonymous> (async
+  file:///C:/projects/destinyworker/.wrangler/tmp/dev-H6Q2nk/index.js:11088:5)
+      at async mw
+  (file:///C:/projects/destinyworker/node_modules/@hono/zod-openapi/dist/index.js:90:26)
+      at async dispatch (file:///C:/projects/destinyworker/node_modules/hono/dist/compose.js:22:17)       
+      at async cors2
+  (file:///C:/projects/destinyworker/node_modules/hono/dist/middleware/cors/index.js:84:5) {
+    code: 'P2021',
+    meta: { modelName: 'EmailAuthCode', table: 'main.email_auth_codes' },
+    clientVersion: '6.10.1'
+  }
+
+
+⎔ Reloading local server...
+X [ERROR] EMAIL_SENDER binding is not configured.

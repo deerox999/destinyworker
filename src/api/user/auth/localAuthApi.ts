@@ -3,8 +3,14 @@ import { Context } from "hono";
 import { generateJWT } from "../../../common/utils";
 
 async function sendAuthCodeByEmail(c: Context, email: string, code: string): Promise<boolean> {
+  // 로컬/개발 환경에서는 실제 이메일을 보내지 않고 콘솔에 로그만 남깁니다.
+  if (c.env.ENVIRONMENT !== 'production') {
+    console.log(`[DEV MODE] Sending auth code ${code} to ${email}`);
+    return true;
+  }
+
   if (!c.env.EMAIL_SENDER) {
-    console.error("EMAIL_SENDER binding is not configured.");
+    console.error("EMAIL_SENDER binding is not configured for production.");
     return false;
   }
 

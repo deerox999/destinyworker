@@ -442,5 +442,5 @@ model EmailAuthCode {
   createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
   updatedAt   DateTime @updatedAt /// 마지막 업데이트 시간
 
-  @@map("email_auth_codes")
+  // @@map("email_auth_codes")
 } 
