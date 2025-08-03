@@ -203,8 +203,6 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       systemPrompt,
       sajuData: body.sajuData,
       model,
-      generationConfig: SERVER_MODEL_CONFIG.generationConfig,
-      safetySettings: SERVER_MODEL_CONFIG.safetySettings,
     };
 
     // Durable Object에 작업 등록

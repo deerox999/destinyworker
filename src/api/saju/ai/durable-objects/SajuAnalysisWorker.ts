@@ -91,8 +91,7 @@ export class SajuAnalysisWorker implements DurableObject {
         conversationHistory: body.conversationHistory,
         model: body.model,
         fortuneType: body.fortuneType,
-        generationConfig: body.generationConfig,
-        safetySettings: body.safetySettings,
+
         createdAt: new Date().toISOString(),
         status: "pending",
       };
@@ -198,8 +197,7 @@ export class SajuAnalysisWorker implements DurableObject {
         conversationHistory: body.conversationHistory,
         model: body.model,
         fortuneType: body.fortuneType,
-        generationConfig: body.generationConfig,
-        safetySettings: body.safetySettings,
+
         createdAt: new Date().toISOString(),
         status: "processing",
       };
@@ -238,17 +236,11 @@ export class SajuAnalysisWorker implements DurableObject {
 
     try {
       // Gemini API 호출
-      const ai = new GoogleGenAI({
-        apiKey: this.env.GOOGLE_GEMINI_API_KEY,
-      });
-
+      const ai = new GoogleGenAI({ apiKey: this.env.GOOGLE_GEMINI_API_KEY });
       const payload = buildGeminiPayload(job);
       const streamingResp = await ai.models.generateContentStream(payload);
 
-      if (!streamingResp) {
-        throw new Error("스트리밍 응답을 받을 수 없습니다.");
-      }
-
+      if (!streamingResp) throw new Error("스트리밍 응답을 받을 수 없습니다.")
       // 스트리밍 응답 생성
       let fullResponse = "";
       const self = this; // this 컨텍스트 보존

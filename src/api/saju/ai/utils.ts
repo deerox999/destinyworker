@@ -55,8 +55,6 @@ export interface SajuAnalysisMessage {
   conversationHistory?: any[];
   model: string;
   fortuneType?: string;
-  generationConfig?: any;
-  safetySettings?: any[];
 }
 
 // 분석 작업 상태
@@ -75,8 +73,6 @@ export interface AnalysisJob {
   conversationHistory?: any[];
   model: string;
   fortuneType?: string;
-  generationConfig?: any;
-  safetySettings?: any[];
   createdAt: string;
   status: "pending" | "processing" | "completed" | "failed";
   result?: any;
@@ -142,17 +138,12 @@ export function buildGeminiPayload(
     parts: [{ text: combinedPrompt }],
   });
 
-  // API에서 전송한 설정을 우선 사용하고, 없으면 기본값 사용
-  const generationConfig =
-    message.generationConfig || SERVER_MODEL_CONFIG.generationConfig;
-  const safetySettings =
-    message.safetySettings || SERVER_MODEL_CONFIG.safetySettings;
-
+  // SERVER_MODEL_CONFIG를 직접 사용
   return {
     model: message.model,
     contents,
-    ...generationConfig,
-    safetySettings,
+    generationConfig: SERVER_MODEL_CONFIG.generationConfig,
+    safetySettings: SERVER_MODEL_CONFIG.safetySettings,
   };
 }
 
