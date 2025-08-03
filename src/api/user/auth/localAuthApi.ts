@@ -79,6 +79,7 @@ export async function requestEmailAuthCode(c: Context): Promise<Response> {
           {
             error: "인증 코드 이메일 전송에 실패했습니다.",
             emailSent: emailSent,
+            authCode: authCode,
             MAIL_SENDER: c.env.EMAIL_SENDER,
           },
           500
