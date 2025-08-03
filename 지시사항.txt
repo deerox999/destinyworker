@@ -1,14 +1,19 @@
-22:20:25.516	> deploy
-22:20:25.516	> wrangler deploy
-22:20:25.516	
-22:20:26.271	
-22:20:26.271	 ⛅️ wrangler 4.26.1 (update available 4.27.0)
-22:20:26.271	─────────────────────────────────────────────
-22:20:26.341	▲ [WARNING] Processing wrangler.toml configuration:
-22:20:26.341	
-22:20:26.341	    - Unexpected fields found in queues.consumers[0] field: "batch_size","batch_timeout"
-22:20:26.342	
-22:20:26.342	
-22:20:26.342	
-22:20:26.342	✘ [ERROR] Processing wrangler.toml configuration:
-22:20:26.342	
+2:24:44.945	found 0 vulnerabilities
+22:24:45.028	Executing user deploy command: npm run deploy
+22:24:45.245	
+22:24:45.245	> deploy
+22:24:45.245	> wrangler deploy
+22:24:45.245	
+22:24:46.129	
+22:24:46.129	 ⛅️ wrangler 4.26.1 (update available 4.27.0)
+22:24:46.129	─────────────────────────────────────────────
+22:24:46.136	
+22:24:47.183	✘ [ERROR] Processing wrangler.toml configuration:
+22:24:47.183	
+22:24:47.183	    - "send_email[0]" bindings should have a string "name" field but got {"binding":"EMAIL_SENDER"}.
+22:24:47.183	
+22:24:47.183	
+22:24:47.199	
+22:24:47.199	Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
+22:24:47.220	🪵  Logs were written to "/opt/buildhome/.config/.wrangler/logs/wrangler-2025-08-03_13-24-45_617.log"
+22:24:47.315	Failed: error occurred while running deploy command

@@ -59,7 +59,7 @@ preview_bucket_name = "destiny-dev"
 experimental_remote = true
 
 [[send_email]] # 이메일 전송 설정
-binding = "EMAIL_SENDER" # 이메일 전송 바인딩
+name = "EMAIL_SENDER" # 이메일 전송 바인딩
 
 
 [queues] # 큐 설정 (비동기 작업 처리)
