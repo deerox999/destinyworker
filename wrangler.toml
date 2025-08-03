@@ -70,8 +70,8 @@ experimental_remote = true
 
 [[queues.consumers]] # 컨슈머 설정 (작업 처리)
 queue = "analysis"          # 분석 작업 처리
-batch_size = 10             # 배치 크기
-batch_timeout = 30          # 배치 타임아웃 (초)
+max_batch_size = 10             # 배치 크기
+max_batch_timeout = 30          # 배치 타임아웃 (초)
 max_retries = 3             # 최대 재시도 횟수
 max_concurrency = 10        # 병렬 처리량 증가 (로컬에선 1개로 제한적임)
 
