@@ -401,6 +401,24 @@ export async function updatePointTransactionAnalysisId(
   analysisId: number
 ): Promise<boolean> {
   try {
+    // 먼저 해당 거래가 존재하는지 확인
+    const checkResult = await db
+      .prepare(
+        "SELECT id, analysisId FROM point_transactions WHERE userId = ? AND reference = ?"
+      )
+      .bind(userId, reference)
+      .first();
+
+    if (!checkResult) {
+      return false;
+    }
+
+    // 이미 analysisId가 설정되어 있는지 확인
+    if (checkResult.analysisId !== null) {
+      return true; // 이미 설정되어 있으면 성공으로 처리
+    }
+
+    // analysisId 업데이트
     const result = await db
       .prepare(
         "UPDATE point_transactions SET analysisId = ? WHERE userId = ? AND reference = ? AND analysisId IS NULL"
@@ -410,7 +428,7 @@ export async function updatePointTransactionAnalysisId(
 
     return (result.meta?.changes ?? 0) > 0;
   } catch (error) {
-    console.error("Update point transaction analysisId error:", error);
+    console.error("[PaymentUtils] Update point transaction analysisId error:", error);
     return false;
   }
 }

@@ -31,6 +31,8 @@ export class SajuAnalysisWorker implements DurableObject {
         return this.handleUpdateStatus(request);
       case "/stream":
         return this.handleStream(request);
+      case "/process-background":
+        return this.handleProcessBackground(request);
       default:
         return new Response("Not Found", { status: 404 });
     }
@@ -350,6 +352,133 @@ export class SajuAnalysisWorker implements DurableObject {
         }),
         {
           status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+  }
+
+  // 신규 백그라운드 처리 엔드포인트
+  private async handleProcessBackground(request: Request): Promise<Response> {
+    try {
+      const body = (await request.json()) as any;
+      const jobId =
+        body.jobId || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      const job: AnalysisJob = {
+        id: jobId,
+        userId: body.userId,
+        analysisType: body.analysisType || "general",
+        type: body.type || "individual",
+        pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
+        reference: body.reference,
+        i18n: body.i18n || "ko",
+        timezone: body.timezone || "Asia/Seoul",
+        userPrompt: body.userPrompt,
+        systemPrompt: body.systemPrompt,
+        sajuData: body.sajuData,
+        conversationHistory: body.conversationHistory,
+        model: body.model,
+        fortuneType: body.fortuneType,
+        createdAt: new Date().toISOString(),
+        status: "processing",
+      };
+      this.jobs.set(jobId, job);
+
+      // 하트비트 + AI 응답 스트리밍
+      const self = this;
+      let fullResponse = "";
+      let aiError: any = null;
+      const stream = new ReadableStream({
+        async start(controller) {
+          // 하트비트 타이머
+          const heartbeatInterval = setInterval(() => {
+            controller.enqueue(new TextEncoder().encode(
+              `data: ${JSON.stringify({ type: "heartbeat", timestamp: Date.now() })}\n\n`
+            ));
+          }, 30000);
+          try {
+            // Gemini API 호출
+            const ai = new GoogleGenAI({ apiKey: self.env.GOOGLE_GEMINI_API_KEY });
+            const payload = buildGeminiPayload(job);
+            const result = await ai.models.generateContent(payload);
+            if (!result) throw new Error("AI 응답을 받을 수 없습니다.");
+            const text = result.text || "죄송합니다. 답변을 생성할 수 없습니다.";
+            fullResponse = text;
+            
+            // 긴 텍스트를 청크로 나누어 전송 (안전성 향상)
+            const chunkSize = 1000; // 1000자씩 나누기
+            for (let i = 0; i < text.length; i += chunkSize) {
+              const chunk = text.slice(i, i + chunkSize);
+              const safeChunk = chunk.replace(/[\u0000-\u001F\u007F-\u009F]/g, ''); // 제어 문자 제거
+              controller.enqueue(new TextEncoder().encode(
+                `data: ${JSON.stringify({ type: "content", text: safeChunk })}\n\n`
+              ));
+            }
+            
+            // DB 저장 등 후처리
+            const analysisCompletedAt = new Date();
+            const title = generateTitle(job);
+            try {
+              const saveResult = await saveSajuAnalysis(
+                job,
+                fullResponse,
+                title,
+                analysisCompletedAt,
+                self.env
+              );
+              if (saveResult.success) {
+                try {
+                  const updateTransactionResult = await updatePointTransactionAnalysisId(
+                    self.env.DB,
+                    job.userId,
+                    job.reference,
+                    saveResult.analysisId!
+                  );
+                  // 로그만
+                } catch (updateTransactionError) {}
+                job.status = "completed";
+                job.result = {
+                  answer: fullResponse,
+                  analysisId: saveResult.analysisId,
+                  metadata: {
+                    modelUsed: job.model,
+                    timestamp: new Date().toISOString(),
+                    responseType: getResponseType(job.type),
+                  },
+                };
+              }
+            } catch (saveError) {
+              aiError = saveError;
+            }
+            controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            clearInterval(heartbeatInterval);
+            controller.close();
+          } catch (error) {
+            aiError = error;
+            controller.enqueue(new TextEncoder().encode(
+              `data: ${JSON.stringify({ type: "error", message: error instanceof Error ? error.message : "Unknown error" })}\n\n`
+            ));
+            clearInterval(heartbeatInterval);
+            controller.close();
+          }
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          error: "Invalid request body",
+          details: error instanceof Error ? error.message : "Unknown error",
+        }),
+        {
+          status: 400,
           headers: { "Content-Type": "application/json" },
         }
       );

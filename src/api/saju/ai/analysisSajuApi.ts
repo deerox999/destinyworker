@@ -295,9 +295,10 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
           await c.env.QUEUE.send({
             ...jobData,
             jobId,
+            useProcessBackground: true, // 신규 방식 사용 (기본값)
             // durableObjectId 제거 - Queue Consumer에서 직접 처리
           });
-          console.log(`[Queue] 작업 전송 성공: ${jobId}`);
+          console.log(`[Queue] 작업 전송 성공: ${jobId} (신규 방식)`);
         } catch (queueError) {
           console.error("[Queue] 전송 실패:", queueError);
           // Queue 실패 시에도 작업은 등록되었으므로 계속 진행

@@ -40,7 +40,115 @@ export async function saju_analysis_queue_handler(
         );
       }
 
-      // Gemini API 직접 호출 (Durable Object 거치지 않음)
+      // 신규 방식: Durable Object /process-background로 위임 (기본값)
+      if (message.body.useProcessBackground !== false) { // false가 아니면 신규 방식 사용
+        const durableObjectId = env.SAJU_ANALYSIS_WORKER.idFromName(
+          `user_${message.body.userId}_${message.body.jobId || Date.now()}`
+        );
+        const durableObject = env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
+        const response = await durableObject.fetch("http://localhost/process-background", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            ...message.body, 
+            jobId: message.body.jobId,
+            analysisId: initialSaveResult.analysisId // DB 분석 ID 전달
+          }),
+        });
+        
+        // 스트리밍 응답 수신 (하트비트 포함)
+        const reader = response.body?.getReader();
+        let fullResponse = "";
+        let buffer = ""; // 불완전한 청크를 위한 버퍼
+        
+        while (reader) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = new TextDecoder().decode(value);
+          buffer += chunk;
+          
+          // 완전한 라인만 처리
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ""; // 마지막 불완전한 라인은 버퍼에 보관
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.slice(6);
+                // [DONE] 메시지 처리
+                if (jsonStr === '[DONE]') {
+                  continue;
+                }
+                
+                const data = JSON.parse(jsonStr);
+                if (data.type === 'heartbeat') {
+                  // 하트비트 처리 (로그만)
+                  // 개발 환경에서만 로그 출력
+                } else if (data.type === 'content') {
+                  fullResponse += data.text;
+                } else if (data.type === 'error') {
+                  throw new Error(data.message);
+                }
+              } catch (parseError) {
+                console.error(`[Queue] JSON 파싱 오류 (라인: ${line}):`, parseError);
+                // 파싱 실패해도 계속 진행
+                continue;
+              }
+            }
+          }
+        }
+        
+        // 분석 완료 후 DB 업데이트
+        const analysisCompletedAt = new Date();
+        const updateResult = await updateSajuAnalysis(
+          initialSaveResult.analysisId!,
+          fullResponse,
+          analysisCompletedAt,
+          env
+        );
+
+        if (!updateResult.success) {
+          throw new Error(
+            `분석 결과 업데이트에 실패했습니다: ${updateResult.error}`
+          );
+        }
+
+        // 포인트 거래 기록의 analysisId 업데이트
+        try {
+          const { updatePointTransactionAnalysisId } = await import(
+            "../../../../common/paymentUtils"
+          );
+          
+          const updateTransactionResult = await updatePointTransactionAnalysisId(
+            env.DB,
+            message.body.userId,
+            message.body.reference,
+            initialSaveResult.analysisId!
+          );
+
+          if (updateTransactionResult) {
+            console.log(
+              `[Queue] 포인트 거래 analysisId 업데이트 성공: ${initialSaveResult.analysisId}`
+            );
+          } else {
+            console.warn(
+              `[Queue] 포인트 거래 analysisId 업데이트 실패: ${initialSaveResult.analysisId}`
+            );
+          }
+        } catch (updateTransactionError) {
+          console.error(
+            "[Queue] 포인트 거래 analysisId 업데이트 오류:",
+            updateTransactionError
+          );
+        }
+
+        console.log(`[Queue] 신규 방식 작업 완료: ${message.body.jobId}`);
+        return; // 신규 방식 완료
+      }
+
+      // 기존 방식: Gemini API 직접 호출 (useProcessBackground가 false일 때만)
+      console.log(`[Queue] 기존 방식 사용: ${message.body.jobId}`);
       const ai = new GoogleGenAI({
         apiKey: env.GOOGLE_GEMINI_API_KEY,
       });
@@ -97,7 +205,7 @@ export async function saju_analysis_queue_handler(
         );
       }
 
-      console.log(`[Queue] 작업 완료: ${message.body.jobId}`);
+      console.log(`[Queue] 기존 방식 작업 완료: ${message.body.jobId}`);
     } catch (error) {
       console.error(`Error processing job ${message.body.jobId}:`, error);
 

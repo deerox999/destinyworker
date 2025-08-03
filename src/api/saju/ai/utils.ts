@@ -55,6 +55,9 @@ export interface SajuAnalysisMessage {
   conversationHistory?: any[];
   model: string;
   fortuneType?: string;
+  // 신규 추가 속성들
+  useProcessBackground?: boolean; // 테스트용 플래그
+  analysisId?: number; // DB 분석 ID (업데이트용)
 }
 
 // 분석 작업 상태
