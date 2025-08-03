@@ -87,11 +87,7 @@ function generateServerPrompts(
   if (stream) {
     baseModel = "gemini-2.5-flash";
   } else {
-    if (c.env.ENVIRONMENT === "development") {
-      baseModel = "gemini-2.5-pro";
-    } else {
-      baseModel = "gemini-2.5-flash";
-    }
+    baseModel = "gemini-2.5-pro";
   }
 
   const result = {
