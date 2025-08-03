@@ -47,7 +47,8 @@ interface AnalysisSajuRequest {
 function generateServerPrompts(
   request: AnalysisSajuRequest,
   type: string,
-  user: any
+  user: any,
+  c: Context
 ): { systemPrompt: string; userPrompt: string; model: string } {
   const options = request.options || {};
   const {
@@ -61,8 +62,8 @@ function generateServerPrompts(
     i18n = "ko",
     stream = false,
   } = options;
-  // stream 파라미터에 따라 모델 선택
-  const baseModel = stream ? "gemini-2.5-flash" : "gemini-2.5-pro";
+  let baseModel = ""; // stream 파라미터에 따라 모델 선택
+  
   // 통합된 파라미터 객체 생성
   const promptParams: PromptParams = {
     language: i18n,
@@ -83,13 +84,23 @@ function generateServerPrompts(
     prompts = generateAnalysisPrompts(promptParams);
   }
 
+  if (stream) {
+    baseModel = "gemini-2.5-flash";
+  } else {
+    if (c.env.ENVIRONMENT === "development") {
+      baseModel = "gemini-2.5-pro";
+    } else {
+      baseModel = "gemini-2.5-flash";
+    }
+  }
+
   const result = {
     systemPrompt: prompts.systemPrompt,
     userPrompt: prompts.userPrompt,
     model: baseModel,
   };
 
-  if (process.env.NODE_ENV === "development") {
+  if (c.env.ENVIRONMENT === "development") {
     console.log("promptParams", promptParams);
     console.log("systemPrompt", result.systemPrompt);
     console.log("userPrompt", result.userPrompt);
@@ -166,7 +177,8 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     const { systemPrompt, userPrompt, model } = generateServerPrompts(
       body,
       type,
-      user
+      user,
+      c
     );
 
     const jobId = `job_${Date.now()}_${Math.random()
@@ -271,10 +283,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       headers.set("Connection", "keep-alive");
       headers.set("X-AI-Model", model);
       headers.set("X-Points-Deducted", pointsCost.toString());
-      headers.set(
-        "X-Points-Remaining",
-        pointValidation.remainingPoints?.toString() || "0"
-      );
+      headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
 
       return new Response(streamResponse.body, {
         status: 200,

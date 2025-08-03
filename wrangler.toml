@@ -87,7 +87,7 @@ tag = "v1"
 new_classes = ["SajuAnalysisWorker"]  # 새로운 Durable Object 클래스
 
 [vars] # 환경 변수
-ENVIRONMENT = "development"       # 환경 설정
+ENVIRONMENT = "production"       # 환경 설정
 
 [observability] # 관찰성 설정 (모니터링)
 enabled = true                   # 관찰성 기능 활성화
