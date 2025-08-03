@@ -87,10 +87,15 @@ function generateServerPrompts(
   if (stream) {
     baseModel = "gemini-2.5-flash";
   } else {
-    /* 524 오류 관련해서 해결할 수 없음. DNS 우회도 안됨. 
-      엔터프라이즈를 쓰면 된다고 하는데, 200달러 이상이다. 현 시점에서는 무리임.
+    /* 
+      524 오류 관련해서 해결할 수 없음. DNS 프록시 꺼봐도 안됨. (api2.youram.me)
+      엔터프라이즈를 쓰면 된다고 하는데, 200달러 이상이라, 현 시점에서는 무리임.
     */
-    baseModel = "gemini-2.5-flash"; // baseModel = "gemini-2.5-pro";
+    if (c.env.ENVIRONMENT === "development") {
+      baseModel = "gemini-2.5-pro";
+    } else {
+      baseModel = "gemini-2.5-flash";
+    }
   }
 
   const result = {
