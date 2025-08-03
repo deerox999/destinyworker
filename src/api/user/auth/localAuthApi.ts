@@ -1,42 +1,30 @@
-import { createPrismaClient } from "../../../common/prismaUtils";
+import { EmailMessage } from "cloudflare:email";
 import { Context } from "hono";
+import { createPrismaClient } from "../../../common/prismaUtils";
 import { generateJWT } from "../../../common/utils";
 
 async function sendAuthCodeByEmail(c: Context, email: string, code: string): Promise<boolean> {
-  // 로컬/개발 환경에서는 실제 이메일을 보내지 않고 콘솔에 로그만 남깁니다.
-  if (c.env.ENVIRONMENT !== 'production') {
-    console.log(`[DEV MODE] Sending auth code ${code} to ${email}`);
-    return true;
-  }
-
-  if (!c.env.EMAIL_SENDER) {
-    console.error("EMAIL_SENDER binding is not configured for production.");
-    return false;
-  }
-
   try {
-    const message = {
-        to: [{ email: email, name: email.split('@')[0] }],
-        from: { email: "noreply@youram.me", name: "Destiny Worker" },
-        subject: "[Destiny Worker] 인증 코드가 도착했습니다.",
-        content: [
-          {
-            type: "html",
-            value: `<div style="font-family: sans-serif; text-align: center; padding: 20px;">
-                <h2>인증 코드 안내</h2>
-                <p>Destiny Worker에 로그인하려면 아래 인증 코드를 입력해주세요.</p>
-                <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px; margin: 20px 0; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
-                  ${code}
-                </p>
-                <p>이 코드는 10분 동안 유효합니다.</p>
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-                <p style="font-size: 12px; color: #888;">본인이 요청하지 않은 경우 이 이메일을 무시해주세요.</p>
-              </div>
-            `,
-          },
-        ],
-      };
-
+    const emailContent = `From: Destiny Worker <noreply@youram.me>
+    To: ${email}
+    Subject: [Destiny Worker] 인증 코드가 도착했습니다.
+    Content-Type: text/html; charset=UTF-8
+    
+    <div style="font-family: sans-serif; text-align: center; padding: 20px;">
+      <h2>인증 코드 안내</h2>
+      <p>Destiny Worker에 로그인하려면 아래 인증 코드를 입력해주세요.</p>
+      <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px; margin: 20px 0; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
+        ${code}
+      </p>
+      <p>이 코드는 10분 동안 유효합니다.</p>
+    </div>`;
+    
+    const message = new EmailMessage(
+      "noreply@youram.me",
+      email,
+      emailContent
+    );
+    
     await c.env.EMAIL_SENDER.send(message);
     console.log(`Authentication code sent to ${email}`);
     return true;
