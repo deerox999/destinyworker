@@ -17,13 +17,12 @@ async function sendAuthCodeByEmail(c: Context, email: string, code: string): Pro
   try {
     const message = {
         to: [{ email: email, name: email.split('@')[0] }],
-        from: { email: "jswork9999@gmail.com", name: "Destiny Worker" },
+        from: { email: "noreply@youram.me", name: "Destiny Worker" },
         subject: "[Destiny Worker] 인증 코드가 도착했습니다.",
         content: [
           {
             type: "html",
-            value: `
-              <div style="font-family: sans-serif; text-align: center; padding: 20px;">
+            value: `<div style="font-family: sans-serif; text-align: center; padding: 20px;">
                 <h2>인증 코드 안내</h2>
                 <p>Destiny Worker에 로그인하려면 아래 인증 코드를 입력해주세요.</p>
                 <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px; margin: 20px 0; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
