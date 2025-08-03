@@ -2,8 +2,6 @@ import { generateJWT, verifyJWT } from "../../../common/utils";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { Context } from "hono";
 
-
-
 interface GoogleUserInfo {
   sub: string;
   email: string;
@@ -77,24 +75,23 @@ async function findOrCreateUser(
   googleUserInfo: GoogleUserInfo
 ): Promise<any> {
   try {
-    // 기존 사용자 찾기
-    let user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { googleId: googleUserInfo.sub },
-          { email: googleUserInfo.email }
-        ]
-      }
+    // 기존 사용자 찾기 (이메일 우선)
+    let user = await prisma.user.findUnique({
+      where: { email: googleUserInfo.email },
     });
 
     if (user) {
-      // 기존 사용자 정보 업데이트 (이름만)
+      // 기존 사용자 정보 업데이트 (googleId가 없으면 추가, 이름 업데이트)
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { name: googleUserInfo.name }
+        data: {
+          googleId: user.googleId ?? googleUserInfo.sub,
+          name: googleUserInfo.name,
+          picture: googleUserInfo.picture,
+        },
       });
     } else {
-      // 새 사용자 생성 (기본 포인트 3000 지급)
+      // 새 사용자 생성
       user = await prisma.user.create({
         data: {
           googleId: googleUserInfo.sub,
@@ -102,7 +99,7 @@ async function findOrCreateUser(
           name: googleUserInfo.name,
           picture: googleUserInfo.picture,
           point: 3000,
-        }
+        },
       });
     }
 

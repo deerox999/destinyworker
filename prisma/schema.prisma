@@ -17,7 +17,7 @@ datasource db {
 /// Google 계정과 연동된 사용자 관리 시스템
 model User {
   id        Int      @id @default(autoincrement()) /// 사용자 고유 ID (자동 증가)
-  googleId  String   @unique /// Google 계정 고유 ID (Google에서 제공)
+  googleId  String?   @unique /// Google 계정 고유 ID (Google에서 제공)
   email     String   @unique /// 사용자 이메일 주소 (Google 계정 이메일)
   name      String /// 사용자 이름 (Google 계정 이름)
   userName  String? /// 사용자 프로필 이름 (선택사항)
@@ -430,4 +430,17 @@ model SajuAnalysis {
   @@index([userId, createdAt]) /// 사용자별 최신 분석 조회를 위한 인덱스
   @@index([userId, isFavorite]) /// 즐겨찾기 조회를 위한 인덱스
   @@map("saju_analyses")
+}
+
+/// 이메일 인증 코드 테이블 - 로컬 로그인 시 이메일 인증 코드 관리
+model EmailAuthCode {
+  id          Int      @id @default(autoincrement()) /// 고유 ID
+  email       String   @unique /// 이메일 주소
+  code        String   /// 인증 코드
+  expiresAt   DateTime /// 만료 시간
+  isVerified  Boolean  @default(false) /// 인증 완료 여부
+  createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
+  updatedAt   DateTime @updatedAt /// 마지막 업데이트 시간
+
+  @@map("email_auth_codes")
 } 

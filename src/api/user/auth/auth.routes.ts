@@ -1,5 +1,6 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { googleLogin, getUserInfo, logout, refreshToken } from "./googleAuthApi";
+import { requestEmailAuthCode, verifyEmailCodeAndLogin } from "./localAuthApi";
 import { SuccessSchema } from "../../../common/schemas";
 
 export function createAuthRouter(): OpenAPIHono {
@@ -137,6 +138,88 @@ export function createAuthRouter(): OpenAPIHono {
   });
 
   app.openapi(refreshTokenRoute, (c) => refreshToken(c));
+
+  // 이메일 인증 코드 요청 라우트
+  const requestEmailAuthCodeRoute = createRoute({
+    method: "post",
+    path: "/local/request-code",
+    summary: "이메일 인증 코드 요청",
+    description: "이메일로 인증 코드를 요청합니다.",
+    tags: ["인증"],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              email: z.string().email().openapi({ description: "이메일 주소", example: "user@example.com" }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "인증 코드 전송 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              message: z.string().openapi({ example: "인증 코드가 이메일로 전송되었습니다." }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      400: { description: "이메일 누락" },
+      500: { description: "서버 오류" },
+    },
+  });
+
+  app.openapi(requestEmailAuthCodeRoute, (c) => requestEmailAuthCode(c));
+
+  // 이메일 코드로 로그인 라우트
+  const emailLoginRoute = createRoute({
+    method: "post",
+    path: "/local/login",
+    summary: "이메일 코드로 로그인",
+    description: "이메일과 인증 코드로 로그인하고 JWT 토큰을 발급받습니다.",
+    tags: ["인증"],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              email: z.string().email().openapi({ description: "이메일 주소", example: "user@example.com" }),
+              code: z.string().openapi({ description: "6자리 인증 코드", example: "123456" }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "로그인 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              token: z.string().openapi({ description: "JWT", example: "your_jwt_token" }),
+              user: z.object({
+                id: z.number().openapi({ example: 1 }),
+                email: z.string().email().openapi({ example: "user@example.com" }),
+                name: z.string().openapi({ example: "홍길동" }),
+                picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
+                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
+              }).openapi({ type: 'object' }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      400: { description: "이메일 또는 코드 누락" },
+      401: { description: "유효하지 않은 코드" },
+      500: { description: "서버 오류" },
+    },
+  });
+
+  app.openapi(emailLoginRoute, (c) => verifyEmailCodeAndLogin(c));
 
   return app;
 }
