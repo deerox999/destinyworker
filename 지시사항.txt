@@ -1,35 +1,5 @@
-chunk-CcO9ZuuX.js:34 url : /api/auth/local/request-code {error: '인증 코드 이메일 전송에 실패했습니다.'}
+deerox999@gmail.com	487790	2025-08-03T13:49:02.382+00:00
 
-[wrangler:info] POST /api/auth/local/request-code 500 Internal Server Error (140ms)
-X [ERROR] Request auth code error: PrismaClientKnownRequestError: 
+프리즈마로 db에 코드 insert까지는 됬는데, 500오류가 발생하고 있어.
 
-  Invalid `prisma.emailAuthCode.upsert()` invocation:
-
-
-  The table `main.email_auth_codes` does not exist in the current database.
-      at br2.handleRequestError
-  (file:///C:/projects/destinyworker/node_modules/@prisma/client/runtime/wasm-engine-edge.js:21:7710)     
-      at br2.handleAndLogRequestError
-  (file:///C:/projects/destinyworker/node_modules/@prisma/client/runtime/wasm-engine-edge.js:21:7035)     
-      at br2.request
-  (file:///C:/projects/destinyworker/node_modules/@prisma/client/runtime/wasm-engine-edge.js:21:6748)     
-      at async f
-  (file:///C:/projects/destinyworker/node_modules/@prisma/client/runtime/wasm-engine-edge.js:30:9707)     
-      at async requestEmailAuthCode
-  (file:///C:/projects/destinyworker/src/api/user/auth/localAuthApi.ts:67:5)
-      at async dispatch (file:///C:/projects/destinyworker/node_modules/hono/dist/compose.js:22:17)       
-      at null.<anonymous> (async
-  file:///C:/projects/destinyworker/.wrangler/tmp/dev-H6Q2nk/index.js:11088:5)
-      at async mw
-  (file:///C:/projects/destinyworker/node_modules/@hono/zod-openapi/dist/index.js:90:26)
-      at async dispatch (file:///C:/projects/destinyworker/node_modules/hono/dist/compose.js:22:17)       
-      at async cors2
-  (file:///C:/projects/destinyworker/node_modules/hono/dist/middleware/cors/index.js:84:5) {
-    code: 'P2021',
-    meta: { modelName: 'EmailAuthCode', table: 'main.email_auth_codes' },
-    clientVersion: '6.10.1'
-  }
-
-
-⎔ Reloading local server...
-X [ERROR] EMAIL_SENDER binding is not configured.
+500 {"error":"인증 코드 이메일 전송에 실패했습니다."}

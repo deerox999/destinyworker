@@ -17,7 +17,7 @@ async function sendAuthCodeByEmail(c: Context, email: string, code: string): Pro
   try {
     const message = {
         to: [{ email: email, name: email.split('@')[0] }],
-        from: { email: "jswork9999@gmail.com", name: "Destiny Worker" }, // TODO: Replace with your verified sender address
+        from: { email: "jswork9999@gmail.com", name: "Destiny Worker" },
         subject: "[Destiny Worker] 인증 코드가 도착했습니다.",
         content: [
           {
