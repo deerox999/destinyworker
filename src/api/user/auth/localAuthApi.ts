@@ -75,7 +75,14 @@ export async function requestEmailAuthCode(c: Context): Promise<Response> {
     const emailSent = await sendAuthCodeByEmail(c, email, authCode);
     if (!emailSent) {
         await prisma.$disconnect();
-        return c.json({ error: "인증 코드 이메일 전송에 실패했습니다." }, 500);
+        return c.json(
+          {
+            error: "인증 코드 이메일 전송에 실패했습니다.",
+            emailSent: emailSent,
+            MAIL_SENDER: c.env.EMAIL_SENDER,
+          },
+          500
+        );
     }
 
     await prisma.$disconnect();
