@@ -46,7 +46,7 @@ export async function saju_analysis_queue_handler(
           `user_${message.body.userId}_${message.body.jobId || Date.now()}`
         );
         const durableObject = env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
-        const response = await durableObject.fetch("http://localhost/process-background", {
+        const response = await durableObject.fetch("http://api2.youram.me/process-background", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
