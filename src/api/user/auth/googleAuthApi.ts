@@ -97,12 +97,9 @@ async function findOrCreateUser(
         
         if (!existingUserWithGoogleId) {
           updateData.googleId = googleUserInfo.sub;
-          console.log(`계정 연결: 이메일 인증 사용자(${user.email})가 Google 계정과 연결됨`);
         } else {
           console.warn(`Google ID ${googleUserInfo.sub} is already assigned to another user`);
         }
-      } else {
-        console.log(`기존 Google 사용자 로그인: ${user.email}`);
       }
       
       user = await prisma.user.update({
