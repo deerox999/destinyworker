@@ -4,7 +4,7 @@ import { createPrismaClient } from "../../../common/prismaUtils";
 import { generateJWT } from "../../../common/utils";
 
 // 언어별 이메일 문구 정의
-const emailContentByLanguage = {
+const contents = {
   ko: {
     serviceName: "유람",
     subject: "[유람] 인증 코드가 도착했습니다",
@@ -53,24 +53,16 @@ async function sendAuthCodeByEmail(c: Context, email: string, code: string, lang
     const resend = new Resend(resendApiKey);
     
     // 언어별 문구 가져오기 (기본값: 한국어)
-    const content = emailContentByLanguage[language as keyof typeof emailContentByLanguage] || emailContentByLanguage.ko;
+    const content = contents[language as keyof typeof contents] || contents.ko;
     
     const emailContent = `
     <div style="font-family: 'Helvetica Neue', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background-color: #f9f9f9; margin: 0 auto; padding: 20px;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e0e0e0;">
-        <!-- Header -->
         <div style="background-color: #D946EF; padding: 24px; text-align: center;">
           <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">${content.serviceName}</h1>
         </div>
-
-        <!-- Body -->
         <div style="padding: 32px 40px; color: #333333;">
           <h2 style="font-size: 22px; font-weight: 600; margin: 0 0 16px 0; color: #1a202c;">${content.title}</h2>
-          <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #4a5568;">
-            안녕하세요! ${content.serviceName}에서 요청하신 인증 코드입니다.
-          </p>
-
-          <!-- Verification Code Section -->
           <div style="background-color: #fae8ff; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
             <p style="margin: 0 0 12px 0; font-size: 14px; color: #5a215c;">
               ${content.description}
@@ -82,18 +74,14 @@ async function sendAuthCodeByEmail(c: Context, email: string, code: string, lang
               ${content.expiresText}
             </p>
           </div>
-
           <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #4a5568;">
             ${content.ignoreText}
           </p>
-
           <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #4a5568;">
-            감사합니다,<br />
             ${content.serviceName}
           </p>
         </div>
-
-        <!-- Footer -->
+        
         <div style="text-align: center; padding: 24px 40px; background-color: #f8fafc; border-top: 1px solid #e0e0e0;">
           <p style="color: #94a3b8; margin: 0; font-size: 12px;">
             © ${new Date().getFullYear()} ${content.serviceName}. All Rights Reserved.
