@@ -1,5 +1,19 @@
-deerox999@gmail.com	487790	2025-08-03T13:49:02.382+00:00
-
+deerox999@gmail.com	124245	2025-08-03T13:49:02.382+00:00
+{"error":"인증 코드 이메일 전송에 실패했습니다.","emailSent":false,"authCode":"124245"}
 프리즈마로 db에 코드 insert까지는 됬는데, 500오류가 발생하고 있어.
+로컬이 아니라, 배포 환경에서 테스트한거야.
 
-500 {"error":"인증 코드 이메일 전송에 실패했습니다."}
+https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/
+공식적으로 제공 된 방법인데, 라우팅 설정은 되어있거든? 뭐 설정이 덜 된게 있는건가?
+
+calm-sun-3ea7 production
+
+요청 4 오류 0
+CPU 시간 중앙값 0.6 ms
+실제 시간 중앙값 12.9 ms
+
+2경로
+마지막으로 수정됨14시간 전
+사용자 설정 주소	상태	
+noreply@youram.me 활성 편집
+jswork9999@youram.me 활성 편집

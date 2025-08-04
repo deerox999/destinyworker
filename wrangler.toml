@@ -40,6 +40,13 @@ id = "f76d441ea2524c58a72e355fb4df71b2"
 preview_id = "68d8ef3bc1644f2f81cca8b57f842267"
 experimental_remote = true
 
+# 인증 코드용 KV 네임스페이스
+[[kv_namespaces]]
+binding = "AUTH_CODE_KV"         # 인증 코드용 KV
+id = "305beea2b37c45ef9cfb10f957c6c1a1"
+preview_id = "305beea2b37c45ef9cfb10f957c6c1a1"
+experimental_remote = true
+
 # AI 서비스 설정
 [ai]
 binding = "AI"                   # AI 모델 바인딩
@@ -58,9 +65,7 @@ bucket_name = "destiny"
 preview_bucket_name = "destiny-dev"
 experimental_remote = true
 
-send_email = [
-    {name = "EMAIL_SENDER"},
-]
+# send_email 설정 제거 - Resend 사용으로 변경
 
 [queues] # 큐 설정 (비동기 작업 처리)
 [[queues.producers]] # 프로듀서 설정 (작업 생성)
@@ -91,6 +96,7 @@ new_classes = ["SajuAnalysisWorker"]  # 새로운 Durable Object 클래스
 
 [vars] # 환경 변수
 ENVIRONMENT = "production"       # 환경 설정
+RESEND_API_KEY = "re_AHMdfbmP_24W9BSLXtCJe5DPSR3Z99HRX"  # Resend API 키
 
 [observability] # 관찰성 설정 (모니터링)
 enabled = true                   # 관찰성 기능 활성화

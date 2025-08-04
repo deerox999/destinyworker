@@ -20,6 +20,12 @@
       "id": "f76d441ea2524c58a72e355fb4df71b2",
       "preview_id": "68d8ef3bc1644f2f81cca8b57f842267",
       "experimental_remote": true
+    },
+    {
+      "binding": "AUTH_CODE_KV",
+      "id": "305beea2b37c45ef9cfb10f957c6c1a1",
+      "preview_id": "0131a26fe57e49f99414003d1a6a184e",
+      "experimental_remote": true
     }
   ],
   "ai": {
@@ -79,7 +85,8 @@
     }
   ],
   "vars": {
-    "ENVIRONMENT": "development"
+    "ENVIRONMENT": "development",
+    "RESEND_API_KEY": "re_AHMdfbmP_24W9BSLXtCJe5DPSR3Z99HRX"
   },
   "observability": {
     "enabled": true

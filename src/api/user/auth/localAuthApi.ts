@@ -1,42 +1,57 @@
-import { EmailMessage } from "cloudflare:email";
+import { Resend } from 'resend';
 import { Context } from "hono";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { generateJWT } from "../../../common/utils";
 
 async function sendAuthCodeByEmail(c: Context, email: string, code: string): Promise<boolean> {
   try {
-    const emailContent = `From: Destiny Worker <noreply@youram.me>
-    To: ${email}
-    Subject: [Destiny Worker] 인증 코드가 도착했습니다.
-    Content-Type: text/html; charset=UTF-8
+    const resendApiKey = c.env.RESEND_API_KEY || 're_AHMdfbmP_24W9BSLXtCJe5DPSR3Z99HRX';
+    const resend = new Resend(resendApiKey);
     
-    <div style="font-family: sans-serif; text-align: center; padding: 20px;">
-      <h2>인증 코드 안내</h2>
-      <p>Destiny Worker에 로그인하려면 아래 인증 코드를 입력해주세요.</p>
-      <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px; margin: 20px 0; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
-        ${code}
-      </p>
-      <p>이 코드는 10분 동안 유효합니다.</p>
+    const emailContent = `
+    <div style="font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
+      <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #2c3e50; margin: 0; font-size: 28px; font-weight: 600;">유람</h1>
+          <p style="color: #7f8c8d; margin: 10px 0 0 0; font-size: 16px;">인증 코드가 도착했습니다</p>
+        </div>
+        
+        <div style="background-color: #ecf0f1; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;">
+          <p style="color: #2c3e50; margin: 0 0 15px 0; font-size: 14px; font-weight: 500;">아래 인증 코드를 입력해주세요</p>
+          <div style="background-color: white; border: 2px solid #3498db; border-radius: 6px; padding: 15px; display: inline-block; min-width: 120px;">
+            <span style="font-size: 32px; font-weight: bold; color: #2c3e50; letter-spacing: 8px;">${code}</span>
+          </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+          <p style="color: #7f8c8d; margin: 0; font-size: 14px;">이 코드는 10분 동안 유효합니다</p>
+          <p style="color: #95a5a6; margin: 10px 0 0 0; font-size: 12px;">본인이 요청하지 않은 경우 무시하셔도 됩니다</p>
+        </div>
+      </div>
     </div>`;
     
-    const message = new EmailMessage(
-      "noreply@youram.me",
-      email,
-      emailContent
-    );
+    const result = await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to: email,
+      subject: '[유람] 인증 코드가 도착했습니다',
+      html: emailContent
+    });
     
-    await c.env.EMAIL_SENDER.send(message);
-    console.log(`Authentication code sent to ${email}`);
+    console.log(`Authentication code sent to ${email}`, result);
     return true;
   } catch (error) {
-    console.error("Failed to send email:", error);
+    console.error("Failed to send email:", {
+      error: error instanceof Error ? error.message : String(error),
+      email: email,
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return false;
   }
 }
 
-// 인증 코드 생성 (6자리 숫자)
+// 인증 코드 생성 (4자리 숫자)
 function generateAuthCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
 // 이메일 인증 코드 요청
@@ -52,41 +67,31 @@ export async function requestEmailAuthCode(c: Context): Promise<Response> {
       return c.json({ error: "이메일이 필요합니다." }, 400);
     }
 
-    const prisma = createPrismaClient(c.env.DB);
     const authCode = generateAuthCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10분 후 만료
 
-    // 기존 코드가 있으면 업데이트, 없으면 새로 생성
-    await prisma.emailAuthCode.upsert({
-      where: { email },
-      update: {
-        code: authCode,
-        expiresAt: expiresAt,
-        isVerified: false,
-      },
-      create: {
-        email,
-        code: authCode,
-        expiresAt: expiresAt,
-      },
+    // AUTH_CODE_KV에 인증 코드 저장 (TTL: 10분)
+    const key = `auth_code:${email}`;
+    const value = JSON.stringify({
+      code: authCode,
+      expiresAt: expiresAt.toISOString(),
+      isVerified: false
     });
+    
+    await c.env.AUTH_CODE_KV.put(key, value, { expirationTtl: 600 }); // 10분 TTL
 
-    // 이메일 전송 (실제 구현 필요)
+    // 이메일 전송
     const emailSent = await sendAuthCodeByEmail(c, email, authCode);
     if (!emailSent) {
-        await prisma.$disconnect();
         return c.json(
           {
             error: "인증 코드 이메일 전송에 실패했습니다.",
             emailSent: emailSent,
             authCode: authCode,
-            MAIL_SENDER: c.env.EMAIL_SENDER,
           },
           500
         );
     }
-
-    await prisma.$disconnect();
 
     return c.json({ success: true, message: "인증 코드가 이메일로 전송되었습니다." });
   } catch (error) {
@@ -97,7 +102,7 @@ export async function requestEmailAuthCode(c: Context): Promise<Response> {
 
 // 이메일 코드 검증 및 로그인
 export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
+  if (!c.env.DB) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
@@ -108,22 +113,27 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
       return c.json({ error: "이메일과 인증 코드가 필요합니다." }, 400);
     }
 
-    const prisma = createPrismaClient(c.env.DB);
+    // AUTH_CODE_KV에서 인증 코드 조회
+    const key = `auth_code:${email}`;
+    const storedData = await c.env.AUTH_CODE_KV.get(key);
+    
+    if (!storedData) {
+      return c.json({ error: "인증 코드가 만료되었거나 존재하지 않습니다." }, 401);
+    }
 
-    // 인증 코드 확인
-    const emailAuth = await prisma.emailAuthCode.findUnique({
-      where: { email },
-    });
-
-    if (!emailAuth || emailAuth.code !== code) {
-      await prisma.$disconnect();
+    const authData = JSON.parse(storedData);
+    
+    if (authData.code !== code) {
       return c.json({ error: "인증 코드가 올바르지 않습니다." }, 401);
     }
 
-    if (new Date() > emailAuth.expiresAt) {
-      await prisma.$disconnect();
+    if (new Date() > new Date(authData.expiresAt)) {
+      // 만료된 코드 삭제
+      await c.env.AUTH_CODE_KV.delete(key);
       return c.json({ error: "인증 코드가 만료되었습니다." }, 401);
     }
+
+    const prisma = createPrismaClient(c.env.DB);
 
     // 사용자 조회 또는 생성
     let user = await prisma.user.findUnique({ where: { email } });
@@ -154,7 +164,7 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
     });
 
     // 인증 코드 삭제
-    await prisma.emailAuthCode.delete({ where: { email } });
+    await c.env.AUTH_CODE_KV.delete(key);
 
     await prisma.$disconnect();
 
@@ -165,6 +175,6 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
     });
   } catch (error) {
     console.error("Login error:", error);
-    return c.json({ error: "로그인 처리 중 오류가 발생했습니다." }, 500);
+    return c.json({ error: "로그인 중 오류가 발생했습니다." }, 500);
   }
 }
