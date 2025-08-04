@@ -22,15 +22,15 @@ const emailContentByLanguage = {
     ignoreText: "You can ignore this if you didn't request it"
   },
   zh: {
-    serviceName: "游览",
-    subject: "[游览] 验证码已到达",
+    serviceName: "遊覽",
+    subject: "[遊覽] 验证码已到达",
     title: "验证码已到达",
     description: "请输入下面的验证码",
     expiresText: "此代码有效期为10分钟",
     ignoreText: "如果您没有请求，可以忽略此邮件"
   },
   ja: {
-    serviceName: "遊覧",
+    serviceName: "遊覽",
     subject: "[遊覧] 認証コードが届きました",
     title: "認証コードが届きました",
     description: "下の認証コードを入力してください",
@@ -38,8 +38,8 @@ const emailContentByLanguage = {
     ignoreText: "ご本人がリクエストしていない場合は無視してください"
   },
   vi: {
-    serviceName: "Du lịch",
-    subject: "[Du lịch] Mã xác thực đã đến",
+    serviceName: "Yuram",
+    subject: "[Yuram] Mã xác thực đã đến",
     title: "Mã xác thực đã đến",
     description: "Vui lòng nhập mã xác thực bên dưới",
     expiresText: "Mã này có hiệu lực trong 10 phút",
@@ -56,23 +56,48 @@ async function sendAuthCodeByEmail(c: Context, email: string, code: string, lang
     const content = emailContentByLanguage[language as keyof typeof emailContentByLanguage] || emailContentByLanguage.ko;
     
     const emailContent = `
-    <div style="font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
-      <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #2c3e50; margin: 0; font-size: 28px; font-weight: 600;">${content.serviceName}</h1>
-          <p style="color: #7f8c8d; margin: 10px 0 0 0; font-size: 16px;">${content.title}</p>
+    <div style="font-family: 'Helvetica Neue', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background-color: #f9f9f9; margin: 0 auto; padding: 20px;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e0e0e0;">
+        <!-- Header -->
+        <div style="background-color: #D946EF; padding: 24px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">${content.serviceName}</h1>
         </div>
-        
-        <div style="background-color: #ecf0f1; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;">
-          <p style="color: #2c3e50; margin: 0 0 15px 0; font-size: 14px; font-weight: 500;">${content.description}</p>
-          <div style="background-color: white; border: 2px solid #3498db; border-radius: 6px; padding: 15px; display: inline-block; min-width: 120px;">
-            <span style="font-size: 32px; font-weight: bold; color: #2c3e50; letter-spacing: 8px;">${code}</span>
+
+        <!-- Body -->
+        <div style="padding: 32px 40px; color: #333333;">
+          <h2 style="font-size: 22px; font-weight: 600; margin: 0 0 16px 0; color: #1a202c;">${content.title}</h2>
+          <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #4a5568;">
+            안녕하세요! ${content.serviceName}에서 요청하신 인증 코드입니다.
+          </p>
+
+          <!-- Verification Code Section -->
+          <div style="background-color: #fae8ff; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
+            <p style="margin: 0 0 12px 0; font-size: 14px; color: #5a215c;">
+              ${content.description}
+            </p>
+            <div style="display: inline-block; background-color: #ffffff; border: 1px dashed #d946ef; border-radius: 8px; padding: 12px 24px;">
+              <span style="font-size: 36px; font-weight: bold; color: #86198f; letter-spacing: 12px; font-family: 'Courier New', monospace;">${code}</span>
+            </div>
+            <p style="margin: 16px 0 0 0; font-size: 14px; color: #64748b;">
+              ${content.expiresText}
+            </p>
           </div>
+
+          <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #4a5568;">
+            ${content.ignoreText}
+          </p>
+
+          <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #4a5568;">
+            감사합니다,<br />
+            ${content.serviceName}
+          </p>
         </div>
-        
-        <div style="text-align: center; margin-top: 30px;">
-          <p style="color: #7f8c8d; margin: 0; font-size: 14px;">${content.expiresText}</p>
-          <p style="color: #95a5a6; margin: 10px 0 0 0; font-size: 12px;">${content.ignoreText}</p>
+
+        <!-- Footer -->
+        <div style="text-align: center; padding: 24px 40px; background-color: #f8fafc; border-top: 1px solid #e0e0e0;">
+          <p style="color: #94a3b8; margin: 0; font-size: 12px;">
+            © ${new Date().getFullYear()} ${content.serviceName}. All Rights Reserved.
+          </p>
         </div>
       </div>
     </div>`;
@@ -90,9 +115,9 @@ async function sendAuthCodeByEmail(c: Context, email: string, code: string, lang
   }
 }
 
-// 인증 코드 생성 (4자리 숫자)
+// 인증 코드 생성 (6자리 숫자)
 function generateAuthCode(): string {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 // 이메일 인증 코드 요청

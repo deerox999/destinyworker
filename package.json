@@ -52,7 +52,7 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --x-remote-bindings --config wrangler.local.json",
     "dev:remote": "wrangler dev --x-remote-bindings",
-    "secret:put": "wrangler secret put GOOGLE_CLIENT_SECRET",
+    "secret:put": "wrangler secret put RESEND_API_KEY",
     "db:migrate:dev": "node scripts/migrate-d1.js --dev",
     "db:migrate:local": "node scripts/migrate-d1.js --local",
     "db:migrate:remote": "node scripts/migrate-d1.js --remote",
