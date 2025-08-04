@@ -81,14 +81,33 @@ async function findOrCreateUser(
     });
 
     if (user) {
-      // 기존 사용자 정보 업데이트 (googleId가 없으면 추가, 이름 업데이트)
+      // 기존 사용자 정보 업데이트 (이름, 프로필 사진)
+      const updateData: any = {
+        name: googleUserInfo.name,
+        picture: googleUserInfo.picture,
+      };
+      
+      // 로컬 로그인 사용자(googleId가 빈 문자열)가 Google 로그인을 시도하는 경우
+      // googleId를 업데이트하여 계정을 연결
+      if (!user.googleId || user.googleId === "") {
+        // googleId가 이미 다른 사용자에게 할당되어 있는지 확인
+        const existingUserWithGoogleId = await prisma.user.findUnique({
+          where: { googleId: googleUserInfo.sub }
+        });
+        
+        if (!existingUserWithGoogleId) {
+          updateData.googleId = googleUserInfo.sub;
+          console.log(`계정 연결: 이메일 인증 사용자(${user.email})가 Google 계정과 연결됨`);
+        } else {
+          console.warn(`Google ID ${googleUserInfo.sub} is already assigned to another user`);
+        }
+      } else {
+        console.log(`기존 Google 사용자 로그인: ${user.email}`);
+      }
+      
       user = await prisma.user.update({
         where: { id: user.id },
-        data: {
-          googleId: user.googleId ?? googleUserInfo.sub,
-          name: googleUserInfo.name,
-          picture: googleUserInfo.picture,
-        },
+        data: updateData,
       });
     } else {
       // 새 사용자 생성

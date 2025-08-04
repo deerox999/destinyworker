@@ -184,18 +184,18 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
 
     const prisma = createPrismaClient(c.env.DB);
 
-    // 사용자 조회 또는 생성
-    let user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          email: email,
-          name: email.split('@')[0], // 초기 이름은 이메일 앞부분으로 설정
-          googleId: null, // 이메일 인증 로그인은 googleId가 null
-          point: 3000,
-        },
-      });
-    }
+         // 사용자 조회 또는 생성
+     let user = await prisma.user.findUnique({ where: { email } });
+     if (!user) {
+       user = await prisma.user.create({
+         data: {
+           email: email,
+           name: email.split('@')[0], // 초기 이름은 이메일 앞부분으로 설정
+           googleId: "", // 임시로 빈 문자열 설정 (데이터베이스 NOT NULL 제약조건 때문)
+           point: 3000,
+         },
+       });
+     }
 
     // JWT 토큰 생성
     const jwtToken = await generateJWT(
