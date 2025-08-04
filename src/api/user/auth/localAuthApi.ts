@@ -49,7 +49,7 @@ const emailContentByLanguage = {
 
 async function sendAuthCodeByEmail(c: Context, email: string, code: string, language: string = 'ko'): Promise<boolean> {
   try {
-    const resendApiKey = c.env.RESEND_API_KEY || 're_AHMdfbmP_24W9BSLXtCJe5DPSR3Z99HRX';
+    const resendApiKey = c.env.RESEND_API_KEY;
     const resend = new Resend(resendApiKey);
     
     // 언어별 문구 가져오기 (기본값: 한국어)

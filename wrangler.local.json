@@ -85,8 +85,7 @@
     }
   ],
   "vars": {
-    "ENVIRONMENT": "development",
-    "RESEND_API_KEY": "re_AHMdfbmP_24W9BSLXtCJe5DPSR3Z99HRX"
+    "ENVIRONMENT": "development"
   },
   "observability": {
     "enabled": true
