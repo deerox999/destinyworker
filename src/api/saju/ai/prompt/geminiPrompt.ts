@@ -1,3 +1,5 @@
+import { getLanguageName } from "../../../../common/utils";
+
 // 분석관점 옵션 타입 정의
 export type 분석관점 = "현실적" | "약간긍정" | "약간부정";
 
@@ -25,18 +27,6 @@ const 특별추가질문 = (user?: any): string => {
 **중요:** 이것은 개발자의 질문입니다. 솔직하고 객관적인 피드백을 제공해주시고, 구체적인 개선 방안을 제시해주세요.`;
   }
   return "";
-};
-
-// 언어 설정 함수
-const getLanguageName = (language: string): string => {
-  const languageMap: Record<string, string> = {
-    ko: "한국어",
-    en: "영어",
-    zh: "중국어",
-    ja: "일본어",
-    vi: "베트남어",
-  };
-  return languageMap[language] || "한국어";
 };
 
 // 톤 설정 통합 함수

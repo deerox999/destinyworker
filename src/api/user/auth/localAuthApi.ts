@@ -3,46 +3,87 @@ import { Context } from "hono";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { generateJWT } from "../../../common/utils";
 
-async function sendAuthCodeByEmail(c: Context, email: string, code: string): Promise<boolean> {
+// 언어별 이메일 문구 정의
+const emailContentByLanguage = {
+  ko: {
+    serviceName: "유람",
+    subject: "[유람] 인증 코드가 도착했습니다",
+    title: "인증 코드가 도착했습니다",
+    description: "아래 인증 코드를 입력해주세요",
+    expiresText: "이 코드는 10분 동안 유효합니다",
+    ignoreText: "본인이 요청하지 않은 경우 무시하셔도 됩니다"
+  },
+  en: {
+    serviceName: "Yuram",
+    subject: "[Yuram] Authentication code has arrived",
+    title: "Authentication code has arrived",
+    description: "Please enter the authentication code below",
+    expiresText: "This code is valid for 10 minutes",
+    ignoreText: "You can ignore this if you didn't request it"
+  },
+  zh: {
+    serviceName: "游览",
+    subject: "[游览] 验证码已到达",
+    title: "验证码已到达",
+    description: "请输入下面的验证码",
+    expiresText: "此代码有效期为10分钟",
+    ignoreText: "如果您没有请求，可以忽略此邮件"
+  },
+  ja: {
+    serviceName: "遊覧",
+    subject: "[遊覧] 認証コードが届きました",
+    title: "認証コードが届きました",
+    description: "下の認証コードを入力してください",
+    expiresText: "このコードは10分間有効です",
+    ignoreText: "ご本人がリクエストしていない場合は無視してください"
+  },
+  vi: {
+    serviceName: "Du lịch",
+    subject: "[Du lịch] Mã xác thực đã đến",
+    title: "Mã xác thực đã đến",
+    description: "Vui lòng nhập mã xác thực bên dưới",
+    expiresText: "Mã này có hiệu lực trong 10 phút",
+    ignoreText: "Bạn có thể bỏ qua nếu không yêu cầu"
+  }
+};
+
+async function sendAuthCodeByEmail(c: Context, email: string, code: string, language: string = 'ko'): Promise<boolean> {
   try {
     const resendApiKey = c.env.RESEND_API_KEY || 're_AHMdfbmP_24W9BSLXtCJe5DPSR3Z99HRX';
     const resend = new Resend(resendApiKey);
+    
+    // 언어별 문구 가져오기 (기본값: 한국어)
+    const content = emailContentByLanguage[language as keyof typeof emailContentByLanguage] || emailContentByLanguage.ko;
     
     const emailContent = `
     <div style="font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
       <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #2c3e50; margin: 0; font-size: 28px; font-weight: 600;">유람</h1>
-          <p style="color: #7f8c8d; margin: 10px 0 0 0; font-size: 16px;">인증 코드가 도착했습니다</p>
+          <h1 style="color: #2c3e50; margin: 0; font-size: 28px; font-weight: 600;">${content.serviceName}</h1>
+          <p style="color: #7f8c8d; margin: 10px 0 0 0; font-size: 16px;">${content.title}</p>
         </div>
         
         <div style="background-color: #ecf0f1; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;">
-          <p style="color: #2c3e50; margin: 0 0 15px 0; font-size: 14px; font-weight: 500;">아래 인증 코드를 입력해주세요</p>
+          <p style="color: #2c3e50; margin: 0 0 15px 0; font-size: 14px; font-weight: 500;">${content.description}</p>
           <div style="background-color: white; border: 2px solid #3498db; border-radius: 6px; padding: 15px; display: inline-block; min-width: 120px;">
             <span style="font-size: 32px; font-weight: bold; color: #2c3e50; letter-spacing: 8px;">${code}</span>
           </div>
         </div>
         
         <div style="text-align: center; margin-top: 30px;">
-          <p style="color: #7f8c8d; margin: 0; font-size: 14px;">이 코드는 10분 동안 유효합니다</p>
-          <p style="color: #95a5a6; margin: 10px 0 0 0; font-size: 12px;">본인이 요청하지 않은 경우 무시하셔도 됩니다</p>
+          <p style="color: #7f8c8d; margin: 0; font-size: 14px;">${content.expiresText}</p>
+          <p style="color: #95a5a6; margin: 10px 0 0 0; font-size: 12px;">${content.ignoreText}</p>
         </div>
       </div>
     </div>`;
     
-    const result = await resend.emails.send({
-      from: 'onboarding@resend.dev',
-      to: email,
-      subject: '[유람] 인증 코드가 도착했습니다',
-      html: emailContent
-    });
-    
-    console.log(`Authentication code sent to ${email}`, result);
+    await resend.emails.send({ from: 'noreply@youram.me', to: email, subject: content.subject, html: emailContent })
     return true;
   } catch (error) {
     console.error("Failed to send email:", {
       error: error instanceof Error ? error.message : String(error),
       email: email,
+      language: language,
       stack: error instanceof Error ? error.stack : undefined
     });
     return false;
@@ -61,7 +102,7 @@ export async function requestEmailAuthCode(c: Context): Promise<Response> {
   }
 
   try {
-    const { email } = (await c.req.json()) as { email?: string };
+    const { email, language = 'ko' } = (await c.req.json()) as { email?: string; language?: string };
 
     if (!email) {
       return c.json({ error: "이메일이 필요합니다." }, 400);
@@ -77,20 +118,15 @@ export async function requestEmailAuthCode(c: Context): Promise<Response> {
       expiresAt: expiresAt.toISOString(),
       isVerified: false
     });
-    
+
     await c.env.AUTH_CODE_KV.put(key, value, { expirationTtl: 600 }); // 10분 TTL
 
-    // 이메일 전송
-    const emailSent = await sendAuthCodeByEmail(c, email, authCode);
+    // 이메일 전송 (언어 파라미터 포함)
+    const emailSent = await sendAuthCodeByEmail(c, email, authCode, language);
     if (!emailSent) {
-        return c.json(
-          {
-            error: "인증 코드 이메일 전송에 실패했습니다.",
-            emailSent: emailSent,
-            authCode: authCode,
-          },
-          500
-        );
+        return c.json({ error: "인증 코드 이메일 전송에 실패했습니다.",
+            emailSent: emailSent, authCode: authCode, language: language,
+        }, 500);
     }
 
     return c.json({ success: true, message: "인증 코드가 이메일로 전송되었습니다." });

@@ -144,7 +144,7 @@ export function createAuthRouter(): OpenAPIHono {
     method: "post",
     path: "/local/request-code",
     summary: "이메일 인증 코드 요청",
-    description: "이메일로 인증 코드를 요청합니다.",
+    description: "이메일로 인증 코드를 요청합니다. 다국어 지원 (ko, en, zh, ja, vi).",
     tags: ["인증"],
     request: {
       body: {
@@ -152,6 +152,7 @@ export function createAuthRouter(): OpenAPIHono {
           "application/json": {
             schema: z.object({
               email: z.string().email().openapi({ description: "이메일 주소", example: "user@example.com" }),
+              language: z.string().optional().openapi({ description: "언어 설정 (ko, en, zh, ja, vi)", example: "ko" }),
             }).openapi({ type: 'object' }),
           },
         },
@@ -188,7 +189,7 @@ export function createAuthRouter(): OpenAPIHono {
           "application/json": {
             schema: z.object({
               email: z.string().email().openapi({ description: "이메일 주소", example: "user@example.com" }),
-              code: z.string().openapi({ description: "6자리 인증 코드", example: "123456" }),
+              code: z.string().openapi({ description: "4자리 인증 코드", example: "1234" }),
             }).openapi({ type: 'object' }),
           },
         },

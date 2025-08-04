@@ -8,6 +8,18 @@ interface JWTPayload {
   iat: number;
 }
 
+// 언어 설정 함수
+export const getLanguageName = (language: string): string => {
+  const languageMap: Record<string, string> = {
+    ko: "한국어",
+    en: "영어",
+    zh: "중국어",
+    ja: "일본어",
+    vi: "베트남어",
+  };
+  return languageMap[language] || "한국어";
+};
+
 // JWT 토큰에서 사용자 정보 추출
 export const getUserFromToken = async (c: Context): Promise<{ id: number; email: string; role: string } | null> => {
   const authHeader = c.req.header("Authorization");
