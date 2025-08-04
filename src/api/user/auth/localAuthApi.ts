@@ -191,6 +191,7 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
         data: {
           email: email,
           name: email.split('@')[0], // 초기 이름은 이메일 앞부분으로 설정
+          googleId: null, // 이메일 인증 로그인은 googleId가 null
           point: 3000,
         },
       });
