@@ -9,7 +9,6 @@ import { createCelebrityRouter } from "./celebrity/celebrity.routes";
 import { createCommunityRouter } from "./community/routes";
 import { createSajuRouter } from "./saju/profile/saju.routes";
 import { createAuthRouter } from "./user/auth/auth.routes";
-import { createPushRouter } from "./user/auth/push.routes";
 import { createPaymentRouter } from "./user/payment/payment.routes";
 import { createR2Router } from "./user/r2.routes";
 import { createUserRouter } from "./user/user.routes";
@@ -63,7 +62,6 @@ export function createAppRouter(): OpenAPIHono {
   // 모듈화된 라우터 병합
   app.route("/api/auth", createAuthRouter());
   app.route("/api/R2", createR2Router(authMiddleware));
-  app.route("/api/push", createPushRouter(authMiddleware));
   app.route("/api/user", createUserRouter(authMiddleware));
   app.route("/api/payment", createPaymentRouter(authMiddleware));
   app.route("/api/saju-profiles", createSajuRouter(authMiddleware));

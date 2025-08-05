@@ -285,17 +285,29 @@ export async function updateSajuAnalysis(
   analysisId: number,
   aiResponse: string,
   analysisCompletedAt: Date,
-  env: any
+  env: any,
+  usageMetadata?: any
 ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
   try {
     const prisma = createPrismaClient(env.DB);
 
+    const updateData: any = {
+      aiResponse: aiResponse,
+      analysisCompletedAt: analysisCompletedAt,
+    };
+
+    // usageMetadata가 있으면 토큰 정보도 업데이트
+    if (usageMetadata) {
+      updateData.promptTokenCount = usageMetadata.promptTokenCount || null;
+      updateData.candidatesTokenCount = usageMetadata.candidatesTokenCount || null;
+      updateData.totalTokenCount = usageMetadata.totalTokenCount || null;
+      updateData.modelVersion = usageMetadata.modelVersion || null;
+      updateData.chunkCount = usageMetadata.chunkCount || null;
+    }
+
     const analysis = await prisma.sajuAnalysis.update({
       where: { id: analysisId },
-      data: {
-        aiResponse: aiResponse,
-        analysisCompletedAt: analysisCompletedAt,
-      },
+      data: updateData,
     });
 
     await prisma.$disconnect();
@@ -321,7 +333,8 @@ export async function saveSajuAnalysis(
   aiResponse: string,
   title: string,
   analysisCompletedAt: Date,
-  env: any
+  env: any,
+  usageMetadata?: any
 ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
   try {
     let birthData = null;
@@ -342,23 +355,34 @@ export async function saveSajuAnalysis(
 
     const prisma = createPrismaClient(env.DB);
 
+    const createData: any = {
+      userId: job.userId,
+      analysisType: job.analysisType,
+      type: job.type,
+      title: title,
+      sajuData: JSON.stringify(birthData),
+      userPrompt: job.userPrompt,
+      systemPrompt: job.systemPrompt || null,
+      aiResponse: aiResponse,
+      modelUsed: job.model,
+      pointsSpent: job.pointsCost,
+      i18n: job.i18n,
+      timezone: job.timezone,
+      analysisStartedAt: new Date(job.createdAt),
+      analysisCompletedAt: analysisCompletedAt,
+    };
+
+    // usageMetadata가 있으면 토큰 정보도 저장
+    if (usageMetadata) {
+      createData.promptTokenCount = usageMetadata.promptTokenCount || null;
+      createData.candidatesTokenCount = usageMetadata.candidatesTokenCount || null;
+      createData.totalTokenCount = usageMetadata.totalTokenCount || null;
+      createData.modelVersion = usageMetadata.modelVersion || null;
+      createData.chunkCount = usageMetadata.chunkCount || null;
+    }
+
     const result = await prisma.sajuAnalysis.create({
-      data: {
-        userId: job.userId,
-        analysisType: job.analysisType,
-        type: job.type,
-        title: title,
-        sajuData: JSON.stringify(birthData),
-        userPrompt: job.userPrompt,
-        systemPrompt: job.systemPrompt || null,
-        aiResponse: aiResponse,
-        modelUsed: job.model,
-        pointsSpent: job.pointsCost,
-        i18n: job.i18n,
-        timezone: job.timezone,
-        analysisStartedAt: new Date(job.createdAt),
-        analysisCompletedAt: analysisCompletedAt,
-      },
+      data: createData,
     });
 
     return {

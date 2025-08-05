@@ -57,7 +57,11 @@
     ],
     "consumers": [
       {
-        "queue": "analysis"
+        "queue": "analysis",
+        "max_batch_size": 5,
+        "max_batch_timeout": 10,
+        "max_retries": 2,
+        "max_concurrency": 5
       }
     ]
   },

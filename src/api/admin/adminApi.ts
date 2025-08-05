@@ -972,7 +972,7 @@ export async function getUserAnalysisTransactions(
       SELECT 
         pt.id, pt.userId, pt.amount, pt.description, pt.type, pt.reference, pt.createdAt,
         sa.id as analysisId, sa.analysis_type, sa.type as analysis_type_detail, sa.title
-      FROM point_transactions pt
+      FROM PointTransaction pt
       LEFT JOIN saju_analyses sa ON (
         CASE 
           WHEN pt.reference LIKE 'saju_analysis_%' THEN CAST(SUBSTR(pt.reference, 14) AS INTEGER)
@@ -996,7 +996,7 @@ export async function getUserAnalysisTransactions(
     // 총 개수 조회
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM point_transactions pt
+      FROM PointTransaction pt
       LEFT JOIN saju_analyses sa ON (
         CASE 
           WHEN pt.reference LIKE 'saju_analysis_%' THEN CAST(SUBSTR(pt.reference, 14) AS INTEGER)

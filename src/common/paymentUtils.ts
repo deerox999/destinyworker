@@ -404,7 +404,7 @@ export async function updatePointTransactionAnalysisId(
     // 먼저 해당 거래가 존재하는지 확인
     const checkResult = await db
       .prepare(
-        "SELECT id, analysisId FROM point_transactions WHERE userId = ? AND reference = ?"
+        "SELECT id, analysisId FROM PointTransaction WHERE userId = ? AND reference = ?"
       )
       .bind(userId, reference)
       .first();
@@ -421,7 +421,7 @@ export async function updatePointTransactionAnalysisId(
     // analysisId 업데이트
     const result = await db
       .prepare(
-        "UPDATE point_transactions SET analysisId = ? WHERE userId = ? AND reference = ? AND analysisId IS NULL"
+        "UPDATE PointTransaction SET analysisId = ? WHERE userId = ? AND reference = ? AND analysisId IS NULL"
       )
       .bind(analysisId, userId, reference)
       .run();

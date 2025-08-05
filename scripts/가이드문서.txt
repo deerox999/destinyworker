@@ -1,0 +1,53 @@
+# 데이터 이관 가이드 (snake_case → PascalCase)
+
+## 1. 백업 생성 (안전을 위해)
+```bash
+# 현재 상태 백업
+npx wrangler d1 execute destiny-new --remote --command "PRAGMA table_info(users);" > backup_before_migration.txt
+```
+
+## 2. 데이터 복사 명령어들
+**중요: 각 명령어를 하나씩 실행하고 오류가 없는지 확인**
+
+```bash
+# 사주 프로필 데이터 복사 (이슈 15 ~ 16)
+npx wrangler d1 execute destiny-new --remote --command "INSERT INTO SajuProfile SELECT * FROM saju_profiles;"
+
+# 사주 분석 데이터 복사 (table SajuAnalysis has 23 columns but 18 values were supplied: SQLITE_ERROR [code: 7500])
+npx wrangler d1 execute destiny-new --remote --command "INSERT INTO SajuAnalysis SELECT * FROM saju_analyses;"
+
+
+# SajuProfile 데이터 복사
+npx wrangler d1 execute destiny-new --remote --command "INSERT INTO SajuProfile (
+  id, userId, name, year, month, day, hour, minute, 
+  calendar, gender, country, city, calculationMethod, context, 
+  createdAt, updatedAt
+) 
+SELECT 
+  id, userId, name, year, month, day, hour, minute,
+  calendar, gender, country, city, calculationMethod, NULL as context,
+  createdAt, updatedAt
+FROM saju_profiles;"
+
+npx wrangler d1 execute destiny-new --remote --command "INSERT INTO SajuProfile (id, userId, name, year, month, day, hour, minute, calendar, gender, country, city, calculationMethod, context, createdAt, updatedAt) SELECT id, userId, name, year, month, day, hour, minute, calendar, gender, country, city, calculationMethod, NULL as context, createdAt, updatedAt FROM saju_profiles;"
+
+# SajuAnalysis 데이터 복사  
+npx wrangler d1 execute destiny-new --remote --command "INSERT INTO SajuAnalysis (
+  id, userId, analysisType, type, title, sajuData, userPrompt, 
+  systemPrompt, aiResponse, modelUsed, pointsSpent, isFavorite, 
+  i18n, timezone, analysisStartedAt, analysisCompletedAt,
+  promptTokenCount, candidatesTokenCount, totalTokenCount, 
+  modelVersion, chunkCount, createdAt, updatedAt
+)
+SELECT 
+  id, userId, analysisType, type, title, sajuData, userPrompt,
+  systemPrompt, aiResponse, modelUsed, pointsSpent, isFavorite,
+  i18n, timezone, analysisStartedAt, analysisCompletedAt,
+  NULL as promptTokenCount,     -- 새 컬럼: NULL로 처리
+  NULL as candidatesTokenCount, -- 새 컬럼: NULL로 처리  
+  NULL as totalTokenCount,      -- 새 컬럼: NULL로 처리
+  NULL as modelVersion,         -- 새 컬럼: NULL로 처리
+  NULL as chunkCount,           -- 새 컬럼: NULL로 처리
+  createdAt, updatedAt
+FROM saju_analyses;"
+```

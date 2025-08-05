@@ -94,7 +94,8 @@ function generateServerPrompts(
     if (c.env.ENVIRONMENT === "development") {
       baseModel = "gemini-2.5-pro";
     } else {
-      baseModel = "gemini-2.5-flash";
+      // baseModel = "gemini-2.5-flash";
+      baseModel = "gemini-2.5-pro";
     }
   }
 
@@ -155,7 +156,7 @@ class DurableObjectClient {
    */
   async getJobStatus(jobId: string): Promise<{ success: boolean; data?: any; error?: string }> {
     const durableObjectId = this.env.SAJU_ANALYSIS_WORKER.idFromName(
-      `user_${this.userId}`
+      `user_${this.userId}_${jobId}`
     );
     const durableObject = this.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
 
@@ -378,11 +379,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       // Queue에 작업 전송
       if (c.env.QUEUE) {
         try {
-          await c.env.QUEUE.send({
-            ...jobData,
-            jobId: createResult.jobId,
-          });
-          console.log(`[Queue] 작업 전송 성공: ${createResult.jobId}`);
+          await c.env.QUEUE.send({ ...jobData, jobId: createResult.jobId })
         } catch (queueError) {
           console.error("[Queue] 전송 실패:", queueError);
           console.warn(`[Queue] Queue 전송 실패했지만 작업은 등록됨: ${createResult.jobId}`);

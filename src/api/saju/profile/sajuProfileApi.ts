@@ -15,6 +15,7 @@ const toDbFields = (data: any) => ({
   country: data.국가,
   city: data.도시,
   calculationMethod: data.계산방법,
+  context: data.맥락정보 || null,
 });
 
 // 영어 -> 한글 필드 변환
@@ -31,6 +32,7 @@ const toKoreanFields = (profile: any) => ({
   국가: profile.country,
   도시: profile.city,
   계산방법: profile.calculationMethod,
+  맥락정보: profile.context,
   createdAt: profile.createdAt,
   updatedAt: profile.updatedAt,
 });

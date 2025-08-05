@@ -1,5 +1,19 @@
 /*
-로컬 개발환경에서 로컬 db 삭제 방법 (dev.db 삭제 후 npx prisma migrate dev 재생성)
+예시:
+  # 로컬 환경에 일반 마이그레이션
+  node scripts/migrate-d1.js --remote
+
+  # 개발 환경에 강제 마이그레이션 (DROP 포함)
+  node scripts/migrate-d1.js --dev --force
+  # 프로덕션 환경 데이터베이스 초기화 (위험!)
+  node scripts/migrate-d1.js --remote --reset --force
+  # 로컬 환경에서 빈 스키마부터 전체 적용
+  node scripts/migrate-d1.js --local --from-empty
+
+  # 쿼리 직접실행
+  npx prisma generate    (동기화)
+  npx prisma migrate dev (마이그레이션 쿼리 생성)
+  npx wrangler d1 execute destiny-local --local --file=prisma/migrations/20250805102303_/migration.sql
 */
 /*
 D1 데이터베이스 마이그레이션 스크립트
@@ -17,18 +31,7 @@ D1 데이터베이스 마이그레이션 스크립트
   --force     위험한 작업 강제 실행 (DROP, RESET 등)
   --from-empty 빈 스키마에서 시작하여 전체 스키마 적용
 
-예시:
-  # 로컬 환경에 일반 마이그레이션
-  node scripts/migrate-d1.js --local
 
-  # 개발 환경에 강제 마이그레이션 (DROP 포함)
-  node scripts/migrate-d1.js --dev --force
-
-  # 프로덕션 환경 데이터베이스 초기화 (위험!)
-  node scripts/migrate-d1.js --remote --reset --force
-
-  # 로컬 환경에서 빈 스키마부터 전체 적용
-  node scripts/migrate-d1.js --local --from-empty
 
 주의사항:
 - --reset과 --force는 데이터 손실을 야기할 수 있습니다
