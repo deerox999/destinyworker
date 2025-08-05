@@ -4,8 +4,9 @@ import {
   buildGeminiPayload,
   generateTitle,
   getResponseType,
-  saveSajuAnalysis,
-  type AnalysisJob,
+  saveSajuAnalysisInitial,
+  updateSajuAnalysis,
+  type AnalysisJob
 } from "../utils";
 
 export class SajuAnalysisWorker implements DurableObject {
@@ -16,6 +17,58 @@ export class SajuAnalysisWorker implements DurableObject {
   constructor(state: DurableObjectState, env: any) {
     this.state = state;
     this.env = env;
+  }
+
+  /**
+   * 공통 Job 객체 생성 로직
+   */
+  private createJob(body: any, jobId?: string, analysisId?: number): AnalysisJob {
+    const generatedJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    return {
+      id: generatedJobId,
+      userId: body.userId,
+      analysisType: body.analysisType || "general",
+      type: body.type || "individual", 
+      pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
+      reference: body.reference,
+      i18n: body.i18n || "ko",
+      timezone: body.timezone || "Asia/Seoul",
+      userPrompt: body.userPrompt,
+      systemPrompt: body.systemPrompt,
+      sajuData: body.sajuData,
+      conversationHistory: body.conversationHistory,
+      model: body.model,
+      fortuneType: body.fortuneType,
+      ...(analysisId && { analysisId }),
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    };
+  }
+
+  /**
+   * 공통 에러 응답 생성
+   */
+  private createErrorResponse(message: string, details: string, status: number = 400): Response {
+    return new Response(
+      JSON.stringify({
+        error: message,
+        details: details,
+      }),
+      {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  /**
+   * 공통 성공 응답 생성
+   */
+  private createSuccessResponse(data: any): Response {
+    return new Response(JSON.stringify(data), {
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -47,32 +100,21 @@ export class SajuAnalysisWorker implements DurableObject {
     const jobId = url.searchParams.get("jobId");
 
     if (!jobId) {
-      return new Response(JSON.stringify({ error: "Job ID is required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return this.createErrorResponse("Job ID is required", "jobId parameter is missing");
     }
 
     const job = this.jobs.get(jobId);
     if (!job) {
-      return new Response(JSON.stringify({ error: "Job not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      return this.createErrorResponse("Job not found", `Job with id ${jobId} not found`, 404);
     }
 
-    return new Response(
-      JSON.stringify({
-        jobId: job.id,
-        status: job.status,
-        createdAt: job.createdAt,
-        result: job.result,
-        error: job.error,
-      }),
-      {
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return this.createSuccessResponse({
+      jobId: job.id,
+      status: job.status,
+      createdAt: job.createdAt,
+      result: job.result,
+      error: job.error,
+    });
   }
 
   /**
@@ -82,53 +124,20 @@ export class SajuAnalysisWorker implements DurableObject {
   private async handleJobCreate(request: Request): Promise<Response> {
     try {
       const body = (await request.json()) as any;
-      const jobId =
-        body.jobId ||
-        `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const job = this.createJob(body, body.jobId);
+      
+      this.jobs.set(job.id, job);
 
-      const job: AnalysisJob = {
-        id: jobId,
-        userId: body.userId,
-        analysisType: body.analysisType || "general",
-        type: body.type || "individual",
-        pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
-        reference: body.reference,
-        i18n: body.i18n || "ko",
-        timezone: body.timezone || "Asia/Seoul",
-        userPrompt: body.userPrompt,
-        systemPrompt: body.systemPrompt,
-        sajuData: body.sajuData,
-        conversationHistory: body.conversationHistory,
-        model: body.model,
-        fortuneType: body.fortuneType,
-
-        createdAt: new Date().toISOString(),
+      return this.createSuccessResponse({
+        success: true,
+        jobId: job.id,
+        message: "분석 작업이 등록되었습니다. Queue에서 처리됩니다.",
         status: "pending",
-      };
-
-      this.jobs.set(jobId, job);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          jobId: jobId,
-          message: "분석 작업이 등록되었습니다. Queue에서 처리됩니다.",
-          status: "pending",
-        }),
-        {
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      });
     } catch (error) {
-      return new Response(
-        JSON.stringify({
-          error: "Invalid request body",
-          details: error instanceof Error ? error.message : "Unknown error",
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        }
+      return this.createErrorResponse(
+        "Invalid request body",
+        error instanceof Error ? error.message : "Unknown error"
       );
     }
   }
@@ -143,48 +152,27 @@ export class SajuAnalysisWorker implements DurableObject {
       const { jobId, status, result, error } = body;
 
       if (!jobId) {
-        return new Response(JSON.stringify({ error: "Job ID is required" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+        return this.createErrorResponse("Job ID is required", "jobId is missing from request body");
       }
 
       const job = this.jobs.get(jobId);
       if (!job) {
-        return new Response(JSON.stringify({ error: "Job not found" }), {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        });
+        return this.createErrorResponse("Job not found", `Job with id ${jobId} not found`, 404);
       }
 
       job.status = status;
-      if (result) {
-        job.result = result;
-      }
-      if (error) {
-        job.error = error;
-      }
+      if (result) job.result = result;
+      if (error) job.error = error;
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          jobId: jobId,
-          status: job.status,
-        }),
-        {
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      return this.createSuccessResponse({
+        success: true,
+        jobId: jobId,
+        status: job.status,
+      });
     } catch (error) {
-      return new Response(
-        JSON.stringify({
-          error: "Invalid request body",
-          details: error instanceof Error ? error.message : "Unknown error",
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        }
+      return this.createErrorResponse(
+        "Invalid request body",
+        error instanceof Error ? error.message : "Unknown error"
       );
     }
   }
@@ -196,44 +184,38 @@ export class SajuAnalysisWorker implements DurableObject {
   private async handleJobStream(request: Request): Promise<Response> {
     try {
       const body = (await request.json()) as any;
-      const jobId =
-        body.jobId ||
-        `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // 1. 임시 job 객체 생성 (DB 저장용)
+      const tempJob = this.createJob(body, body.jobId);
+      tempJob.status = "processing";
 
-      const job: AnalysisJob = {
-        id: jobId,
-        userId: body.userId,
-        analysisType: body.analysisType || "general",
-        type: body.type || "individual",
-        pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
-        reference: body.reference,
-        i18n: body.i18n || "ko",
-        timezone: body.timezone || "Asia/Seoul",
-        userPrompt: body.userPrompt,
-        systemPrompt: body.systemPrompt,
-        sajuData: body.sajuData,
-        conversationHistory: body.conversationHistory,
-        model: body.model,
-        fortuneType: body.fortuneType,
+      // 2. DB에 초기 레코드 생성 (스트리밍도 미리 생성하여 통일)
+      const analysisStartedAt = new Date();
+      const title = generateTitle(tempJob);
 
-        createdAt: new Date().toISOString(),
-        status: "processing",
-      };
+      const initialSaveResult = await saveSajuAnalysisInitial(
+        tempJob,
+        title,
+        analysisStartedAt,
+        this.env
+      );
 
-      this.jobs.set(jobId, job);
+      if (!initialSaveResult.success) {
+        throw new Error(
+          `스트리밍 분석 작업 초기화에 실패했습니다: ${initialSaveResult.error}`
+        );
+      }
+
+      // 3. analysisId를 포함한 최종 job 객체 저장
+      tempJob.analysisId = initialSaveResult.analysisId;
+      this.jobs.set(tempJob.id, tempJob);
 
       // 스트리밍 처리 시작 (클라이언트로 스트리밍 응답 전송)
-      return this.processStreamingJob(jobId, true);
+      return this.processStreamingJob(tempJob.id, true);
     } catch (error) {
-      return new Response(
-        JSON.stringify({
-          error: "Invalid request body",
-          details: error instanceof Error ? error.message : "Unknown error",
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        }
+      return this.createErrorResponse(
+        "Invalid request body",
+        error instanceof Error ? error.message : "Unknown error"
       );
     }
   }
@@ -241,10 +223,7 @@ export class SajuAnalysisWorker implements DurableObject {
   private async processStreamingJob(jobId: string, shouldStreamToClient: boolean = true): Promise<Response> {
     const job = this.jobs.get(jobId);
     if (!job) {
-      return new Response(JSON.stringify({ error: "Job not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      return this.createErrorResponse("Job not found", `Job with id ${jobId} not found`, 404);
     }
 
     try {
@@ -266,15 +245,10 @@ export class SajuAnalysisWorker implements DurableObject {
       job.status = "failed";
       job.error = error instanceof Error ? error.message : "Unknown error";
 
-      return new Response(
-        JSON.stringify({
-          error: "스트리밍 처리 실패",
-          details: error instanceof Error ? error.message : "Unknown error",
-        }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
+      return this.createErrorResponse(
+        "스트리밍 처리 실패",
+        error instanceof Error ? error.message : "Unknown error",
+        500
       );
     }
   }
@@ -290,11 +264,11 @@ export class SajuAnalysisWorker implements DurableObject {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          // 스트리밍 응답을 클라이언트로 전송하면서 응답 수집
           for await (const chunk of streamingResp) {
             if (chunk.text) {
               fullResponse += chunk.text;
               
-              // usageMetadata 저장 (스트리밍에서도)
               if (chunk.usageMetadata) {
                 latestUsageMetadata = chunk.usageMetadata;
               }
@@ -309,24 +283,11 @@ export class SajuAnalysisWorker implements DurableObject {
             }
           }
 
-          // 스트리밍 완료 후 DB 저장
-          const analysisCompletedAt = new Date();
-          const title = generateTitle(job);
-
+          // 스트리밍 완료 후 DB 업데이트
           try {
-            const saveResult = await saveSajuAnalysis(
-              job,
-              fullResponse,
-              title,
-              analysisCompletedAt,
-              self.env,
-              latestUsageMetadata  // usageMetadata 전달
-            );
-            if (saveResult.success) {
-              await self.updateJobAfterSave(job, fullResponse, saveResult, latestUsageMetadata);
-            }
+            await self.saveAnalysisAndUpdateJob(job, fullResponse, latestUsageMetadata);
           } catch (saveError) {
-            console.error("스트리밍 응답 저장 실패:", saveError);
+            console.error("스트리밍 응답 업데이트 실패:", saveError);
           }
 
           controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
@@ -359,66 +320,73 @@ export class SajuAnalysisWorker implements DurableObject {
    * 내부 처리만 수행 (클라이언트로 스트리밍 전송 안 함)
    */
   private async processStreamingInternal(job: AnalysisJob, streamingResp: any, jobId: string): Promise<Response> {
-    let fullResponse = "";
-    let latestUsageMetadata: any = null;
-    let chunkCount = 0;
-
     try {
-      for await (const chunk of streamingResp) {
-        if (chunk.text) {
-          fullResponse += chunk.text;
-          chunkCount++;
-          if (chunk.usageMetadata) {
-            latestUsageMetadata = chunk.usageMetadata;
-          }
-        }
-      }
+      // 스트리밍 응답 처리
+      const { fullResponse, latestUsageMetadata } = await this.processStreamChunks(streamingResp);
 
-      // DB 저장
-      const analysisCompletedAt = new Date();
-      const title = generateTitle(job);
-
-      const saveResult = await saveSajuAnalysis(
-        job,
-        fullResponse,
-        title,
-        analysisCompletedAt,
-        this.env,
-        latestUsageMetadata
-      );
-
-      if (saveResult.success) {
-        await this.updateJobAfterSave(job, fullResponse, saveResult, latestUsageMetadata);
+      // DB 업데이트 및 Job 상태 업데이트
+      await this.saveAnalysisAndUpdateJob(job, fullResponse, latestUsageMetadata);
         
-        return new Response(
-          JSON.stringify({
-            success: true,
-            jobId: jobId,
-            analysisId: saveResult.analysisId,
-            status: "completed",
-            message: "분석이 완료되었습니다.",
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      } else {
-        throw new Error(`분석 결과 저장 실패: ${saveResult.error}`);
-      }
+      return this.createSuccessResponse({
+        success: true,
+        jobId: jobId,
+        analysisId: job.analysisId,
+        status: "completed",
+        message: "분석이 완료되었습니다.",
+      });
     } catch (error) {
       job.status = "failed";
       job.error = error instanceof Error ? error.message : "Unknown error";
       
-      return new Response(
-        JSON.stringify({
-          error: "내부 스트리밍 처리 실패",
-          details: error instanceof Error ? error.message : "Unknown error",
-        }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
+      return this.createErrorResponse(
+        "내부 스트리밍 처리 실패",
+        error instanceof Error ? error.message : "Unknown error",
+        500
       );
+    }
+  }
+
+  /**
+   * 스트리밍 응답 처리 공통 로직
+   */
+  private async processStreamChunks(streamingResp: any): Promise<{ fullResponse: string; latestUsageMetadata: any }> {
+    let fullResponse = "";
+    let latestUsageMetadata: any = null;
+    
+    for await (const chunk of streamingResp) {
+      if (chunk.text) {
+        fullResponse += chunk.text;
+        if (chunk.usageMetadata) {
+          latestUsageMetadata = chunk.usageMetadata;
+        }
+      }
+    }
+    
+    return { fullResponse, latestUsageMetadata };
+  }
+
+  /**
+   * 분석 결과 저장 및 Job 업데이트 공통 로직
+   */
+  private async saveAnalysisAndUpdateJob(job: AnalysisJob, fullResponse: string, latestUsageMetadata: any): Promise<void> {
+    const analysisCompletedAt = new Date();
+
+    if (!job.analysisId) {
+      throw new Error("analysisId가 없어서 분석 결과를 업데이트할 수 없습니다.");
+    }
+
+    const saveResult = await updateSajuAnalysis(
+      job.analysisId,
+      fullResponse,
+      analysisCompletedAt,
+      this.env,
+      latestUsageMetadata
+    );
+
+    if (saveResult.success) {
+      await this.updateJobAfterSave(job, fullResponse, saveResult, latestUsageMetadata);
+    } else {
+      throw new Error(`분석 결과 저장 실패: ${saveResult.error}`);
     }
   }
 
@@ -432,7 +400,7 @@ export class SajuAnalysisWorker implements DurableObject {
         this.env.DB,
         job.userId,
         job.reference,
-        saveResult.analysisId!
+        job.analysisId!
       )
     } catch (updateTransactionError) {
       console.error("[SajuAnalysisWorker] 포인트 거래 analysisId 업데이트 오류:", updateTransactionError);
@@ -441,7 +409,7 @@ export class SajuAnalysisWorker implements DurableObject {
     job.status = "completed";
     job.result = {
       answer: fullResponse,
-      analysisId: saveResult.analysisId,
+      analysisId: job.analysisId,
       metadata: {
         modelUsed: job.model,
         timestamp: new Date().toISOString(),
@@ -462,45 +430,20 @@ export class SajuAnalysisWorker implements DurableObject {
   private async handleJobProcess(request: Request): Promise<Response> {
     try {
       const body = (await request.json()) as any;
-      const jobId =
-        body.jobId ||
-        `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      const job: AnalysisJob = {
-        id: jobId,
-        userId: body.userId,
-        analysisType: body.analysisType || "general",
-        type: body.type || "individual",
-        pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
-        reference: body.reference,
-        i18n: body.i18n || "ko",
-        timezone: body.timezone || "Asia/Seoul",
-        userPrompt: body.userPrompt,
-        systemPrompt: body.systemPrompt,
-        sajuData: body.sajuData,
-        conversationHistory: body.conversationHistory,
-        model: body.model,
-        fortuneType: body.fortuneType,
-
-        createdAt: new Date().toISOString(),
-        status: "processing",
-      };
-
-      this.jobs.set(jobId, job);
+      
+      const job = this.createJob(body, body.jobId, body.analysisId);
+      job.status = "processing";
+      
+      this.jobs.set(job.id, job);
 
       // 스트리밍 처리 시작 (클라이언트로 스트리밍 응답 전송하지 않음)
-      return this.processStreamingJob(jobId, false);
+      return this.processStreamingJob(job.id, false);
     } catch (error) {
       console.error(`[SajuAnalysisWorker] 작업 시작 실패:`, error);
-      return new Response(
-        JSON.stringify({
-          error: "장시간 작업 시작 실패",
-          details: error instanceof Error ? error.message : "Unknown error",
-        }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
+      return this.createErrorResponse(
+        "장시간 작업 시작 실패",
+        error instanceof Error ? error.message : "Unknown error",
+        500
       );
     }
   }

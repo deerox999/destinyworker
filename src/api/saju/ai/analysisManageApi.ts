@@ -146,6 +146,7 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         isFavorite: true,
         i18n: true,
         timezone: true,
+        usageMetadata: true,
         analysisStartedAt: true,
         analysisCompletedAt: true,
       },
@@ -183,6 +184,7 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         sajuData: sajuData,
         i18n: analysis.i18n,
         timezone: analysis.timezone,
+        usageMetadata: analysis.usageMetadata,
       },
       200
     );

@@ -106,9 +106,9 @@ function generateServerPrompts(
   };
 
   if (c.env.ENVIRONMENT === "development") {
-    console.log("promptParams", promptParams);
-    console.log("systemPrompt", result.systemPrompt);
-    console.log("userPrompt", result.userPrompt);
+    // console.log("promptParams", promptParams);
+    // console.log("systemPrompt", result.systemPrompt);
+    // console.log("userPrompt", result.userPrompt);
   }
   return result;
 }
@@ -229,9 +229,7 @@ async function updateProfileContext(env: any, userId: number, profileId?: number
         context: userContext,
       },
     });
-    
     await prisma.$disconnect();
-    console.log(`프로필 ID ${profileId}의 context가 업데이트되었습니다.`);
   } catch (error) {
     console.error("프로필 context 업데이트 실패:", error);
   }

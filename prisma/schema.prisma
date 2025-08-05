@@ -384,12 +384,8 @@ model SajuAnalysis {
   timezone        String?  /// 시간대 설정 (Asia/Seoul, America/New_York 등)
   analysisStartedAt DateTime? /// 분석 시작 시간
   analysisCompletedAt DateTime? /// 분석 완료 시간
-  // usageMetadata 관련 필드들
-  promptTokenCount Int?    /// 프롬프트 토큰 수
-  candidatesTokenCount Int? /// 응답 토큰 수  
-  totalTokenCount Int?     /// 전체 토큰 수
-  modelVersion    String?  /// 모델 버전 (예: gemini-2.5-pro)
-  chunkCount      Int?     /// 스트리밍 청크 수
+  // usageMetadata 관련 필드들 (JSON으로 통합)
+  usageMetadata   String?  /// 토큰 사용량 등 메타데이터 (JSON 문자열)
   createdAt       DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 분석 생성 시간
   updatedAt       DateTime @updatedAt /// 마지막 업데이트 시간
   

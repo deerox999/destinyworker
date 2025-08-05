@@ -80,6 +80,7 @@ export interface AnalysisJob {
   status: "pending" | "processing" | "completed" | "failed";
   result?: any;
   error?: string;
+  analysisId?: number;
 }
 
 /**
@@ -220,11 +221,12 @@ export function getResponseType(type: string): string {
  * 사주 분석 초기 데이터를 DB에 저장하는 함수 (분석 시작 시)
  */
 export async function saveSajuAnalysisInitial(
-  message: SajuAnalysisMessage,
+  message: SajuAnalysisMessage | AnalysisJob,
   title: string,
   analysisStartedAt: Date,
   env: any
 ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
+  const prisma = createPrismaClient(env.DB);
   try {
     let birthData = null;
     if (message.sajuData) {
@@ -241,8 +243,6 @@ export async function saveSajuAnalysisInitial(
         };
       }
     }
-
-    const prisma = createPrismaClient(env.DB);
 
     const analysis = await prisma.sajuAnalysis.create({
       data: {
@@ -263,8 +263,6 @@ export async function saveSajuAnalysisInitial(
       },
     });
 
-    await prisma.$disconnect();
-
     return {
       success: true,
       analysisId: analysis.id,
@@ -275,11 +273,13 @@ export async function saveSajuAnalysisInitial(
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 /**
- * 사주 분석 결과를 DB에서 업데이트하는 함수 (분석 완료 시)
+ * 사주 분석 결과를 DB에서 업데이트하는 함수 (분석 완료/실패 시)
  */
 export async function updateSajuAnalysis(
   analysisId: number,
@@ -288,9 +288,8 @@ export async function updateSajuAnalysis(
   env: any,
   usageMetadata?: any
 ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
+  const prisma = createPrismaClient(env.DB);
   try {
-    const prisma = createPrismaClient(env.DB);
-
     const updateData: any = {
       aiResponse: aiResponse,
       analysisCompletedAt: analysisCompletedAt,
@@ -298,19 +297,13 @@ export async function updateSajuAnalysis(
 
     // usageMetadata가 있으면 토큰 정보도 업데이트
     if (usageMetadata) {
-      updateData.promptTokenCount = usageMetadata.promptTokenCount || null;
-      updateData.candidatesTokenCount = usageMetadata.candidatesTokenCount || null;
-      updateData.totalTokenCount = usageMetadata.totalTokenCount || null;
-      updateData.modelVersion = usageMetadata.modelVersion || null;
-      updateData.chunkCount = usageMetadata.chunkCount || null;
+      updateData.usageMetadata = JSON.stringify(usageMetadata);
     }
 
     const analysis = await prisma.sajuAnalysis.update({
       where: { id: analysisId },
       data: updateData,
     });
-
-    await prisma.$disconnect();
 
     return {
       success: true,
@@ -322,11 +315,13 @@ export async function updateSajuAnalysis(
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 /**
- * 사주 분석 결과를 DB에 저장하는 함수 (완료 시)
+ * 사주 분석 결과를 DB에 저장하는 함수 (스트리밍 완료 시 사용)
  */
 export async function saveSajuAnalysis(
   job: AnalysisJob,
@@ -336,6 +331,7 @@ export async function saveSajuAnalysis(
   env: any,
   usageMetadata?: any
 ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
+  const prisma = createPrismaClient(env.DB);
   try {
     let birthData = null;
     if (job.sajuData) {
@@ -352,8 +348,6 @@ export async function saveSajuAnalysis(
         };
       }
     }
-
-    const prisma = createPrismaClient(env.DB);
 
     const createData: any = {
       userId: job.userId,
@@ -374,11 +368,7 @@ export async function saveSajuAnalysis(
 
     // usageMetadata가 있으면 토큰 정보도 저장
     if (usageMetadata) {
-      createData.promptTokenCount = usageMetadata.promptTokenCount || null;
-      createData.candidatesTokenCount = usageMetadata.candidatesTokenCount || null;
-      createData.totalTokenCount = usageMetadata.totalTokenCount || null;
-      createData.modelVersion = usageMetadata.modelVersion || null;
-      createData.chunkCount = usageMetadata.chunkCount || null;
+      createData.usageMetadata = JSON.stringify(usageMetadata);
     }
 
     const result = await prisma.sajuAnalysis.create({
@@ -395,5 +385,7 @@ export async function saveSajuAnalysis(
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
+  } finally {
+    await prisma.$disconnect();
   }
 }

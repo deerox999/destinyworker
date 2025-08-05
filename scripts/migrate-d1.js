@@ -1,7 +1,11 @@
 /*
 예시:
   # 로컬 환경에 일반 마이그레이션
-  node scripts/migrate-d1.js --remote
+  node scripts/migrate-d1.js --local
+
+  # 직접 쿼리 실행 (로컬은 --remote제거해야 함.)
+  npx wrangler d1 execute destiny-local --command "ALTER TABLE SajuAnalysis ADD COLUMN usageMetadata TEXT;"
+  npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE SajuAnalysis ADD COLUMN usageMetadata TEXT;"
 
   # 개발 환경에 강제 마이그레이션 (DROP 포함)
   node scripts/migrate-d1.js --dev --force
