@@ -4,6 +4,7 @@ import {
   refundPoints,
   usePoints,
 } from "../../../common/paymentUtils";
+import { createPrismaClient } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
 import {
   generateAnalysisPrompts,
@@ -13,13 +14,11 @@ import {
   type 분석요소,
   type 이해도레벨,
 } from "./prompt/geminiPrompt";
-import { SERVER_MODEL_CONFIG } from "./utils";
 
 // API 사용자가 보내는 요청 본문 타입 정의 (안전한 파라미터만 허용)
 interface AnalysisSajuRequest {
   // 사주 데이터 (필수)
   sajuData: any;
-
   // 분석 옵션
   options?: {
     // 분석 설정
@@ -29,6 +28,7 @@ interface AnalysisSajuRequest {
     // 프롬프트 생성 파라미터
     userQuestion?: string; // 사용자 추가 질문
     userContext?: string; // 사용자 맥락정보
+    profileId?: number; // 프로필 ID (선택적 - 분석 후 해당 프로필의 context 업데이트용)
     toneOption?: 분석관점; // '현실적', '약간긍정', '약간부정'
     targetYear?: number; // 연간운세용
     understandingLevel?: 이해도레벨; // '초보', '중수', '전문가'
@@ -212,6 +212,32 @@ class DurableObjectClient {
 }
 
 /**
+ * 프로필의 context를 업데이트하는 헬퍼 함수
+ */
+async function updateProfileContext(env: any, userId: number, profileId?: number, userContext?: string): Promise<void> {
+  if (!profileId || !userContext) return;
+  try {
+    const prisma = createPrismaClient(env.DB);
+    
+    // 해당 프로필이 사용자 소유인지 확인 후 업데이트
+    await prisma.sajuProfile.updateMany({
+      where: {
+        id: profileId,
+        userId: userId,
+      },
+      data: {
+        context: userContext,
+      },
+    });
+    
+    await prisma.$disconnect();
+    console.log(`프로필 ID ${profileId}의 context가 업데이트되었습니다.`);
+  } catch (error) {
+    console.error("프로필 context 업데이트 실패:", error);
+  }
+}
+
+/**
  * 통합 사주 분석 API - 모든 분석 유형을 하나의 엔드포인트로 처리
  */
 export async function AnalysisSaju(c: Context): Promise<Response> {
@@ -305,6 +331,9 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
 
       const streamResponse = await doClient.startStreaming(jobData);
 
+      // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)
+      updateProfileContext(c.env, user.id, options.profileId, options.userContext);
+
       if (!streamResponse.ok) {
         // 실패 시 포인트 환불
         await refundPoints(
@@ -387,6 +416,9 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       } else {
         console.warn("[Queue] QUEUE가 설정되지 않음");
       }
+
+      // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)  
+      updateProfileContext(c.env, user.id, options.profileId, options.userContext);
 
       return c.json(
         {
