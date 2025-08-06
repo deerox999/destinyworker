@@ -6,6 +6,7 @@ import {
   getCelebrities,
   getCelebrityRequests,
   updateCelebrity,
+  updateCelebrityAiResponse,
 } from "./celebrity";
 
 import { MiddlewareHandler } from "hono";
@@ -140,12 +141,55 @@ export function createCelebrityAdminRouter(authMiddleware: MiddlewareHandler): O
     },
   });
 
+  const updateCelebrityAiResponseRoute = createRoute({
+    method: "patch",
+    path: "/{id}/ai-response",
+    summary: "[Admin] 유명인물 AI 응답 업데이트",
+    description: "특정 언어의 AI 응답만 업데이트합니다. 기존 번역 데이터는 유지됩니다. (관리자용)",
+    tags: ["Admin-유명인물"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: CelebrityIdParamSchema,
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              languageCode: z.string().openapi({ description: "언어 코드", example: "ko" }),
+              aiResponse: z.string().openapi({ description: "AI 응답 내용", example: "아이유는 대한민국의 가수이자 배우입니다." }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: { 
+        description: "AI 응답 업데이트 성공", 
+        content: { 
+          "application/json": { 
+            schema: SuccessSchema.extend({ 
+              data: z.object({
+                celebrityId: z.string().openapi({ example: "iu" }),
+                languageCode: z.string().openapi({ example: "ko" }),
+                aiResponse: z.string().openapi({ example: "아이유는 대한민국의 가수이자 배우입니다." }),
+              }).openapi({ type: 'object' })
+            }).openapi({ type: 'object' }) 
+          } 
+        } 
+      },
+      400: { description: "잘못된 요청 데이터" },
+      401: { description: "인증 실패" },
+      403: { description: "권한 없음" },
+      404: { description: "유명인물 또는 해당 언어 번역을 찾을 수 없음" },
+    },
+  });
+
 
   // 라우트 등록
   app.openapi(createCelebritiesBatchRoute, (c) => createCelebritiesBatch(c)); 
   app.openapi(createCelebrityRoute, (c) => createCelebrity(c));
   app.openapi(getCelebritiesRoute, (c) => getCelebrities(c)); // 안됨
   app.openapi(updateCelebrityRoute, (c) => updateCelebrity(c)); // 안됨
+  app.openapi(updateCelebrityAiResponseRoute, (c) => updateCelebrityAiResponse(c));
   app.openapi(deleteCelebrityRoute, (c) => deleteCelebrity(c)); // 안됨
   app.openapi(getCelebrityRequestsRoute, (c) => getCelebrityRequests(c)); // 안됨
   return app;

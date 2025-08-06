@@ -336,22 +336,35 @@ export async function updateCelebrityAiResponse(
       return c.json({ error: "언어 코드가 필요합니다." }, 400);
     }
 
-    if (aiResponse === undefined) {
-      return c.json({ error: "aiResponse 데이터가 필요합니다." }, 400);
+    if (aiResponse === undefined || aiResponse === null) {
+      return c.json({ error: "AI 응답 내용이 필요합니다." }, 400);
     }
 
     const prisma = createPrismaClient(c.env.DB);
-
-    // 해당 언어의 번역 데이터 업데이트
-    const updatedTranslation = await prisma.celebrityTranslation.update({
+    
+    // 해당 언어의 번역 데이터가 존재하는지 확인
+    const existingTranslation = await prisma.celebrityTranslation.findFirst({
       where: {
-        celebrityId_languageCode: {
-          celebrityId,
-          languageCode,
-        },
+        celebrityId,
+        languageCode,
+      },
+    });
+
+    if (!existingTranslation) {
+      await prisma.$disconnect();
+      return c.json({ 
+        error: "해당 언어의 번역 데이터를 찾을 수 없습니다.",
+        message: `Celebrity ID: ${celebrityId}, Language: ${languageCode}`
+      }, 404);
+    }
+
+    // aiResponse만 업데이트
+    await prisma.celebrityTranslation.update({
+      where: {
+        id: existingTranslation.id,
       },
       data: {
-        aiResponse: aiResponse,
+        aiResponse,
       },
     });
 
@@ -359,8 +372,12 @@ export async function updateCelebrityAiResponse(
 
     return c.json({
       success: true,
-      message: "AI 응답이 업데이트되었습니다.",
-      data: updatedTranslation,
+      message: "AI 응답이 성공적으로 업데이트되었습니다.",
+      data: {
+        celebrityId,
+        languageCode,
+        aiResponse,
+      },
     });
   } catch (error) {
     return c.json(
