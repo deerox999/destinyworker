@@ -1091,6 +1091,7 @@ export async function getAnalysisById(
         timezone: true,
         analysisStartedAt: true,
         analysisCompletedAt: true,
+        usageMetadata: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -1131,8 +1132,9 @@ export async function getAnalysisById(
         sajuData: sajuData,
         i18n: analysis.i18n,
         timezone: analysis.timezone,
+        usageMetadata: analysis.usageMetadata,
         createdAt: toUTC(analysis.createdAt),
-        updatedAt: toUTC(analysis.updatedAt)
+        updatedAt: toUTC(analysis.updatedAt),
       }
     });
 
