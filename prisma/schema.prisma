@@ -118,6 +118,7 @@ model CelebrityTranslation {
   name          String   /// 번역된 이름
   occupation    String   /// 직업
   description   String   /// 설명
+  aiResponse    String?  /// AI가 생성한 분석 데이터
   
   celebrity     Celebrity @relation(fields: [celebrityId], references: [id], onDelete: Cascade)
 

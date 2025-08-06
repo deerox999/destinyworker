@@ -22,7 +22,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
     path: "/",
     summary: "유명인물 목록 조회",
     description: "페이지네이션을 지원하는 유명인물 목록을 조회합니다.",
-    tags: ["Admin-유명인물"],
+    tags: ["유명인물"],
     request: {
       query: PaginationQuerySchema.merge(SortQuerySchema).extend({
         id: z.string().optional().describe("ID로 검색 (정확한 ID 매칭)"),

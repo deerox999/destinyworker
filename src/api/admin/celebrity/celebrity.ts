@@ -61,16 +61,17 @@ export async function createCelebritiesBatch(
         imageUrl: celebrity.imageUrl,
       });
 
-      // 번역 데이터 추가
-      translations.forEach((t: any) => {
-        allTranslations.push({
-          celebrityId: id,
-          languageCode: t.languageCode,
-          name: t.name,
-          occupation: t.occupation,
-          description: t.description,
-        });
-      });
+             // 번역 데이터 추가
+       translations.forEach((t: any) => {
+         allTranslations.push({
+           celebrityId: id,
+           languageCode: t.languageCode,
+           name: t.name,
+           occupation: t.occupation,
+           description: t.description,
+           aiResponse: t.aiResponse || null,
+         });
+       });
     });
 
     if (validationErrors.length > 0) {
@@ -179,6 +180,7 @@ export async function createCelebrity(
           name: t.name,
           occupation: t.occupation,
           description: t.description,
+          aiResponse: t.aiResponse || null,
         })),
       }),
     ]);
@@ -249,6 +251,7 @@ export async function updateCelebrity(
             name: t.name,
             occupation: t.occupation,
             description: t.description,
+            aiResponse: t.aiResponse || null,
           })),
         })
       );
@@ -312,6 +315,63 @@ export async function deleteCelebrity(
   }
 }
 
+// [Admin] 유명인물 업데이트
+export async function updateCelebrityAiResponse(
+  c: Context,
+): Promise<Response> {
+  try {
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const celebrityId = c.req.param("id");
+    if (!celebrityId) {
+      return c.json({ error: "유명인물 ID가 필요합니다." }, 400);
+    }
+
+    const body = (await c.req.json()) as any;
+    const { languageCode, aiResponse } = body;
+
+    if (!languageCode) {
+      return c.json({ error: "언어 코드가 필요합니다." }, 400);
+    }
+
+    if (aiResponse === undefined) {
+      return c.json({ error: "aiResponse 데이터가 필요합니다." }, 400);
+    }
+
+    const prisma = createPrismaClient(c.env.DB);
+
+    // 해당 언어의 번역 데이터 업데이트
+    const updatedTranslation = await prisma.celebrityTranslation.update({
+      where: {
+        celebrityId_languageCode: {
+          celebrityId,
+          languageCode,
+        },
+      },
+      data: {
+        aiResponse: aiResponse,
+      },
+    });
+
+    await prisma.$disconnect();
+
+    return c.json({
+      success: true,
+      message: "AI 응답이 업데이트되었습니다.",
+      data: updatedTranslation,
+    });
+  } catch (error) {
+    return c.json(
+      {
+        error: "AI 응답 업데이트 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
 
 /**
  * 유명인물 요청 목록 조회 (관리자용)
@@ -401,7 +461,17 @@ export async function getCelebrities(
     const queryOptions = {
       where,
       include: {
-        translations: true,
+        translations: {
+          select: {
+            id: true,
+            celebrityId: true,
+            languageCode: true,
+            name: true,
+            occupation: true,
+            description: true,
+            aiResponse: true,
+          },
+        },
       },
       orderBy: {
         [sort]: order,
