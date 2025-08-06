@@ -38,6 +38,7 @@ interface AnalysisSajuRequest {
     i18n?: string; // 언어 설정
     timezone?: string; // 시간대 설정
     stream?: boolean; // 스트리밍 여부
+    isDevelop?: boolean; // 개발자 모드 (특별추가질문 활성화)
   };
 }
 
@@ -61,6 +62,7 @@ function generateServerPrompts(
     selectedAnalysisElements = [],
     i18n = "ko",
     stream = false,
+    isDevelop = false,
   } = options;
   let baseModel = ""; // stream 파라미터에 따라 모델 선택
   
@@ -75,6 +77,7 @@ function generateServerPrompts(
     이해도레벨: understandingLevel,
     선택된분석요소: selectedAnalysisElements,
     user,
+    isDevelop,
   };
 
   let prompts: { systemPrompt: string; userPrompt: string };
