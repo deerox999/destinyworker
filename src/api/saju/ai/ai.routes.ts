@@ -3,6 +3,7 @@ import { MiddlewareHandler } from "hono";
 import { createAnalysisRouter } from "./analysis.routes";
 import { createRagRouter } from "./rag.routes";
 import { createChatRouter } from "./chat.routes";
+import { createDailyRouter } from "./daily.routes";
 
 export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -11,6 +12,8 @@ export function createAiRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   app.route("/", createAnalysisRouter(authMiddleware));
   app.route("/", createRagRouter(authMiddleware));
   app.route("/", createChatRouter(authMiddleware));
+  // 무료 오늘의 운세는 인증 없이 제공
+  app.route("/", createDailyRouter());
 
   return app;
 }
