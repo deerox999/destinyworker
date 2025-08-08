@@ -1,4 +1,5 @@
 import { Context } from "hono";
+import { createPrismaClient } from "./prismaUtils";
 
 interface JWTPayload {
   userId: number;
@@ -134,5 +135,22 @@ export async function verifyJWT(
     return payload;
   } catch (error) {
     return null;
+  }
+}
+
+// 날짜를 UTC 문자열로 변환
+export const toUTC = (date: Date | string | null | undefined): string | null => {
+  if (!date) return null;
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toISOString();
+};
+
+// Prisma 핸들러 감싸기 (연결 생성/종료 보장)
+export async function withPrisma<T>(db: D1Database, handler: (prisma: any) => Promise<T>): Promise<T> {
+  const prisma = createPrismaClient(db);
+  try {
+    return await handler(prisma);
+  } finally {
+    await prisma.$disconnect();
   }
 }

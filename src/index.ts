@@ -3,13 +3,11 @@ import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
 import { SajuAnalysisWorker } from "./api/saju/ai/durable-objects/SajuAnalysisWorker";
-import { saju_analysis_queue_handler } from "./api/saju/ai/queue-consumers/sajuAnalysisConsumer";
 
 type Env = {
   Bindings: {
     KV: KVNamespace;
     SAJU_ANALYSIS_WORKER: DurableObjectNamespace;
-    QUEUE: Queue;
     GOOGLE_GEMINI_API_KEY: string;
     DB: D1Database;
   }
@@ -58,11 +56,4 @@ app.route("/", routes);
 // Durable Object 등록
 export { SajuAnalysisWorker };
 
-// Queue Consumer 등록 - Cloudflare Worker에서 자동으로 인식
-export { saju_analysis_queue_handler };
-
-// Queue Consumer를 default export에 포함
-export default {
-  ...app,
-  queue: saju_analysis_queue_handler,
-};
+export default app;

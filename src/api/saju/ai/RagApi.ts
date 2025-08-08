@@ -1,6 +1,7 @@
 import { Context } from "hono";
 import { createEmbedding, createEmbeddings } from "../../../common/ragUtils";
 import { createPrismaClient } from "../../../common/prismaUtils";
+import { parsePagination, buildPaginationMeta } from "../../../common/paginationUtils";
 
 /**
  * RAG 문서에 대한 사주 프로젝트용 표준 메타데이터 스키마.
@@ -170,11 +171,8 @@ export async function RagDocuments(
     const prisma = createPrismaClient(c.env.DB);
     
     // 페이지네이션 파라미터 추출
-    const page = parseInt(c.req.query("page") || "1");
-    const limit = parseInt(c.req.query("limit") || "10");
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 10, maxLimit: 100 });
     const search = c.req.query("search") || "";
-    
-    const skip = (page - 1) * limit;
     
     // 검색 조건 구성
     const where = search ? {
@@ -191,7 +189,7 @@ export async function RagDocuments(
     const documents = await prisma.document.findMany({
       where,
       skip,
-      take: limit,
+      take,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -211,12 +209,9 @@ export async function RagDocuments(
     return c.json({
       data: parsedDocuments,
       pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasNext: page * limit < total,
-        hasPrev: page > 1
+        ...buildPaginationMeta(total, page, take),
+        hasNext: page * take < total,
+        hasPrev: page > 1,
       }
     });
   } catch (error) {

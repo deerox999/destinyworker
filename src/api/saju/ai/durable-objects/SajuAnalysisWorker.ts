@@ -125,13 +125,17 @@ export class SajuAnalysisWorker implements DurableObject {
     try {
       const body = (await request.json()) as any;
       const job = this.createJob(body, body.jobId);
-      
+
+      // 생성 직후 상태 저장
       this.jobs.set(job.id, job);
+
+      // Queue 없이 비동기 처리: 초기 저장 + 장시간 처리까지 백그라운드로 수행
+      this.state.waitUntil(this.initializeAndProcessJob(job));
 
       return this.createSuccessResponse({
         success: true,
         jobId: job.id,
-        message: "분석 작업이 등록되었습니다. Queue에서 처리됩니다.",
+        message: "분석 작업이 등록되었습니다. 처리 대기 중입니다.",
         status: "pending",
       });
     } catch (error) {
@@ -449,4 +453,38 @@ export class SajuAnalysisWorker implements DurableObject {
   }
 
 
+  /**
+   * Queue 없이 동작할 때: 초기 DB 저장 후 내부 처리까지 백그라운드로 수행
+   */
+  private async initializeAndProcessJob(job: any): Promise<void> {
+    try {
+      // 1) 초기 레코드 생성
+      const analysisStartedAt = new Date();
+      const title = generateTitle(job);
+
+      const initialSaveResult = await saveSajuAnalysisInitial(
+        job,
+        title,
+        analysisStartedAt,
+        this.env
+      );
+
+      if (!initialSaveResult.success) {
+        job.status = "failed";
+        job.error = `분석 작업 초기화에 실패했습니다: ${initialSaveResult.error}`;
+        this.jobs.set(job.id, job);
+        return;
+      }
+
+      // 2) analysisId 부여 후 내부 처리 실행
+      job.analysisId = initialSaveResult.analysisId;
+      this.jobs.set(job.id, job);
+
+      await this.processStreamingJob(job.id, false);
+    } catch (error) {
+      job.status = "failed";
+      job.error = error instanceof Error ? error.message : "Unknown error";
+      this.jobs.set(job.id, job);
+    }
+  }
 }

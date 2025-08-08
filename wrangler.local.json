@@ -47,24 +47,7 @@
       "experimental_remote": true
     }
   ],
-  "queues": {
-    "producers": [
-      {
-        "binding": "QUEUE",
-        "queue": "analysis",
-        "experimental_remote": true
-      }
-    ],
-    "consumers": [
-      {
-        "queue": "analysis",
-        "max_batch_size": 5,
-        "max_batch_timeout": 10,
-        "max_retries": 2,
-        "max_concurrency": 5
-      }
-    ]
-  },
+  
   "durable_objects": {
     "bindings": [
       {

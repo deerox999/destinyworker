@@ -24,7 +24,7 @@
     "lunar-javascript": "^1.7.3",
     "swagger-typescript-api": "^13.2.7",
     "typescript": "5.8.3",
-    "wrangler": "^4.26.1"
+    "wrangler": "^4.28.1"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.844.0",
@@ -48,10 +48,10 @@
     "cf-typegen": "wrangler types",
     "update:local": "npm i -D wrangler@latest",
     "update:global": "npm install -g wrangler@latest",
-    "check": "tsc && wrangler deploy --dry-run",
-    "deploy": "wrangler deploy",
     "dev": "wrangler dev --x-remote-bindings --config wrangler.local.json",
     "dev:remote": "wrangler dev --x-remote-bindings",
+    "deploy": "wrangler deploy",
+    "check": "tsc && wrangler deploy --dry-run",
     "secret:put": "wrangler secret put RESEND_API_KEY",
     "db:migrate:dev": "node scripts/migrate-d1.js --dev",
     "db:migrate:local": "node scripts/migrate-d1.js --local",

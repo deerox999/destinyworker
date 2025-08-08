@@ -112,3 +112,77 @@ export async function paginate(
     throw new Error(`Failed to retrieve paginated data from ${tableName}.`);
   }
 }
+
+// 추가: 페이지네이션/정렬 유틸 공통 함수들
+export type SortOrder = "asc" | "desc";
+
+export interface PaginationParams {
+  page: number;
+  limit: number;
+  skip: number;
+  take: number;
+}
+
+export interface PaginationOptionsEx {
+  defaultPage?: number;
+  defaultLimit?: number;
+  maxLimit?: number;
+}
+
+export interface SortParams {
+  sort: string;
+  order: SortOrder;
+}
+
+export interface SortOptions {
+  allowedFields?: string[];
+  defaultSort?: string;
+  defaultOrder?: SortOrder;
+}
+
+export function parsePagination(
+  c: Context,
+  options: PaginationOptionsEx = {}
+): PaginationParams {
+  const { defaultPage = 1, defaultLimit = 20, maxLimit = 100 } = options;
+
+  const rawPage = c.req.query("page");
+  const rawLimit = c.req.query("limit");
+
+  const page = Math.max(1, parseInt(rawPage || `${defaultPage}`, 10));
+  const limit = Math.max(
+    1,
+    Math.min(maxLimit, parseInt(rawLimit || `${defaultLimit}`, 10))
+  );
+  const skip = (page - 1) * limit;
+  const take = limit;
+
+  return { page, limit, skip, take };
+}
+
+export function parseSort(
+  c: Context,
+  options: SortOptions = {}
+): SortParams {
+  const { allowedFields, defaultSort = "createdAt", defaultOrder = "desc" } = options;
+
+  const sort = (c.req.query("sort") || defaultSort).toString();
+  let order = (c.req.query("order") || defaultOrder).toString().toLowerCase();
+  if (order !== "asc" && order !== "desc") order = defaultOrder;
+
+  const finalSort = allowedFields && allowedFields.length > 0
+    ? allowedFields.includes(sort) ? sort : defaultSort
+    : sort;
+
+  return { sort: finalSort, order: order as SortOrder };
+}
+
+export function buildPaginationMeta(totalItems: number, page: number, pageSize: number) {
+  const totalPages = Math.ceil(totalItems / pageSize);
+  return {
+    totalItems,
+    totalPages,
+    currentPage: page,
+    pageSize,
+  };
+}

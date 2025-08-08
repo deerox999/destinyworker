@@ -67,18 +67,7 @@ experimental_remote = true
 
 # send_email 설정 제거 - Resend 사용으로 변경
 
-[queues] # 큐 설정 (비동기 작업 처리)
-[[queues.producers]] # 프로듀서 설정 (작업 생성)
-binding = "QUEUE"
-queue = "analysis"               # 사주 분석 작업 큐
-experimental_remote = true
 
-[[queues.consumers]] # 컨슈머 설정 (작업 처리)
-queue = "analysis"          # 분석 작업 처리
-max_batch_size = 5              # 배치 크기 감소 (빠른 처리)
-max_batch_timeout = 10          # 배치 타임아웃 단축 (10초)
-max_retries = 2             # 최대 재시도 횟수 감소
-max_concurrency = 5         # 병렬 처리량 조정
 
 [durable_objects] # Durable Objects 설정 (상태 유지 객체)
 [[durable_objects.bindings]] # 바인딩 설정

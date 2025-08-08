@@ -406,17 +406,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
         );
       }
 
-      // Queue에 작업 전송
-      if (c.env.QUEUE) {
-        try {
-          await c.env.QUEUE.send({ ...jobData, jobId: createResult.jobId })
-        } catch (queueError) {
-          console.error("[Queue] 전송 실패:", queueError);
-          console.warn(`[Queue] Queue 전송 실패했지만 작업은 등록됨: ${createResult.jobId}`);
-        }
-      } else {
-        console.warn("[Queue] QUEUE가 설정되지 않음");
-      }
+      // Queue 없이 DO에서 비동기 처리됨 (handleJobCreate 내부 waitUntil)
 
       // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)  
       updateProfileContext(c.env, user.id, options.profileId, options.userContext);
@@ -425,7 +415,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
         {
           success: true,
           jobId: createResult.jobId,
-          message: "분석 작업이 등록되었습니다. Queue에서 처리됩니다.",
+          message: "분석 작업이 등록되었습니다. 처리 대기 중입니다.",
           status: "pending",
           points: {
             deducted: pointsCost,

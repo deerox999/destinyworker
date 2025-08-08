@@ -1,15 +1,8 @@
 import { Context } from "hono";
-import { paginate } from "../../common/paginationUtils";
-import { isAdmin, createPrismaClient } from "../../common/prismaUtils";
-import { addPoints, deductPoints, getUserPoints, getPointTransactions } from "../../common/paymentUtils";
-import { PrismaClient } from "@prisma/client";
-
-// UTC 변환 유틸리티 함수
-const toUTC = (date: Date | string | null): string | null => {
-  if (!date) return null;
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return dateObj.toISOString();
-};
+import { buildPaginationMeta, paginate, parsePagination } from "../../common/paginationUtils";
+import { addPoints, deductPoints, getPointTransactions, getUserPoints } from "../../common/paymentUtils";
+import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
+import { toUTC } from "../../common/utils";
 
 // 영어 -> 한글 필드 변환 (사주 프로필용)
 const toKoreanFields = (profile: any) => ({
@@ -37,11 +30,8 @@ export async function getUsers(c: Context): Promise<any> {
     const prisma = createPrismaClient(c.env.DB);
 
     // URL 파라미터에서 페이지네이션 정보 추출
-    const page = parseInt(c.req.query("page") || "1");
-    const limit = parseInt(c.req.query("limit") || "20");
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 20, maxLimit: 100 });
     const search = c.req.query("search") || "";
-
-    const skip = (page - 1) * limit;
 
     // 검색 조건 구성
     const whereCondition = search
@@ -71,7 +61,7 @@ export async function getUsers(c: Context): Promise<any> {
         },
         orderBy: { createdAt: "desc" },
         skip,
-        take: limit,
+        take,
       }),
       prisma.user.count({ where: whereCondition }),
     ]);
@@ -91,12 +81,7 @@ export async function getUsers(c: Context): Promise<any> {
         updatedAt: toUTC(user.updatedAt),
         profileCount: user._count.sajuProfiles,
       })),
-      pagination: {
-        totalItems: totalCount,
-        totalPages: Math.ceil(totalCount / limit),
-        currentPage: page,
-        pageSize: limit,
-      },
+      pagination: buildPaginationMeta(totalCount, page, take),
     });
   } catch (error) {
     return c.json(
@@ -231,12 +216,9 @@ export async function getLoginHistory(
 
     const prisma = createPrismaClient(c.env.DB);
 
-    const page = parseInt(c.req.query("page") || "1");
-    const limit = parseInt(c.req.query("limit") || "20");
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 20, maxLimit: 100 });
     const search = c.req.query("search") || "";
     const action = c.req.query("action") || ""; // 'login' or 'logout'
-
-    const skip = (page - 1) * limit;
 
     const whereCondition: any = {};
     if (search) {
@@ -263,7 +245,7 @@ export async function getLoginHistory(
         },
         orderBy: { createdAt: "desc" },
         skip,
-        take: limit,
+        take,
       }),
       prisma.loginHistory.count({ where: whereCondition }),
     ]);
@@ -278,12 +260,7 @@ export async function getLoginHistory(
         createdAt: toUTC(h.createdAt),
         user: h.user,
       })),
-      pagination: {
-        totalItems: totalCount,
-        totalPages: Math.ceil(totalCount / limit),
-        currentPage: page,
-        pageSize: limit,
-      },
+      pagination: buildPaginationMeta(totalCount, page, take),
     });
   } catch (error) {
     return c.json(
@@ -409,8 +386,7 @@ export async function getAiUsageStatsByUser(
   }
 
   const prisma = createPrismaClient(c.env.DB);
-  const page = parseInt(c.req.query("page") || "1");
-  const limit = parseInt(c.req.query("limit") || "20");
+  const { page, take, skip } = parsePagination(c, { defaultLimit: 20, maxLimit: 100 });
   const sort = c.req.query("sort") || "totalTokens";
   const allowedSortColumns = ["totalTokens", "totalCalls"];
   const sortColumn = allowedSortColumns.includes(sort) ? sort : "totalTokens";
@@ -418,7 +394,7 @@ export async function getAiUsageStatsByUser(
     c.req.query("order")?.toLowerCase() === "asc" ? "ASC" : "DESC";
   const startDate = c.req.query("startDate");
   const endDate = c.req.query("endDate");
-  const offset = (page - 1) * limit;
+  const offset = skip;
 
   try {
     const whereClauses: string[] = [];
@@ -454,7 +430,7 @@ export async function getAiUsageStatsByUser(
           totalItems: 0,
           totalPages: 0,
           currentPage: page,
-          pageSize: limit,
+          pageSize: take,
         },
       });
     }
@@ -474,7 +450,7 @@ export async function getAiUsageStatsByUser(
     const paginatedUserStats = (await prisma.$queryRawUnsafe(
       userIdsQuery,
       ...bindings,
-      limit,
+      take,
       offset
     )) as any[];
     const userIds = paginatedUserStats.map((u) => u.userId);
@@ -486,9 +462,9 @@ export async function getAiUsageStatsByUser(
         stats: [],
         pagination: {
           totalItems,
-          totalPages: Math.ceil(totalItems / limit),
+          totalPages: Math.ceil(totalItems / take),
           currentPage: page,
-          pageSize: limit,
+          pageSize: take,
         },
       });
     }
@@ -554,12 +530,7 @@ export async function getAiUsageStatsByUser(
     return c.json({
       success: true,
       stats: finalStats,
-      pagination: {
-        totalItems,
-        totalPages: Math.ceil(totalItems / limit),
-        currentPage: page,
-        pageSize: limit,
-      },
+      pagination: buildPaginationMeta(totalItems, page, take),
     });
   } catch (error) {
     console.error("Error fetching AI usage stats by user:", error);

@@ -1,6 +1,6 @@
 
 import { isAdmin, createPrismaClient } from "../../../common/prismaUtils";
-import { paginate } from "../../../common/paginationUtils";
+import { paginate, parsePagination, buildPaginationMeta } from "../../../common/paginationUtils";
 import { Context } from "hono";
 
 // [Admin] 유명인물 대량 생성
@@ -424,9 +424,7 @@ export async function getCelebrities(
     const prisma = createPrismaClient(c.env.DB);
     const { searchParams } = new URL(c.req.url);
 
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
-    const skip = Number((page - 1) * limit);
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 10, maxLimit: 100 });
     const sort = searchParams.get("sort") || "createdAt";
     const order = searchParams.get("order")?.toLowerCase() || "desc";
     const id = searchParams.get("id") || "";
@@ -489,12 +487,22 @@ export async function getCelebrities(
             aiResponse: true,
           },
         },
+        viewCount: {
+          select: {
+            viewCount: true,
+          },
+        },
+        _count: {
+          select: {
+            comments: true,
+          },
+        },
       },
       orderBy: {
         [sort]: order,
       },
       skip,
-      take: limit,
+      take,
     };
     
     const [celebrities, totalCount] = await Promise.all([
@@ -502,18 +510,26 @@ export async function getCelebrities(
       prisma.celebrity.count({ where }),
     ]);
 
-    const totalPages = Math.ceil(totalCount / limit);
+    // 각 유명인물에 대해 aiResponse 유무 확인 및 추가 정보 계산
+    const celebritiesWithStats = celebrities.map(celebrity => {
+      const viewCountValue = celebrity.viewCount?.viewCount || 0;
+      const commentCount = celebrity._count.comments;
+      
+      // celebrity 객체에서 viewCount와 _count 속성을 제거하고 새로운 속성들 추가
+      const { viewCount: _, _count: __, ...celebrityWithoutStats } = celebrity;
+      
+      return {
+        ...celebrityWithoutStats,
+        viewCount: viewCountValue,
+        commentCount,
+      };
+    });
 
     await prisma.$disconnect();
 
     return c.json({
-      data: celebrities,
-      pagination: {
-        totalItems: totalCount,
-        totalPages:totalPages,
-        currentPage: page,
-        pageSize: limit,
-      },
+      data: celebritiesWithStats,
+      pagination: buildPaginationMeta(totalCount, page, take),
     });
   } catch (error) {
     console.error("Celebrities fetch error:", error);

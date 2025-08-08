@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { parsePagination, buildPaginationMeta } from "../../common/paginationUtils";
 import { Context } from "hono";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
@@ -121,13 +122,8 @@ export async function getCelebrities(
   c: Context
 ): Promise<any> {
   try {
-    const page = Math.max(1, parseInt(c.req.query("page") || "1"));
-    const limit = Math.min(
-      100,
-      Math.max(1, parseInt(c.req.query("limit") || "10"))
-    );
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 10, maxLimit: 100 });
     const lang = c.req.query("lang") || "ko";
-    const skip = (page - 1) * limit;
 
     const prisma = createPrismaClient(c.env.DB);
 
@@ -135,7 +131,7 @@ export async function getCelebrities(
       prisma.celebrity.count(),
       prisma.celebrity.findMany({
         skip,
-        take: limit,
+        take,
         include: {
           translations: {
             where: { languageCode: lang },
@@ -167,12 +163,7 @@ export async function getCelebrities(
     return c.json({
       success: true,
       celebrities: result,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: buildPaginationMeta(total, page, take),
     });
   } catch (error) {
     console.error("유명인물 목록 조회 실패:", error);

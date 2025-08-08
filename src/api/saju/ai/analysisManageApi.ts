@@ -1,13 +1,10 @@
 import { Context } from "hono";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
+import { parsePagination, buildPaginationMeta } from "../../../common/paginationUtils";
+import { toUTC } from "../../../common/utils";
 
-// UTC 변환 유틸리티 함수
-const toUTC = (date: Date | string | null): string | null => {
-  if (!date) return null;
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return dateObj.toISOString();
-};
+// UTC 변환은 공통 유틸 사용
 
 /**
  * 사용자의 사주 분석 결과 목록을 조회하는 API
@@ -19,13 +16,10 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
   }
 
   try {
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 10, maxLimit: 100 });
     const { searchParams } = new URL(c.req.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
     const analysisType = searchParams.get("type"); // 'individual', 'compatibility', 또는 null (전체)
     const isFavorite = searchParams.get("favorite"); // 'true', 'false', 또는 null (전체)
-
-    const offset = (page - 1) * limit;
 
     // Prisma 클라이언트 생성
     const prisma = createPrismaClient(c.env.DB);
@@ -63,13 +57,11 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
           analysisCompletedAt: true,
         },
         orderBy: [{ isFavorite: "desc" }, { createdAt: "desc" }],
-        take: limit,
-        skip: offset,
+        take,
+        skip,
       }),
       prisma.sajuAnalysis.count({ where }),
     ]);
-
-    const totalPages = Math.ceil(total / limit);
 
     // UTC 변환 적용
     const processedAnalyses = analyses.map((analysis) => ({
@@ -88,18 +80,10 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
 
     await prisma.$disconnect();
 
-    return c.json(
-      {
-        analyses: processedAnalyses,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages,
-        },
-      },
-      200
-    );
+    return c.json({
+      analyses: processedAnalyses,
+      pagination: buildPaginationMeta(total, page, take),
+    }, 200);
   } catch (error) {
     console.error("사주 분석 목록 조회 오류:", error);
     return c.json(
