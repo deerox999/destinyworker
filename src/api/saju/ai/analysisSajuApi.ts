@@ -406,8 +406,6 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
         );
       }
 
-      // Queue 없이 DO에서 비동기 처리됨 (handleJobCreate 내부 waitUntil)
-
       // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)  
       updateProfileContext(c.env, user.id, options.profileId, options.userContext);
 

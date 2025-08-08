@@ -39,7 +39,7 @@ export const LANGUAGE_PROMPTS: { [key: string]: string } = {
   vi: "Bạn là một nhà chiêm tinh và thầy bói chuyên nghiệp. Vui lòng cung cấp phân tích vận mệnh chi tiết và thân thiện dựa trên thông tin lá số tử vi của người dùng.",
 };
 
-// Queue 메시지 타입
+// 메시지 타입
 export interface SajuAnalysisMessage {
   jobId: string;
   userId: number;
