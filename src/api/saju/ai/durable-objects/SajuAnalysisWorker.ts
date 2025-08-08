@@ -118,7 +118,7 @@ export class SajuAnalysisWorker implements DurableObject {
   }
 
   /**
-   * Job 생성 (Queue Consumer가 호출)
+   * Job 생성
    * POST /jobs/create
    */
   private async handleJobCreate(request: Request): Promise<Response> {
@@ -147,7 +147,7 @@ export class SajuAnalysisWorker implements DurableObject {
   }
 
   /**
-   * Job 상태 업데이트 (Queue Consumer가 호출)
+   * Job 상태 업데이트
    * POST /jobs/update
    */
   private async handleJobUpdate(request: Request): Promise<Response> {
@@ -428,7 +428,7 @@ export class SajuAnalysisWorker implements DurableObject {
   }
 
   /**
-   * 장시간 비동기 처리 (Queue Consumer에서 위임받음)
+   * 장시간 비동기 처리
    * POST /jobs/process
    */
   private async handleJobProcess(request: Request): Promise<Response> {
