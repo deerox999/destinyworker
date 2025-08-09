@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { getAnalysisTypePoints, updatePointTransactionAnalysisId } from "../../../../common/paymentUtils";
+import { getAnalysisTypePoints, updatePointTransactionAnalysisId, refundPoints } from "../../../../common/paymentUtils";
 import {
   buildGeminiPayload,
   generateTitle,
@@ -13,6 +13,8 @@ export class SajuAnalysisWorker implements DurableObject {
   private state: DurableObjectState;
   private env: any;
   private jobs: Map<string, AnalysisJob> = new Map();
+  private jobTimeouts: Map<string, any> = new Map();
+  private isProcessingFromAlarm: boolean = false;
 
   constructor(state: DurableObjectState, env: any) {
     this.state = state;
@@ -103,7 +105,15 @@ export class SajuAnalysisWorker implements DurableObject {
       return this.createErrorResponse("Job ID is required", "jobId parameter is missing");
     }
 
-    const job = this.jobs.get(jobId);
+    let job = this.jobs.get(jobId);
+    if (!job) {
+      // 스토리지에서 복구 시도
+      const stored = await this.state.storage.get<AnalysisJob>(jobId);
+      if (stored) {
+        job = stored;
+        this.jobs.set(jobId, job);
+      }
+    }
     if (!job) {
       return this.createErrorResponse("Job not found", `Job with id ${jobId} not found`, 404);
     }
@@ -128,9 +138,12 @@ export class SajuAnalysisWorker implements DurableObject {
 
       // 생성 직후 상태 저장
       this.jobs.set(job.id, job);
+      await this.state.storage.put(job.id, job);
 
       // Queue 없이 비동기 처리: 초기 저장 + 장시간 처리까지 백그라운드로 수행
       this.state.waitUntil(this.initializeAndProcessJob(job));
+      // 알람 스케줄: 인스턴스 종료/재시작에도 재개되도록 보조
+      await this.scheduleAlarmSoon();
 
       return this.createSuccessResponse({
         success: true,
@@ -213,6 +226,7 @@ export class SajuAnalysisWorker implements DurableObject {
       // 3. analysisId를 포함한 최종 job 객체 저장
       tempJob.analysisId = initialSaveResult.analysisId;
       this.jobs.set(tempJob.id, tempJob);
+      await this.state.storage.put(tempJob.id, tempJob);
 
       // 스트리밍 처리 시작 (클라이언트로 스트리밍 응답 전송)
       return this.processStreamingJob(tempJob.id, true);
@@ -231,29 +245,28 @@ export class SajuAnalysisWorker implements DurableObject {
     }
 
     try {
-      // Gemini API 호출
+      // 처리 시작 상태 업데이트
+      job.status = "processing";
+      // 10분 타임아웃 스케줄링
+      this.scheduleJobTimeout(job);
+      await this.state.storage.put(job.id, job);
+
+      // Gemini API 호출 준비
       const ai = new GoogleGenAI({ apiKey: this.env.GOOGLE_GEMINI_API_KEY });
       const payload = buildGeminiPayload(job);
-      const streamingResp = await ai.models.generateContentStream(payload);
-
-      if (!streamingResp) throw new Error("스트리밍 응답을 받을 수 없습니다.")
 
       if (shouldStreamToClient) {
-        // 클라이언트로 스트리밍 응답 전송
+        // 스트리밍 필요: 스트리밍 API 사용
+        const streamingResp = await ai.models.generateContentStream(payload);
+        if (!streamingResp) throw new Error("스트리밍 응답을 받을 수 없습니다.");
         return this.createStreamingResponse(job, streamingResp, jobId);
-      } else {
-        // 내부 처리만 수행 (클라이언트로 스트리밍 전송 안 함)
-        return this.processStreamingInternal(job, streamingResp, jobId);
       }
-    } catch (error) {
-      job.status = "failed";
-      job.error = error instanceof Error ? error.message : "Unknown error";
 
-      return this.createErrorResponse(
-        "스트리밍 처리 실패",
-        error instanceof Error ? error.message : "Unknown error",
-        500
-      );
+      // 비스트리밍 처리: 비스트리밍 API 사용 (동시 스트림 연결 병목 회피)
+      return await this.processNonStreamingJob(ai, job, payload, jobId);
+    } catch (error) {
+      await this.failJob(job, error instanceof Error ? error.message : "Unknown error");
+      return this.createErrorResponse("스트리밍 처리 실패", job.error || "Unknown error", 500);
     }
   }
 
@@ -264,26 +277,39 @@ export class SajuAnalysisWorker implements DurableObject {
     let fullResponse = "";
     let latestUsageMetadata: any = null;
     const self = this;
+    let streamCanceledByClient = false;
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
           // 스트리밍 응답을 클라이언트로 전송하면서 응답 수집
           for await (const chunk of streamingResp) {
+            // 타임아웃 등으로 실패 처리되었는지 확인하고 중단
+            const latest = self.jobs.get(job.id);
+            if (latest && latest.status === "failed") {
+              const timeoutData = `data: ${JSON.stringify({
+                type: "error",
+                message: latest.error || "작업이 중단되었습니다.",
+              })}\n\n`;
+              controller.enqueue(new TextEncoder().encode(timeoutData));
+              break;
+            }
+
             if (chunk.text) {
               fullResponse += chunk.text;
               
               if (chunk.usageMetadata) {
                 latestUsageMetadata = chunk.usageMetadata;
               }
-              
-              const data = `data: ${JSON.stringify({
-                text: chunk.text,
-              })}\n\n`;
-              controller.enqueue(new TextEncoder().encode(data));
+              if (!streamCanceledByClient) {
+                const data = `data: ${JSON.stringify({ text: chunk.text })}\n\n`;
+                controller.enqueue(new TextEncoder().encode(data));
+              }
             } else {
-              const data = `data: ${JSON.stringify(chunk)}\n\n`;
-              controller.enqueue(new TextEncoder().encode(data));
+              if (!streamCanceledByClient) {
+                const data = `data: ${JSON.stringify(chunk)}\n\n`;
+                controller.enqueue(new TextEncoder().encode(data));
+              }
             }
           }
 
@@ -294,20 +320,29 @@ export class SajuAnalysisWorker implements DurableObject {
             console.error("스트리밍 응답 업데이트 실패:", saveError);
           }
 
-          controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-          controller.close();
+          // 타임아웃 클리어
+          self.clearJobTimeout(job.id);
+          if (!streamCanceledByClient) {
+            controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            controller.close();
+          }
         } catch (error) {
           console.error("스트리밍 오류:", error);
-          job.status = "failed";
-          job.error = error instanceof Error ? error.message : "Unknown error";
+          await self.failJob(job, error instanceof Error ? error.message : "Unknown error");
 
           const errorData = `data: ${JSON.stringify({
             type: "error",
-            message: error instanceof Error ? error.message : "Unknown error",
+            message: job.error || (error instanceof Error ? error.message : "Unknown error"),
           })}\n\n`;
-          controller.enqueue(new TextEncoder().encode(errorData));
-          controller.close();
+          if (!streamCanceledByClient) {
+            controller.enqueue(new TextEncoder().encode(errorData));
+            controller.close();
+          }
         }
+      },
+      async cancel(_reason) {
+        // 클라이언트가 SSE 연결을 끊었지만, 서버는 계속 처리해서 저장
+        streamCanceledByClient = true;
       },
     });
 
@@ -330,6 +365,8 @@ export class SajuAnalysisWorker implements DurableObject {
 
       // DB 업데이트 및 Job 상태 업데이트
       await this.saveAnalysisAndUpdateJob(job, fullResponse, latestUsageMetadata);
+      await this.state.storage.put(job.id, job);
+      this.clearJobTimeout(job.id);
         
       return this.createSuccessResponse({
         success: true,
@@ -339,15 +376,66 @@ export class SajuAnalysisWorker implements DurableObject {
         message: "분석이 완료되었습니다.",
       });
     } catch (error) {
-      job.status = "failed";
-      job.error = error instanceof Error ? error.message : "Unknown error";
-      
-      return this.createErrorResponse(
-        "내부 스트리밍 처리 실패",
-        error instanceof Error ? error.message : "Unknown error",
-        500
-      );
+      await this.failJob(job, error instanceof Error ? error.message : "Unknown error");
+      return this.createErrorResponse("내부 스트리밍 처리 실패", job.error || "Unknown error", 500);
     }
+  }
+
+  /**
+   * 비스트리밍 처리 (generateContent 사용)
+   */
+  private async processNonStreamingJob(ai: any, job: AnalysisJob, payload: any, jobId: string): Promise<Response> {
+    try {
+      const resp = await ai.models.generateContent(payload);
+
+      // 다양한 SDK 응답 형태를 견고하게 처리
+      const fullResponse = this.extractTextFromGenerateResponse(resp);
+      const latestUsageMetadata = resp?.response?.usageMetadata || resp?.usageMetadata || null;
+
+      await this.saveAnalysisAndUpdateJob(job, fullResponse, latestUsageMetadata);
+      await this.state.storage.put(job.id, job);
+      this.clearJobTimeout(job.id);
+
+      return this.createSuccessResponse({
+        success: true,
+        jobId,
+        analysisId: job.analysisId,
+        status: "completed",
+        message: "분석이 완료되었습니다.",
+      });
+    } catch (error) {
+      await this.failJob(job, error instanceof Error ? error.message : "Unknown error");
+      return this.createErrorResponse("비스트리밍 처리 실패", job.error || "Unknown error", 500);
+    }
+  }
+
+  /**
+   * generateContent 응답에서 텍스트를 추출
+   */
+  private extractTextFromGenerateResponse(resp: any): string {
+    // 신 SDK (@google/genai) 또는 구 SDK 호환 처리
+    if (!resp) return "";
+
+    // 신 SDK 형태 추정
+    if (resp.response?.text) {
+      try {
+        return typeof resp.response.text === "function" ? resp.response.text() : resp.response.text;
+      } catch (_) { /* ignore */ }
+    }
+
+    // 일반 텍스트 속성 시도
+    if (typeof resp.text === "string") return resp.text;
+
+    // candidates → parts → text 추출 시도
+    const candidates = resp.response?.candidates || resp.candidates || [];
+    for (const c of candidates) {
+      const parts = c?.content?.parts || c?.parts || [];
+      const texts = parts.map((p: any) => p?.text).filter(Boolean);
+      if (texts.length) return texts.join("");
+    }
+
+    // 마지막 fallback: 문자열화
+    return typeof resp === "string" ? resp : JSON.stringify(resp);
   }
 
   /**
@@ -379,6 +467,11 @@ export class SajuAnalysisWorker implements DurableObject {
       throw new Error("analysisId가 없어서 분석 결과를 업데이트할 수 없습니다.");
     }
 
+    // 이미 실패 처리된 작업이면 저장을 건너뜁니다.
+    if (job.status === "failed") {
+      return;
+    }
+
     const saveResult = await updateSajuAnalysis(
       job.analysisId,
       fullResponse,
@@ -389,6 +482,7 @@ export class SajuAnalysisWorker implements DurableObject {
 
     if (saveResult.success) {
       await this.updateJobAfterSave(job, fullResponse, saveResult, latestUsageMetadata);
+      await this.state.storage.put(job.id, job);
     } else {
       throw new Error(`분석 결과 저장 실패: ${saveResult.error}`);
     }
@@ -478,13 +572,136 @@ export class SajuAnalysisWorker implements DurableObject {
 
       // 2) analysisId 부여 후 내부 처리 실행
       job.analysisId = initialSaveResult.analysisId;
+      job.status = "processing";
       this.jobs.set(job.id, job);
+      await this.state.storage.put(job.id, job);
+      // 타임아웃 스케줄링
+      this.scheduleJobTimeout(job);
+      await this.scheduleAlarmSoon();
 
       await this.processStreamingJob(job.id, false);
     } catch (error) {
-      job.status = "failed";
-      job.error = error instanceof Error ? error.message : "Unknown error";
-      this.jobs.set(job.id, job);
+      await this.failJob(job, error instanceof Error ? error.message : "Unknown error");
     }
+  }
+
+  /**
+   * 작업 실패 공통 처리: 상태 업데이트, DB 업데이트, 포인트 환불, 타이머 정리
+   */
+  private async failJob(job: AnalysisJob, message: string): Promise<void> {
+    try {
+      job.status = "failed";
+      job.error = message;
+      this.jobs.set(job.id, job);
+      await this.state.storage.put(job.id, job);
+
+      // DB 실패 내용 업데이트
+      if (job.analysisId) {
+        try {
+          await updateSajuAnalysis(
+            job.analysisId,
+            `분석이 예상보다 오래 걸려 중단되었거나 오류가 발생했습니다.\n사유: ${message}`,
+            new Date(),
+            this.env
+          );
+        } catch (e) {
+          console.error("[SajuAnalysisWorker] 실패 업데이트 오류:", e);
+        }
+      }
+
+      // 포인트 환불
+      try {
+        await refundPoints(
+          this.env.DB,
+          job.userId,
+          job.pointsCost,
+          `사주 분석 실패로 인한 포인트 환불 (${job.type})`,
+          job.reference,
+          job.analysisId
+        );
+      } catch (refundError) {
+        console.error("[SajuAnalysisWorker] 환불 처리 오류:", refundError);
+      }
+    } finally {
+      this.clearJobTimeout(job.id);
+    }
+  }
+
+  /**
+   * 작업 타임아웃 스케줄링 (기본 10분)
+   */
+  private scheduleJobTimeout(job: AnalysisJob, timeoutMs: number = 10 * 60 * 1000): void {
+    // 기존 타이머 정리
+    this.clearJobTimeout(job.id);
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        // 완료 여부 재확인
+        const latest = this.jobs.get(job.id);
+        if (!latest || latest.status === "completed" || latest.status === "failed") {
+          return;
+        }
+        await this.failJob(latest, "작업 시간이 10분을 초과했습니다.");
+      } catch (e) {
+        console.error("[SajuAnalysisWorker] 타임아웃 처리 오류:", e);
+      }
+    }, timeoutMs);
+
+    this.jobTimeouts.set(job.id, timeoutId);
+  }
+
+  private clearJobTimeout(jobId: string): void {
+    const id = this.jobTimeouts.get(jobId);
+    if (id) {
+      clearTimeout(id);
+      this.jobTimeouts.delete(jobId);
+    }
+  }
+
+  /**
+   * DO 알람: 인스턴스 재시작/중단 이후에도 보류 작업을 재개
+   */
+  async alarm(): Promise<void> {
+    if (this.isProcessingFromAlarm) return;
+    this.isProcessingFromAlarm = true;
+    try {
+      const list = await this.state.storage.list<AnalysisJob>({});
+      const now = Date.now();
+      for (const [, job] of list) {
+        if (!job) continue;
+        // 이미 완료/실패된 작업은 스킵
+        if (job.status === "completed" || job.status === "failed") continue;
+
+        // 10분 초과 시 실패 처리
+        const createdAtMs = Date.parse(job.createdAt);
+        if (isFinite(createdAtMs) && now - createdAtMs > 10 * 60 * 1000) {
+          await this.failJob(job, "작업 시간이 10분을 초과했습니다.");
+          continue;
+        }
+
+        // 메모리에 올리고 처리 재개 (논스트리밍으로 내부 처리)
+        this.jobs.set(job.id, job);
+        try {
+          await this.processStreamingJob(job.id, false);
+        } catch (e) {
+          await this.failJob(job, e instanceof Error ? e.message : "Unknown error");
+        }
+      }
+    } finally {
+      this.isProcessingFromAlarm = false;
+      // 아직 미완료 작업이 남았으면 알람을 조금 뒤에 다시 예약
+      const list = await this.state.storage.list<AnalysisJob>({});
+      for (const [, job] of list) {
+        if (job && (job.status === "pending" || job.status === "processing")) {
+          await this.scheduleAlarmSoon();
+          break;
+        }
+      }
+    }
+  }
+
+  private async scheduleAlarmSoon(delayMs: number = 1000): Promise<void> {
+    const when = Date.now() + delayMs;
+    await this.state.storage.setAlarm(when);
   }
 }
