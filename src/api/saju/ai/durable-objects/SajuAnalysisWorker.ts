@@ -278,10 +278,20 @@ export class SajuAnalysisWorker implements DurableObject {
     let latestUsageMetadata: any = null;
     const self = this;
     let streamCanceledByClient = false;
+    let heartbeatId: any = null;
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          // 주기적 하트비트로 idle 타임아웃 방지
+          heartbeatId = setInterval(() => {
+            if (!streamCanceledByClient) {
+              // SSE 코멘트 또는 핑 이벤트
+              const ping = `: ping\n\n`;
+              controller.enqueue(new TextEncoder().encode(ping));
+            }
+          }, 8000);
+
           // 스트리밍 응답을 클라이언트로 전송하면서 응답 수집
           for await (const chunk of streamingResp) {
             // 타임아웃 등으로 실패 처리되었는지 확인하고 중단
@@ -328,16 +338,34 @@ export class SajuAnalysisWorker implements DurableObject {
           }
         } catch (error) {
           console.error("스트리밍 오류:", error);
-          await self.failJob(job, error instanceof Error ? error.message : "Unknown error");
+          const message = error instanceof Error ? error.message : "Unknown error";
+          const is524 = message?.includes("524") || (error as any)?.code === 524;
 
-          const errorData = `data: ${JSON.stringify({
-            type: "error",
-            message: job.error || (error instanceof Error ? error.message : "Unknown error"),
-          })}\n\n`;
-          if (!streamCanceledByClient) {
-            controller.enqueue(new TextEncoder().encode(errorData));
-            controller.close();
+          if (is524) {
+            // 스트리밍 연결 문제로 판단, 백그라운드 비스트리밍으로 자동 전환
+            self.state.waitUntil(self.processStreamingJob(job.id, false));
+
+            const notice = `data: ${JSON.stringify({
+              type: "notice",
+              message: "스트리밍 연결이 끊겨 백그라운드 처리로 전환합니다.",
+            })}\n\n`;
+            if (!streamCanceledByClient) {
+              controller.enqueue(new TextEncoder().encode(notice));
+              controller.close();
+            }
+          } else {
+            await self.failJob(job, message);
+            const errorData = `data: ${JSON.stringify({
+              type: "error",
+              message: job.error || message,
+            })}\n\n`;
+            if (!streamCanceledByClient) {
+              controller.enqueue(new TextEncoder().encode(errorData));
+              controller.close();
+            }
           }
+        } finally {
+          if (heartbeatId) clearInterval(heartbeatId);
         }
       },
       async cancel(_reason) {
@@ -600,7 +628,7 @@ export class SajuAnalysisWorker implements DurableObject {
         try {
           await updateSajuAnalysis(
             job.analysisId,
-            `분석이 예상보다 오래 걸려 중단되었거나 오류가 발생했습니다.\n사유: ${message}`,
+            `분석이 예상보다 오래 걸려 중단되었거나 오류가 발생했습니다.\n사유: ${message} \n 포인트 환불 처리 완료: ${job.pointsCost}`,
             new Date(),
             this.env
           );
