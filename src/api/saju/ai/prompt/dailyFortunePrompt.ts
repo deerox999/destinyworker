@@ -42,7 +42,7 @@ export function buildDailyFortuneUserPrompt(language: string, timezone: string) 
 [작성 규칙]
 - description: 각 항목 1문장, 이모지 최대 1개.
 - summary: 가장 강한 1~2 오행과 일간의 관계를 1문장.
-- advice: 정확히 3개, 각 15~40자.
+- advice: 정확히 7개, 각 15~40자.
 - chart는 반드시 포함. labels/data는 아래 스키마와 동일 순서로 7개.
 - 내부 추론/아이디어 나열/대안 비교 없이, 정해진 공식만 적용해 즉시 결과를 산출하세요.
 
