@@ -21,6 +21,17 @@ export const getLanguageName = (language: string): string => {
   return languageMap[language] || "한국어";
 };
 
+export const supportedLanguages = ["ko", "en", "ja", "zh", "vi"] as const;
+export type SupportedLanguage = typeof supportedLanguages[number];
+
+export function requireLanguageParam(c: Context): SupportedLanguage {
+  const language = c.req.query("language");
+  if (!language || !supportedLanguages.includes(language as SupportedLanguage)) {
+    throw new Error("INVALID_LANGUAGE");
+  }
+  return language as SupportedLanguage;
+}
+
 // JWT 토큰에서 사용자 정보 추출
 export const getUserFromToken = async (c: Context): Promise<{ id: number; email: string; role: string } | null> => {
   const authHeader = c.req.header("Authorization");

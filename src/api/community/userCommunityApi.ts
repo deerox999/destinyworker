@@ -1,6 +1,6 @@
 import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
-import { getUserFromToken } from "../../common/utils";
+import { getUserFromToken, requireLanguageParam } from "../../common/utils";
 import { deleteImagesFromR2, deleteR2Object, extractR2ImageUrls } from '../user/r2Api';
 import { addPoints, deductPoints } from "../../common/paymentUtils";
 
@@ -8,17 +8,18 @@ export const userCommunityApi = {
   // 커뮤니티 전체 데이터 조회
   async getCommunityData(c: Context) {
     try {
+      const language = requireLanguageParam(c);
       const prisma = createPrismaClient(c.env.DB);
       
       const boards = await prisma.board.findMany({
-        where: { isActive: true },
+        where: { isActive: true, language } as any,
         include: {
           categories: {
-            where: { isActive: true },
+            where: { isActive: true, language } as any,
             orderBy: { sortOrder: 'asc' }
           },
           posts: {
-            where: { isDeleted: false },
+            where: { isDeleted: false, language } as any,
             orderBy: { createdAt: 'desc' },
             take: 5,
             include: {
@@ -28,6 +29,7 @@ export const userCommunityApi = {
                   tag: true
                 }
               },
+              author: { select: { userName: true, name: true, picture: true } },
               _count: {
                 select: { 
                   comments: {
@@ -46,7 +48,7 @@ export const userCommunityApi = {
 
       // 최근 게시글 (전체)
       const recentPosts = await prisma.post.findMany({
-        where: { isDeleted: false },
+        where: { isDeleted: false, language } as any,
         orderBy: { createdAt: 'desc' },
         take: 10,
         include: {
@@ -57,6 +59,7 @@ export const userCommunityApi = {
               tag: true
             }
           },
+          author: { select: { userName: true, name: true, picture: true } },
           _count: {
             select: { 
               comments: {
@@ -69,7 +72,7 @@ export const userCommunityApi = {
 
       // 인기 게시글 (좋아요 기준)
       const popularPosts = await prisma.post.findMany({
-        where: { isDeleted: false },
+        where: { isDeleted: false, language } as any,
         orderBy: { likeCount: 'desc' },
         take: 10,
         include: {
@@ -80,6 +83,7 @@ export const userCommunityApi = {
               tag: true
             }
           },
+          author: { select: { userName: true, name: true, picture: true } },
           _count: {
             select: { 
               comments: {
@@ -91,51 +95,55 @@ export const userCommunityApi = {
       });
 
       // 게시판별 최근 게시글 추가
-      const boardsWithRecentPosts = boards.map(board => ({
-        ...board,
-        recentPosts: board.posts.map(post => ({
-          id: post.id,
-          title: post.title,
-          authorName: post.authorName || '익명',
-          authorImage: post.authorImage,
-          isAnonymous: !post.authorId,
-          tags: post.postTags.map(pt => pt.tag.name),
-          viewCount: post.viewCount,
-          likeCount: post.likeCount,
-          commentCount: post._count.comments,
-          createdAt: post.createdAt
-        }))
-      }));
+      const boardsWithRecentPosts = boards.map(board => {
+        const recentPosts = board.posts.map(post => {
+          const authorName = post.author ? (post.author.userName || post.author.name) : null;
+          const authorImage = post.authorImage ?? post.author?.picture ?? null;
+          return {
+            id: post.id,
+            title: post.title,
+            authorName,
+            authorImage,
+            isAnonymous: false,
+            tags: post.postTags.map(pt => pt.tag.name),
+            viewCount: post.viewCount,
+            likeCount: post.likeCount,
+            commentCount: post._count.comments,
+            createdAt: post.createdAt
+          };
+        });
+        return {
+          id: board.id,
+          name: board.name,
+          displayName: board.displayName,
+          description: board.description,
+          sortOrder: board.sortOrder,
+          isActive: board.isActive,
+          createdAt: board.createdAt,
+          updatedAt: board.updatedAt,
+          categories: board.categories.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            sortOrder: cat.sortOrder,
+            isActive: cat.isActive
+          })),
+          recentPosts
+        };
+      });
 
       await prisma.$disconnect();
 
       return c.json({
         success: true,
         data: {
-          boards: boardsWithRecentPosts.map(board => ({
-            id: board.id,
-            name: board.name,
-            displayName: board.displayName,
-            description: board.description,
-            sortOrder: board.sortOrder,
-            isActive: board.isActive,
-            createdAt: board.createdAt,
-            updatedAt: board.updatedAt,
-            categories: board.categories.map(cat => ({
-              id: cat.id,
-              name: cat.name,
-              sortOrder: cat.sortOrder,
-              isActive: cat.isActive
-            })),
-            recentPosts: board.recentPosts
-          })),
+          boards: boardsWithRecentPosts,
           recentPosts: recentPosts.map(post => ({
             id: post.id,
             boardId: post.boardId,
             title: post.title,
-            authorName: post.authorName || '익명',
-            authorImage: post.authorImage,
-            isAnonymous: !post.authorId,
+            authorName: post.author ? (post.author.userName || post.author.name) : null,
+            authorImage: post.authorImage ?? post.author?.picture ?? null,
+          isAnonymous: false,
             tags: post.postTags.map(pt => pt.tag.name),
             viewCount: post.viewCount,
             likeCount: post.likeCount,
@@ -146,9 +154,9 @@ export const userCommunityApi = {
             id: post.id,
             boardId: post.boardId,
             title: post.title,
-            authorName: post.authorName || '익명',
-            authorImage: post.authorImage,
-            isAnonymous: !post.authorId,
+            authorName: post.author ? (post.author.userName || post.author.name) : null,
+            authorImage: post.authorImage ?? post.author?.picture ?? null,
+          isAnonymous: false,
             tags: post.postTags.map(pt => pt.tag.name),
             viewCount: post.viewCount,
             likeCount: post.likeCount,
@@ -166,13 +174,14 @@ export const userCommunityApi = {
   // 게시판 목록 조회 (카테고리 포함)
   async getBoards(c: Context) {
     try {
+      const language = requireLanguageParam(c);
       const prisma = createPrismaClient(c.env.DB);
       
       const boards = await prisma.board.findMany({
-        where: { isActive: true },
+        where: { isActive: true, language } as any,
         include: {
           categories: {
-            where: { isActive: true },
+            where: { isActive: true, language } as any,
             orderBy: { sortOrder: 'asc' }
           }
         },
@@ -214,6 +223,7 @@ export const userCommunityApi = {
     try {
       const { boardId } = c.req.param();
       const { page = 1, limit = 10, categoryId, sort = 'newest', search, tags } = c.req.query();
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
@@ -228,14 +238,15 @@ export const userCommunityApi = {
 
       // 카테고리 조회
       const categories = await prisma.boardCategory.findMany({
-        where: { boardId: parseInt(boardId), isActive: true },
+        where: { boardId: parseInt(boardId), isActive: true, language } as any,
         orderBy: { sortOrder: 'asc' }
       });
 
       // 게시글 조회 조건 구성
       const where: any = {
         boardId: parseInt(boardId),
-        isDeleted: false
+        isDeleted: false,
+        language
       };
 
       if (categoryId && categoryId !== 'all') {
@@ -253,9 +264,10 @@ export const userCommunityApi = {
         const tagArray = tags.split(',').map(tag => tag.trim());
         where.postTags = {
           some: {
-            tag: {
-              name: { in: tagArray }
-            }
+            tag: ({
+              name: { in: tagArray },
+              language
+            } as any)
           }
         };
       }
@@ -295,6 +307,7 @@ export const userCommunityApi = {
                 tag: true
               }
             },
+            author: { select: { userName: true, name: true, picture: true } },
             _count: {
               select: { 
                 comments: {
@@ -333,9 +346,9 @@ export const userCommunityApi = {
           posts: posts.map(post => ({
             id: post.id,
             title: post.title,
-            authorName: post.authorName || '익명',
-            authorImage: post.authorImage,
-            isAnonymous: !post.authorId,
+          authorName: post.author ? (post.author.userName || post.author.name) : null,
+          authorImage: post.authorImage ?? post.author?.picture ?? null,
+          isAnonymous: false,
             tags: post.postTags.map(pt => pt.tag.name),
             viewCount: post.viewCount,
             likeCount: post.likeCount,
@@ -366,10 +379,11 @@ export const userCommunityApi = {
   async getPosts(c: Context) {
     try {
       const { page = 1, limit = 20, boardId, categoryId, search, tags, sort = 'newest' } = c.req.query();
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const where: any = { isDeleted: false };
+      const where: any = { isDeleted: false, language };
 
       if (boardId) {
         where.boardId = parseInt(boardId);
@@ -391,7 +405,8 @@ export const userCommunityApi = {
         where.postTags = {
           some: {
             tag: {
-              name: { in: tagArray }
+              name: { in: tagArray },
+              language
             }
           }
         };
@@ -493,14 +508,15 @@ export const userCommunityApi = {
   async getPost(c: Context) {
     try {
       const { id } = c.req.param();
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
       // 현재 사용자 정보 확인 (로그인 여부 확인, 필수 아님)
       const currentUser = await getUserFromToken(c);
 
-      const post = await prisma.post.findUnique({
-        where: { id: parseInt(id), isDeleted: false },
+      const post = await prisma.post.findFirst({
+        where: { id: parseInt(id), isDeleted: false, language } as any,
         include: {
           board: true,
           category: true,
@@ -509,6 +525,7 @@ export const userCommunityApi = {
               tag: true
             }
           },
+          author: { select: { userName: true, name: true, picture: true } },
           _count: {
             select: { 
               comments: {
@@ -552,9 +569,9 @@ export const userCommunityApi = {
           id: post.id,
           title: post.title,
           content: post.content,
-          authorName: post.authorName || '익명',
-          authorImage: post.authorImage,
-          isAnonymous: !post.authorId,
+          authorName: post.author ? (post.author.userName || post.author.name) : null,
+          authorImage: post.authorImage ?? post.author?.picture ?? null,
+          isAnonymous: false,
           tags: post.postTags.map(pt => pt.tag.name),
           viewCount: post.viewCount + 1, // 증가된 조회수 반영
           likeCount: post.likeCount,
@@ -584,7 +601,12 @@ export const userCommunityApi = {
   async createPost(c: Context) {
     try {
       const body = await c.req.json();
-      const { title, content, boardId, categoryId, isAnonymous = false, password, tags = [] } = body;
+      const { title, content, boardId, categoryId, tags = [], language } = body;
+      const lang = (language ?? '').trim();
+
+      if (!lang) {
+        return c.json({ success: false, message: 'language는 필수입니다.' }, 400);
+      }
 
       const prisma = createPrismaClient(c.env.DB);
 
@@ -610,64 +632,49 @@ export const userCommunityApi = {
         }
       }
 
-      // 익명 게시글인 경우 비밀번호 필수
-      if (isAnonymous && !password) {
-        await prisma.$disconnect();
-        return c.json({ success: false, message: '익명 게시글은 비밀번호가 필요합니다.' }, 400);
-      }
-
       // 로그인한 사용자 정보 가져오기
-      let user = null;
-      let authorId = null;
-      let authorName = '익명';
-      let authorImage = null;
-
-      if (!isAnonymous) {
-        user = await getUserFromToken(c);
-        if (!user) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '로그인이 필요합니다.' }, 401);
-        }
-        authorId = user.id;
-        
-        // 사용자 정보 조회
-        const userInfo = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { name: true, userName: true, picture: true }
-        });
-        authorName = userInfo?.userName || userInfo?.name || '사용자';
-        authorImage = userInfo?.picture;
+      const user = await getUserFromToken(c);
+      if (!user) {
+        await prisma.$disconnect();
+        return c.json({ success: false, message: '로그인이 필요합니다.' }, 401);
       }
+      const authorId = user.id;
+      const userInfo = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { name: true, userName: true, picture: true }
+      });
+      const authorName = userInfo?.userName || userInfo?.name || '사용자';
+      const authorImage = userInfo?.picture ?? null;
 
       // 게시글 생성
       const post = await prisma.post.create({
-        data: {
+        data: ({
           title,
           content,
           boardId,
           categoryId: categoryId || 1, // 기본 카테고리
           authorId,
           authorName,
-          authorImage: isAnonymous ? null : authorImage, // 로그인 사용자의 이미지 URL
-          password: isAnonymous ? password : null,
+          authorImage,
+          language: lang,
           viewCount: 0,
           likeCount: 0,
           commentCount: 0,
           isDeleted: false
-        }
+        } as any)
       });
 
       // 태그 처리
       if (tags.length > 0) {
         for (const tagName of tags) {
           // 태그가 없으면 생성
-          let tag = await prisma.tag.findUnique({
-            where: { name: tagName }
+          let tag = await prisma.tag.findFirst({
+            where: ({ name: tagName, language: lang } as any)
           });
 
           if (!tag) {
             tag = await prisma.tag.create({
-              data: { name: tagName }
+              data: ({ name: tagName, language: lang } as any)
             });
           }
 
@@ -682,7 +689,7 @@ export const userCommunityApi = {
       }
 
       // 로그인한 사용자의 경우 포인트 증가 (익명 게시글 제외, 이미지 없는 순수 텍스트만, 100자 이상)
-      if (!isAnonymous && authorId) {
+      if (authorId) {
         // 이미지가 포함되어 있는지 확인 (R2 URL 패턴 체크)
         const hasImages = content.includes(c.env.R2_PUBLIC_URL);
         
@@ -739,12 +746,13 @@ export const userCommunityApi = {
     try {
       const { id } = c.req.param();
       const body = await c.req.json();
-      const { title, content, categoryId, password, tags } = body;
+      const { title, content, categoryId, tags } = body;
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const post = await prisma.post.findUnique({
-        where: { id: parseInt(id), isDeleted: false }
+      const post = await prisma.post.findFirst({
+        where: { id: parseInt(id), isDeleted: false, language } as any
       });
 
       if (!post) {
@@ -758,16 +766,8 @@ export const userCommunityApi = {
       const isAuthor = user && post.authorId === user.id;
 
       if (!isAuthor && !isAdmin) {
-        // 익명 게시글인 경우 비밀번호 확인
-        if (!post.authorId && post.password !== password) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '비밀번호가 일치하지 않습니다.' }, 403);
-        }
-        
-        if (!post.authorId && !password) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '권한이 없습니다.' }, 403);
-        }
+        await prisma.$disconnect();
+        return c.json({ success: false, message: '권한이 없습니다.' }, 403);
       }
 
       // 카테고리 존재 확인 (선택사항)
@@ -817,6 +817,7 @@ export const userCommunityApi = {
           ...(title && { title }),
           ...(content && { content }),
           ...(categoryId && { categoryId }),
+          ...(language && { language }),
           updatedAt: new Date()
         }
       });
@@ -830,13 +831,13 @@ export const userCommunityApi = {
 
         // 새 태그 연결
         for (const tagName of tags) {
-          let tag = await prisma.tag.findUnique({
-            where: { name: tagName }
+          let tag = await prisma.tag.findFirst({
+            where: ({ name: tagName, language } as any)
           });
 
           if (!tag) {
             tag = await prisma.tag.create({
-              data: { name: tagName }
+              data: ({ name: tagName, language } as any)
             });
           }
 
@@ -871,14 +872,12 @@ export const userCommunityApi = {
   async deletePost(c: Context) {
     try {
       const { id } = c.req.param();
-      
-      // query parameter에서 password 확인
-      const { password } = c.req.query();
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const post = await prisma.post.findUnique({
-        where: { id: parseInt(id), isDeleted: false }
+      const post = await prisma.post.findFirst({
+        where: { id: parseInt(id), isDeleted: false, language } as any
       });
 
       if (!post) {
@@ -892,16 +891,8 @@ export const userCommunityApi = {
       const isAuthor = user && post.authorId === user.id;
 
       if (!isAuthor && !isAdmin) {
-        // 익명 게시글인 경우 비밀번호 확인
-        if (!post.authorId && post.password !== password) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '비밀번호가 일치하지 않습니다.' }, 403);
-        }
-        
-        if (!post.authorId && !password) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '권한이 없습니다.' }, 403);
-        }
+        await prisma.$disconnect();
+        return c.json({ success: false, message: '권한이 없습니다.' }, 403);
       }
 
       // 게시글에 포함된 이미지 URL들을 추출하여 R2에서 삭제
@@ -1064,14 +1055,15 @@ export const userCommunityApi = {
     try {
       const { id } = c.req.param();
       const { page = 1, limit = 50 } = c.req.query();
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
       // 현재 사용자 정보 확인 (로그인 여부 확인, 필수 아님)
       const currentUser = await getUserFromToken(c);
 
-      const post = await prisma.post.findUnique({
-        where: { id: parseInt(id), isDeleted: false }
+      const post = await prisma.post.findFirst({
+        where: { id: parseInt(id), isDeleted: false, language } as any
       });
 
       if (!post) {
@@ -1152,12 +1144,13 @@ export const userCommunityApi = {
     try {
       const { postId } = c.req.param();
       const body = await c.req.json();
-      const { content, parentId, isAnonymous = false, password, authorImage } = body;
+      const { content, parentId } = body;
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const post = await prisma.post.findUnique({
-        where: { id: parseInt(postId), isDeleted: false }
+      const post = await prisma.post.findFirst({
+        where: { id: parseInt(postId), isDeleted: false, language } as any
       });
 
       if (!post) {
@@ -1177,34 +1170,19 @@ export const userCommunityApi = {
         }
       }
 
-      // 익명 댓글인 경우 비밀번호 필수
-      if (isAnonymous && !password) {
+      // 로그인한 사용자 정보 가져오기 (익명 제거)
+      const user = await getUserFromToken(c);
+      if (!user) {
         await prisma.$disconnect();
-        return c.json({ success: false, message: '익명 댓글은 비밀번호가 필요합니다.' }, 400);
+        return c.json({ success: false, message: '로그인이 필요합니다.' }, 401);
       }
-
-      // 로그인한 사용자 정보 가져오기
-      let user = null;
-      let authorId = null;
-      let authorName = '익명';
-      let commentAuthorImage = null;
-
-      if (!isAnonymous) {
-        user = await getUserFromToken(c);
-        if (!user) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '로그인이 필요합니다.' }, 401);
-        }
-        authorId = user.id;
-        
-        // 사용자 정보 조회
-        const userInfo = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { name: true, userName: true, picture: true }
-        });
-        authorName = userInfo?.userName || userInfo?.name || '사용자';
-        commentAuthorImage = userInfo?.picture;
-      }
+      const authorId = user.id;
+      const userInfo = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { name: true, userName: true, picture: true }
+      });
+      const authorName = userInfo?.userName || userInfo?.name || '사용자';
+      const commentAuthorImage = userInfo?.picture ?? null;
 
       const comment = await prisma.comment.create({
         data: {
@@ -1213,8 +1191,7 @@ export const userCommunityApi = {
           parentId: parentId ? parseInt(parentId) : null,
           authorId,
           authorName,
-          authorImage: isAnonymous ? null : commentAuthorImage, // 로그인 사용자의 이미지 URL
-          password: isAnonymous ? password : null,
+          authorImage: commentAuthorImage,
           likeCount: 0,
           isDeleted: false
         }
@@ -1227,7 +1204,7 @@ export const userCommunityApi = {
       });
 
       // 로그인한 사용자의 경우 포인트 증가 (익명 댓글 제외, 20자 이상)
-      if (!isAnonymous && authorId) {
+      if (authorId) {
         // 순수 텍스트 길이 계산 (HTML 태그 제거)
         const textContent = content.replace(/<[^>]*>/g, '').trim();
         const textLength = textContent.length;
@@ -1277,7 +1254,7 @@ export const userCommunityApi = {
     try {
       const { id } = c.req.param();
       const body = await c.req.json();
-      const { content, password } = body;
+      const { content } = body;
 
       const prisma = createPrismaClient(c.env.DB);
 
@@ -1296,16 +1273,8 @@ export const userCommunityApi = {
       const isAuthor = user && comment.authorId === user.id;
 
       if (!isAuthor && !isAdmin) {
-        // 익명 댓글인 경우 비밀번호 확인
-        if (!comment.authorId && comment.password !== password) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '비밀번호가 일치하지 않습니다.' }, 403);
-        }
-        
-        if (!comment.authorId && !password) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '권한이 없습니다.' }, 403);
-        }
+        await prisma.$disconnect();
+        return c.json({ success: false, message: '권한이 없습니다.' }, 403);
       }
 
       // 기존 이미지와 새 이미지 비교하여 삭제된 이미지만 R2에서 삭제
@@ -1364,9 +1333,6 @@ export const userCommunityApi = {
   async deleteComment(c: Context) {
     try {
       const { id } = c.req.param();
-      
-      // query parameter에서 password 확인
-      const { password } = c.req.query();
 
       const prisma = createPrismaClient(c.env.DB);
 
@@ -1385,16 +1351,8 @@ export const userCommunityApi = {
       const isAuthor = user && comment.authorId === user.id;
 
       if (!isAuthor && !isAdmin) {
-        // 익명 댓글인 경우 비밀번호 확인
-        if (!comment.authorId && comment.password !== password) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '비밀번호가 일치하지 않습니다.' }, 403);
-        }
-        
-        if (!comment.authorId && !password) {
-          await prisma.$disconnect();
-          return c.json({ success: false, message: '권한이 없습니다.' }, 403);
-        }
+        await prisma.$disconnect();
+        return c.json({ success: false, message: '권한이 없습니다.' }, 403);
       }
 
       // 댓글에 포함된 이미지 URL들을 추출하여 R2에서 삭제
@@ -1586,7 +1544,7 @@ export const userCommunityApi = {
       for (const boardData of sampleBoards) {
         // 기존 게시판이 있는지 확인
         const existingBoard = await prisma.board.findUnique({
-          where: { name: boardData.name }
+          where: { name: boardData.name } as any
         });
 
         if (!existingBoard) {

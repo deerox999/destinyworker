@@ -243,15 +243,19 @@ model PointTransaction {
 /// 게시판 테이블 - 커뮤니티 게시판 관리
 model Board {
   id          Int      @id @default(autoincrement()) /// 게시판 고유 ID
-  name        String   @unique /// 게시판 식별자 ('bug-report', 'free-discussion')
+  name        String   /// 게시판 식별자 ('bug-report', 'free-discussion')
   displayName String   /// 게시판 표시 이름 ('버그 제보', '자유 토론')
   description String?  /// 게시판 설명
   sortOrder   Int      @default(0) /// 정렬 순서
   isActive    Boolean  @default(true) /// 게시판 활성화 여부
+  language    String   @default("ko") /// 언어 코드 (ko, en, ja, zh, vi)
   createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
   updatedAt   DateTime @updatedAt /// 마지막 업데이트 시간
   posts       Post[] /// 관계: 게시판에 속한 게시글들
   categories  BoardCategory[] /// 관계: 게시판에 속한 카테고리들
+
+  @@unique([name, language])
+  @@index([language])
 }
 
 /// 게시판 카테고리 테이블 - 게시판별 카테고리 관리
@@ -261,10 +265,13 @@ model BoardCategory {
   name      String   /// 카테고리 이름 ('치명적 버그', '사소한 버그', '일상', '정보 공유' 등)
   sortOrder Int      @default(0) /// 정렬 순서
   isActive  Boolean  @default(true) /// 카테고리 활성화 여부
+  language  String   @default("ko") /// 언어 코드 (ko, en, ja, zh, vi) - 보드와 동일 언어 사용 권장
   createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
   updatedAt DateTime @updatedAt /// 마지막 업데이트 시간
   board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade) /// 관계: 카테고리는 하나의 게시판에 속함
   posts     Post[] /// 관계: 카테고리에 속한 게시글들
+
+  @@index([language])
 }
 
 /// 게시글 테이블 - 커뮤니티 게시글 관리
@@ -273,9 +280,8 @@ model Post {
   boardId     Int      /// 소속 게시판 ID
   categoryId  Int      /// 소속 카테고리 ID
   authorId    Int?     /// 작성자 ID (로그인 사용자의 경우)
-  authorName  String?  /// 작성자 이름 (익명 사용자의 경우)
+  authorName  String?  /// 작성자 표시 이름 (익명 제거 후에도 캐시 용도로 유지)
   authorImage String?  /// 작성자 이미지 URL (로그인 사용자의 경우)
-  password    String?  /// 비밀번호 (익명 사용자의 경우, 해시된 값)
   title       String   /// 게시글 제목
   content     String   /// 게시글 내용 (HTML content from QuillEditor)
   viewCount   Int      @default(0) /// 조회수
@@ -283,6 +289,7 @@ model Post {
   commentCount Int     @default(0) /// 댓글수
   isNotice    Boolean  @default(false) /// 공지사항 여부
   isDeleted   Boolean  @default(false) /// 삭제 여부
+  language    String   @default("ko") /// 언어 코드 (ko, en, ja, zh, vi)
   createdAt   DateTime @default(now()) /// 생성 시간
   updatedAt   DateTime @updatedAt /// 마지막 업데이트 시간
   
@@ -293,6 +300,8 @@ model Post {
   comments    Comment[] /// 관계: 게시글에 달린 댓글들
   postLikes   PostLike[] /// 관계: 게시글에 대한 추천들
   postTags    PostTag[] /// 관계: 게시글에 연결된 태그들
+
+  @@index([language])
 }
 
 /// 댓글 테이블 - 게시글 댓글 관리
@@ -300,9 +309,8 @@ model Comment {
   id          Int      @id @default(autoincrement()) /// 댓글 고유 ID
   postId      Int      /// 소속 게시글 ID
   authorId    Int?     /// 작성자 ID (로그인 사용자의 경우)
-  authorName  String?  /// 작성자 이름 (익명 사용자의 경우)
+  authorName  String?  /// 작성자 표시 이름 (익명 제거 후에도 캐시 용도로 유지)
   authorImage String?  /// 작성자 이미지 URL (로그인 사용자의 경우)
-  password    String?  /// 비밀번호 (익명 사용자의 경우, 해시된 값)
   parentId    Int?     /// 부모 댓글 ID (대댓글용)
   content     String   /// 댓글 내용
   likeCount   Int      @default(0) /// 추천수
@@ -349,9 +357,13 @@ model CommentLike {
 /// 태그 테이블 - 게시글 태그 관리
 model Tag {
   id        Int      @id @default(autoincrement()) /// 태그 고유 ID
-  name      String   @unique /// 태그 이름
+  name      String   /// 태그 이름
+  language  String   @default("ko") /// 언어 코드 (ko, en, ja, zh, vi)
   createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
   postTags  PostTag[] /// 관계: 태그가 연결된 게시글들
+
+  @@unique([name, language])
+  @@index([language])
 }
 
 /// 게시글-태그 연결 테이블 - 게시글과 태그의 다대다 관계

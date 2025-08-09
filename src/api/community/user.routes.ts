@@ -12,6 +12,15 @@ export function createUserCommunityRouter(): OpenAPIHono {
     summary: "커뮤니티 전체 데이터 조회",
     description: "게시판, 카테고리, 최근 게시글을 한 번에 조회합니다.",
     tags: ["커뮤니티-사용자"],
+    request: {
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
+      }),
+    },
     responses: {
       200: {
         description: "성공",
@@ -161,6 +170,15 @@ export function createUserCommunityRouter(): OpenAPIHono {
     summary: "게시판 목록 조회",
     description: "활성화된 게시판 목록을 조회합니다.",
     tags: ["커뮤니티-사용자"],
+    request: {
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
+      }),
+    },
     responses: {
       200: {
         description: "성공",
@@ -217,6 +235,11 @@ export function createUserCommunityRouter(): OpenAPIHono {
           }),
       }),
       query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
         page: z.coerce
           .number()
           .int()
@@ -374,6 +397,11 @@ export function createUserCommunityRouter(): OpenAPIHono {
     tags: ["커뮤니티-사용자"],
     request: {
       query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
         page: z.coerce
           .number()
           .int()
@@ -460,9 +488,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
                         content: z
                           .string()
                           .openapi({ example: "게시글 내용..." }),
-                        authorName: z
-                          .string()
-                          .openapi({ example: "유람하는 방랑자" }),
+                        authorName: z.string().nullable().openapi({ example: "유람하는 방랑자" }),
                         isAnonymous: z.boolean().openapi({ example: false }),
                         tags: z
                           .array(z.string())
@@ -535,6 +561,13 @@ export function createUserCommunityRouter(): OpenAPIHono {
             example: 1,
           }),
       }),
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
+      }),
     },
     responses: {
       200: {
@@ -547,9 +580,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
                   id: z.number().int().openapi({ example: 1 }),
                   title: z.string().openapi({ example: "버그 제보합니다" }),
                   content: z.string().openapi({ example: "게시글 내용..." }),
-                  authorName: z
-                    .string()
-                    .openapi({ example: "유람하는 방랑자" }),
+                  authorName: z.string().nullable().openapi({ example: "유람하는 방랑자" }),
                   isAnonymous: z.boolean().openapi({ example: false }),
                   tags: z
                     .array(z.string())
@@ -604,6 +635,7 @@ export function createUserCommunityRouter(): OpenAPIHono {
           "application/json": {
             schema: z
               .object({
+                language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({ example: "ko" }),
                 title: z
                   .string()
                   .min(1)
@@ -621,16 +653,6 @@ export function createUserCommunityRouter(): OpenAPIHono {
                   .positive()
                   .optional()
                   .openapi({ example: 1 }),
-                isAnonymous: z
-                  .boolean()
-                  .default(false)
-                  .openapi({ example: false }),
-                password: z
-                  .string()
-                  .min(4)
-                  .max(20)
-                  .optional()
-                  .openapi({ example: "1234" }),
                 tags: z
                   .array(z.string())
                   .optional()
@@ -716,12 +738,6 @@ export function createUserCommunityRouter(): OpenAPIHono {
                   .positive()
                   .optional()
                   .openapi({ example: 1 }),
-                password: z
-                  .string()
-                  .min(4)
-                  .max(20)
-                  .optional()
-                  .openapi({ example: "1234" }),
                 tags: z
                   .array(z.string())
                   .optional()
@@ -783,16 +799,11 @@ export function createUserCommunityRouter(): OpenAPIHono {
           }),
       }),
       query: z.object({
-        password: z
-          .string()
-          .min(4)
-          .max(20)
-          .optional()
-          .openapi({
-            param: { name: "password", in: "query" },
-            description: "익명 게시글 삭제 시 필요한 비밀번호",
-            example: "1234",
-          }),
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
       }),
     },
     responses: {
@@ -875,6 +886,11 @@ export function createUserCommunityRouter(): OpenAPIHono {
           }),
       }),
       query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
         page: z.coerce
           .number()
           .int()
@@ -985,16 +1001,6 @@ export function createUserCommunityRouter(): OpenAPIHono {
                   .positive()
                   .optional()
                   .openapi({ example: 1 }),
-                isAnonymous: z
-                  .boolean()
-                  .default(false)
-                  .openapi({ example: false }),
-                password: z
-                  .string()
-                  .min(4)
-                  .max(20)
-                  .optional()
-                  .openapi({ example: "1234" }),
               })
               .openapi({ type: "object" }),
           },
@@ -1059,12 +1065,6 @@ export function createUserCommunityRouter(): OpenAPIHono {
                   .min(1)
                   .max(100000)
                   .openapi({ example: "댓글 내용" }),
-                password: z
-                  .string()
-                  .min(4)
-                  .max(20)
-                  .optional()
-                  .openapi({ example: "1234" }),
               })
               .openapi({ type: "object" }),
           },

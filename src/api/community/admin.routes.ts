@@ -12,6 +12,15 @@ export function createAdminCommunityRouter(): OpenAPIHono {
     summary: "게시판 목록 조회 (관리자용)",
     description: "모든 게시판 목록을 조회합니다. (활성/비활성 포함)",
     tags: ["커뮤니티-관리자"],
+    request: {
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
+      }),
+    },
     responses: {
       200: {
         description: "성공",
@@ -62,23 +71,14 @@ export function createAdminCommunityRouter(): OpenAPIHono {
           "application/json": {
             schema: z
               .object({
-                name: z
-                  .string()
-                  .min(1)
-                  .max(50)
-                  .openapi({ example: "bug-report" }),
-                displayName: z
-                  .string()
-                  .min(1)
-                  .max(100)
-                  .openapi({ example: "버그 제보" }),
-                description: z
-                  .string()
-                  .max(500)
-                  .optional()
-                  .openapi({ example: "버그를 제보하는 공간입니다." }),
-                sortOrder: z.number().int().default(0).openapi({ example: 0 }),
-                isActive: z.boolean().default(true).openapi({ example: true }),
+                items: z.array(z.object({
+                  language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({ example: "ko" }),
+                  name: z.string().min(1).max(50).openapi({ example: "bug-report" }),
+                  displayName: z.string().min(1).max(100).openapi({ example: "버그 제보" }),
+                  description: z.string().max(500).optional().openapi({ example: "버그를 제보하는 공간입니다." }),
+                  sortOrder: z.number().int().default(0).openapi({ example: 0 }),
+                  isActive: z.boolean().default(true).openapi({ example: true }),
+                }))
               })
               .openapi({ type: "object" }),
           },
@@ -136,6 +136,13 @@ export function createAdminCommunityRouter(): OpenAPIHono {
             description: "게시판 ID",
             example: 1,
           }),
+      }),
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
       }),
       body: {
         content: {
@@ -213,6 +220,13 @@ export function createAdminCommunityRouter(): OpenAPIHono {
             example: 1,
           }),
       }),
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
+      }),
     },
     responses: {
       200: {
@@ -252,6 +266,13 @@ export function createAdminCommunityRouter(): OpenAPIHono {
             description: "게시판 ID",
             example: 1,
           }),
+      }),
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
       }),
     },
     responses: {
@@ -312,13 +333,12 @@ export function createAdminCommunityRouter(): OpenAPIHono {
           "application/json": {
             schema: z
               .object({
-                name: z
-                  .string()
-                  .min(1)
-                  .max(100)
-                  .openapi({ example: "치명적 버그" }),
-                sortOrder: z.number().int().default(0).openapi({ example: 0 }),
-                isActive: z.boolean().default(true).openapi({ example: true }),
+                items: z.array(z.object({
+                  language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({ example: "ko" }),
+                  name: z.string().min(1).max(100).openapi({ example: "치명적 버그" }),
+                  sortOrder: z.number().int().default(0).openapi({ example: 0 }),
+                  isActive: z.boolean().default(true).openapi({ example: true }),
+                }))
               })
               .openapi({ type: "object" }),
           },
@@ -372,6 +392,13 @@ export function createAdminCommunityRouter(): OpenAPIHono {
             description: "카테고리 ID",
             example: 1,
           }),
+      }),
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
       }),
       body: {
         content: {
@@ -438,6 +465,13 @@ export function createAdminCommunityRouter(): OpenAPIHono {
             description: "카테고리 ID",
             example: 1,
           }),
+      }),
+      query: z.object({
+        language: z.enum(["ko", "en", "ja", "zh", "vi"]).openapi({
+          param: { name: "language", in: "query" },
+          description: "언어 코드",
+          example: "ko",
+        }),
       }),
     },
     responses: {

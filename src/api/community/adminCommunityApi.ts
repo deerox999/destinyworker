@@ -1,5 +1,6 @@
 import { Context } from "hono";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
+import { requireLanguageParam, supportedLanguages } from "../../common/utils";
 import { getUserFromToken } from "../../common/utils";
 
 export const adminCommunityApi = {
@@ -11,9 +12,11 @@ export const adminCommunityApi = {
         return c.json({ error: "관리자 권한이 필요합니다." }, 403);
       }
 
+      const language = requireLanguageParam(c);
       const prisma = createPrismaClient(c.env.DB);
       
       const boards = await prisma.board.findMany({
+        where: ({ language } as any),
         orderBy: [
           { sortOrder: "asc" },
           { createdAt: "asc" }
@@ -44,39 +47,45 @@ export const adminCommunityApi = {
       }
 
       const body = await c.req.json();
-      const { name, displayName, description, sortOrder = 0, isActive = true } = body;
+      // 언어별 다건 입력 지원: items: [{ language, name, displayName, description, sortOrder?, isActive? }]
+      const { items } = body as { items: Array<{ language: string; name: string; displayName: string; description?: string; sortOrder?: number; isActive?: boolean }>; };
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return c.json({ success: false, message: "items는 필수입니다." }, 400);
+      }
+      for (const it of items) {
+        if (!it.language || !supportedLanguages.includes(it.language as any)) {
+          return c.json({ success: false, message: "유효한 language가 필요합니다." }, 400);
+        }
+      }
 
       const prisma = createPrismaClient(c.env.DB);
 
-      // 게시판명 중복 확인
-      const existingBoard = await prisma.board.findUnique({
-        where: { name },
-      });
-
-      if (existingBoard) {
-        await prisma.$disconnect();
-        return c.json(
-          { success: false, message: "이미 존재하는 게시판명입니다." },
-          409
-        );
+      const created: any[] = [];
+      for (const it of items) {
+        const existing = await prisma.board.findFirst({ where: ({ name: it.name, language: it.language } as any) });
+        if (existing) {
+          continue; // 같은 (name, language)는 건너뜀
+        }
+        const board = await prisma.board.create({
+          data: ({
+            name: it.name,
+            displayName: it.displayName,
+            description: it.description,
+            sortOrder: it.sortOrder ?? 0,
+            isActive: it.isActive ?? true,
+            language: it.language as any,
+          } as any),
+        });
+        created.push(board);
       }
-
-      const board = await prisma.board.create({
-        data: {
-          name,
-          displayName,
-          description,
-          sortOrder,
-          isActive,
-        },
-      });
 
       await prisma.$disconnect();
 
       return c.json(
         {
           success: true,
-          data: board,
+          data: created,
         },
         201
       );
@@ -100,11 +109,12 @@ export const adminCommunityApi = {
       const { boardId } = c.req.param();
       const body = await c.req.json();
       const { displayName, description, sortOrder, isActive } = body;
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const board = await prisma.board.findUnique({
-        where: { id: parseInt(boardId) },
+      const board = await prisma.board.findFirst({
+        where: ({ id: parseInt(boardId), language } as any),
       });
 
       if (!board) {
@@ -122,6 +132,7 @@ export const adminCommunityApi = {
           ...(description !== undefined && { description }),
           ...(sortOrder !== undefined && { sortOrder }),
           ...(isActive !== undefined && { isActive }),
+          ...(language && ({ language } as any)),
           updatedAt: new Date(),
         },
       });
@@ -150,11 +161,12 @@ export const adminCommunityApi = {
       }
 
       const { boardId } = c.req.param();
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const board = await prisma.board.findUnique({
-        where: { id: parseInt(boardId) },
+      const board = await prisma.board.findFirst({
+        where: ({ id: parseInt(boardId), language } as any),
       });
 
       if (!board) {
@@ -195,11 +207,12 @@ export const adminCommunityApi = {
       }
 
       const { boardId } = c.req.param();
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const board = await prisma.board.findUnique({
-        where: { id: parseInt(boardId) },
+      const board = await prisma.board.findFirst({
+        where: ({ id: parseInt(boardId), language } as any),
       });
 
       if (!board) {
@@ -211,7 +224,7 @@ export const adminCommunityApi = {
       }
 
       const categories = await prisma.boardCategory.findMany({
-        where: { boardId: parseInt(boardId) },
+        where: ({ boardId: parseInt(boardId), language } as any),
         orderBy: { sortOrder: "asc" },
       });
 
@@ -240,13 +253,18 @@ export const adminCommunityApi = {
 
       const { boardId } = c.req.param();
       const body = await c.req.json();
-      const { name, sortOrder = 0, isActive = true } = body;
+      // 언어별 다건 입력 지원: items: [{ language, name, sortOrder?, isActive? }]
+      const { items } = body as { items: Array<{ language: string; name: string; sortOrder?: number; isActive?: boolean }>; };
+      if (!Array.isArray(items) || items.length === 0) {
+        return c.json({ success: false, message: "items는 필수입니다." }, 400);
+      }
 
       const prisma = createPrismaClient(c.env.DB);
 
       // 게시판 존재 확인
-      const board = await prisma.board.findUnique({
-        where: { id: parseInt(boardId) },
+      const language = requireLanguageParam(c);
+      const board = await prisma.board.findFirst({
+        where: ({ id: parseInt(boardId), language } as any),
       });
 
       if (!board) {
@@ -257,37 +275,34 @@ export const adminCommunityApi = {
         );
       }
 
-      // 카테고리명 중복 확인 (같은 게시판 내에서)
-      const existingCategory = await prisma.boardCategory.findFirst({
-        where: {
-          boardId: parseInt(boardId),
-          name: name,
-        },
-      });
-
-      if (existingCategory) {
-        await prisma.$disconnect();
-        return c.json(
-          { success: false, message: "이미 존재하는 카테고리명입니다." },
-          409
-        );
+      const created: any[] = [];
+      for (const it of items) {
+        if (!it.language || !supportedLanguages.includes(it.language as any)) {
+          await prisma.$disconnect();
+          return c.json({ success: false, message: "유효한 language가 필요합니다." }, 400);
+        }
+        const existing = await prisma.boardCategory.findFirst({
+          where: ({ boardId: parseInt(boardId), name: it.name, language: it.language } as any),
+        });
+        if (existing) continue;
+        const category = await prisma.boardCategory.create({
+          data: ({
+            boardId: parseInt(boardId),
+            name: it.name,
+            sortOrder: it.sortOrder ?? 0,
+            isActive: it.isActive ?? true,
+            language: it.language as any,
+          } as any),
+        });
+        created.push(category);
       }
-
-      const category = await prisma.boardCategory.create({
-        data: {
-          boardId: parseInt(boardId),
-          name,
-          sortOrder,
-          isActive,
-        },
-      });
 
       await prisma.$disconnect();
 
       return c.json(
         {
           success: true,
-          data: category,
+          data: created,
         },
         201
       );
@@ -311,11 +326,12 @@ export const adminCommunityApi = {
       const { categoryId } = c.req.param();
       const body = await c.req.json();
       const { name, sortOrder, isActive } = body;
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const category = await prisma.boardCategory.findUnique({
-        where: { id: parseInt(categoryId) },
+      const category = await prisma.boardCategory.findFirst({
+        where: ({ id: parseInt(categoryId), language } as any),
       });
 
       if (!category) {
@@ -332,6 +348,7 @@ export const adminCommunityApi = {
           ...(name && { name }),
           ...(sortOrder !== undefined && { sortOrder }),
           ...(isActive !== undefined && { isActive }),
+          ...(language && ({ language } as any)),
           updatedAt: new Date(),
         },
       });
@@ -360,11 +377,12 @@ export const adminCommunityApi = {
       }
 
       const { categoryId } = c.req.param();
+      const language = requireLanguageParam(c);
 
       const prisma = createPrismaClient(c.env.DB);
 
-      const category = await prisma.boardCategory.findUnique({
-        where: { id: parseInt(categoryId) },
+      const category = await prisma.boardCategory.findFirst({
+        where: ({ id: parseInt(categoryId), language } as any),
       });
 
       if (!category) {
@@ -442,7 +460,7 @@ export const adminCommunityApi = {
       for (const boardData of sampleBoards) {
         // 기존 게시판이 있는지 확인
         const existingBoard = await prisma.board.findUnique({
-          where: { name: boardData.name }
+          where: { name: boardData.name } as any
         });
 
         if (!existingBoard) {
