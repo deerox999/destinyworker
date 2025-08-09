@@ -1,5 +1,5 @@
 -- npx wrangler d1 execute destiny-local --local --file=prisma/migrations/seed_i18n.sql
--- npx wrangler d1 execute destiny-new --remote --file=prisma/migrations/seed_i18n.sql
+-- npx wrangler d1 execute destiny-new --remote --file=prisma/migrations/patch_i18n.sql
 -- 커뮤니티 i18n 보완 패치 (직접 쿼리)
 -- 목적:
 -- 1) 기존 데이터의 language 컬럼 값을 ko로 통일

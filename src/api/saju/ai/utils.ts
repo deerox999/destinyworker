@@ -7,7 +7,7 @@ export const SERVER_MODEL_CONFIG = {
     temperature: 0.4,
     topP: 0.4,
     topK: 40,
-    maxOutputTokens: 65535,
+    maxOutputTokens: 39999,
   },
 
   // 안전 설정 (고정값)
@@ -111,12 +111,10 @@ export function buildGeminiPayload(
             text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람 (${
               message.sajuData.person1.name
             }):\n${JSON.stringify(
-              message.sajuData.person1.sajuData,
-              null,
-              2
-            )}\n\n두 번째 사람 (${
+              message.sajuData.person1.sajuData
+            )}\n\n두 번째 사람 (${ 
               message.sajuData.person2.name
-            }):\n${JSON.stringify(message.sajuData.person2.sajuData, null, 2)}`,
+            }):\n${JSON.stringify(message.sajuData.person2.sajuData)}`,
           },
         ],
       });
@@ -124,7 +122,7 @@ export function buildGeminiPayload(
       contents.push({
         role: "user",
         parts: [
-          { text: `사주 데이터: ${JSON.stringify(message.sajuData, null, 2)}` },
+          { text: `사주 데이터: ${JSON.stringify(message.sajuData)}` },
         ],
       });
     }

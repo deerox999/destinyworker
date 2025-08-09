@@ -1190,48 +1190,6 @@ export function createUserCommunityRouter(): OpenAPIHono {
     },
   });
 
-  // 샘플 데이터 생성
-  const createSampleDataRoute = createRoute({
-    method: "post",
-    path: "/sample-data",
-    summary: "샘플 데이터 생성",
-    description: "테스트용 게시판과 카테고리 샘플 데이터를 생성합니다. (익명 접근 가능)",
-    tags: ["커뮤니티-사용자"],
-    responses: {
-      201: {
-        description: "생성 성공",
-        content: {
-          "application/json": {
-            schema: SuccessSchema.extend({
-              data: z
-                .object({
-                  message: z.string().openapi({ example: "샘플 데이터가 생성되었습니다." }),
-                  boards: z.number().int().openapi({ example: 4 }),
-                  categories: z.number().int().openapi({ example: 12 }),
-                  details: z.object({
-                    boards: z.array(z.object({
-                      id: z.number().int().openapi({ example: 1 }),
-                      name: z.string().openapi({ example: "free-discussion" }),
-                      displayName: z.string().openapi({ example: "자유 토론" }),
-                      sortOrder: z.number().int().openapi({ example: 0 })
-                    })),
-                    categories: z.array(z.object({
-                      id: z.number().int().openapi({ example: 1 }),
-                      name: z.string().openapi({ example: "일상" }),
-                      boardId: z.number().int().openapi({ example: 1 }),
-                      sortOrder: z.number().int().openapi({ example: 0 })
-                    }))
-                  })
-                })
-                .openapi({ type: "object" }),
-            }).openapi({ type: "object" }),
-          },
-        },
-      },
-      500: { description: "서버 오류" },
-    },
-  });
-
   // 라우트 등록
   app.openapi(getCommunityDataRoute, userCommunityApi.getCommunityData);
   app.openapi(getBoardsRoute, userCommunityApi.getBoards);
@@ -1247,7 +1205,5 @@ export function createUserCommunityRouter(): OpenAPIHono {
   app.openapi(updateCommentRoute, userCommunityApi.updateComment);
   app.openapi(deleteCommentRoute, userCommunityApi.deleteComment);
   app.openapi(toggleCommentLikeRoute, userCommunityApi.toggleCommentLike);
-  app.openapi(createSampleDataRoute, userCommunityApi.createSampleData);
-
   return app;
 }

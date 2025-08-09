@@ -394,10 +394,6 @@ ${fullContext}`;
       };
     });
 
-    // 디버깅을 위한 로그 추가
-    console.log("Original messages:", JSON.stringify(messages, null, 2));
-    console.log("Gemini messages:", JSON.stringify(geminiContents, null, 2));
-
     const llmResponse = await geminiApi.models.generateContent({
       model: model,
       contents: geminiContents,
