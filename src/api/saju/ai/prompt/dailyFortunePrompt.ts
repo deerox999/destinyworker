@@ -56,8 +56,8 @@ export function buildDailyFortuneUserPrompt(language: string, timezone: string) 
     { "key": "wealth",     "label": "재물운",     "score": number, "description": string },
     { "key": "work",       "label": "직장운",     "score": number, "description": string },
     { "key": "study",      "label": "학업운",     "score": number, "description": string },
-    { "key": "social",     "label": "대인관계운", "score": number, "description": string },
-    { "key": "creativity", "label": "창의운",     "score": number, "description": string }
+    { "key": "creativity", "label": "창의운",     "score": number, "description": string },
+    { "key": "social",     "label": "대인관계운", "score": number, "description": string }
   ],
   "summary": string,
   "advice": [string, string, string],
@@ -65,7 +65,7 @@ export function buildDailyFortuneUserPrompt(language: string, timezone: string) 
     "type": "radar",
     "labels": [
       "연애운", "건강운", "재물운", "직장운", "학업운",
-      "대인관계운", "창의운"
+      "창의운", "대인관계운"
     ],
     "data": [number, number, number, number, number, number, number]
   }
