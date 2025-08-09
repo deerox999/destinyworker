@@ -9,6 +9,32 @@ import {
   type AnalysisJob
 } from "../utils";
 
+/**
+맞아요. 결론만 말하면:
+반드시 “클라이언트로의 스트리밍”이어야 100초를 회피하는 건 아닙니다.
+하지만 “우리 서버 → 외부(AI)” 구간이 Cloudflare 프록시(오렌지 구름)에 걸려 있으면, 하트비트/핑을 “클라이언트로” 보내도 524에는 전혀 영향이 없습니다. 524는 “Cloudflare → 오리진” 구간의 Proxy Read/Write Timeout(기본 100초/30초)에 걸려 발생하기 때문입니다. 즉, 브라우저로 보내는 핑은 해당 타임아웃을 연장하지 못합니다. 공식 문서도 장시간 처리에 대해 폴링·DNS-only 등으로 회피하라고 안내합니다. Cloudflare 524 문서
+현상 정리
+논스트리밍 3건 중 일부가 101초에 실패한 건, DO 내부에서 외부(AI) 호출이 CF 프록시 뒤에 있어 100초 Proxy Read Timeout에 걸린 케이스로 보입니다.
+다른 1건이 101초에 성공한 건, 외부가 더 빨리 초기 바이트를 흘려 주었거나 경로·엣지 차이로 간신히 넘긴 케이스일 수 있습니다.
+핵심 사실
+524는 “Cloudflare → 오리진” 구간의 타임아웃입니다. “우리 → 브라우저” 구간의 keepalive(하트비트)는 이 타임아웃과 무관합니다.
+따라서, 하트비트로 524를 회피할 수 없습니다. 필요 없어서 제거해 두었습니다.
+
+권장 회피책
+외부(AI) 호출 도메인을 Cloudflare 프록시에서 제외(DNS-only, 회색 구름)하거나, 
+애초에 Cloudflare가 끼지 않는 도메인으로 직접 호출.
+외부에 스트리밍 API가 있다면 “우리 → 외부”를 스트리밍으로 호출해 초기 바이트를 빠르게 받아 100초를 넘기지 않도록 유도(현재 그 방향으로 전환).
+엔터프라이즈 요금제에서만 Proxy Read Timeout 상향 가능.
+장시간 작업은 “즉시 응답 + 폴링” 아키텍처(이미 적용). 다만 외부 호출 자체가 CF 프록시에 걸려 있으면, 이 호출도 524에 걸릴 수 있으므로 위의 DNS-only가 사실상 정답입니다.
+요청하신 대로 하트비트는 제거했습니다. 남는 조치로, 외부(AI) 호출 경로를 Cloudflare 프록시에서 반드시 분리하거나(회색 구름) 구글 공식 엔드포인트를 직접 쓰도록 변경하는 걸 권합니다.
+하트비트/핑: 524 회피 불가
+실효 해법: 외부 호출을 CF 프록시 바깥으로, 또는 업스트림 스트리밍 사용, 또는 엔터프라이즈로 타임아웃 상향
+참고: Cloudflare 524 공식 문서
+변경 사항 요약
+DO 스트리밍 하트비트 제거
+논스트리밍도 업스트림은 스트림으로 처리해 초기 바이트 유도
+524 발생 시 백그라운드 전환/폴링 유지, 10분 초과 자동 실패/환불 유지
+ */
 export class SajuAnalysisWorker implements DurableObject {
   private state: DurableObjectState;
   private env: any;
@@ -255,18 +281,29 @@ export class SajuAnalysisWorker implements DurableObject {
       const ai = new GoogleGenAI({ apiKey: this.env.GOOGLE_GEMINI_API_KEY });
       const payload = buildGeminiPayload(job);
 
+      // 업스트림은 항상 스트리밍으로 호출해 524(100초 Proxy Read Timeout) 회피
+      const streamingResp = await ai.models.generateContentStream(payload);
+      if (!streamingResp) throw new Error("스트리밍 응답을 받을 수 없습니다.");
+
       if (shouldStreamToClient) {
-        // 스트리밍 필요: 스트리밍 API 사용
-        const streamingResp = await ai.models.generateContentStream(payload);
-        if (!streamingResp) throw new Error("스트리밍 응답을 받을 수 없습니다.");
         return this.createStreamingResponse(job, streamingResp, jobId);
+      } else {
+        // 클라이언트로는 스트리밍하지 않고 내부 처리만 수행
+        return this.processStreamingInternal(job, streamingResp, jobId);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const code = (error as any)?.code || (error as any)?.status;
+      const is524 = message?.includes("524") || code === 524;
+
+      if (shouldStreamToClient && is524) {
+        // 스트림 생성 전에 524가 발생한 경우: 백그라운드로 전환하고 간단한 SSE 알림 반환
+        this.state.waitUntil(this.processStreamingJob(job.id, false));
+        return this.createSSENoticeAndClose("스트리밍 연결이 시간초과되어 백그라운드 처리로 전환합니다.");
       }
 
-      // 비스트리밍 처리: 비스트리밍 API 사용 (동시 스트림 연결 병목 회피)
-      return await this.processNonStreamingJob(ai, job, payload, jobId);
-    } catch (error) {
-      await this.failJob(job, error instanceof Error ? error.message : "Unknown error");
-      return this.createErrorResponse("스트리밍 처리 실패", job.error || "Unknown error", 500);
+      await this.failJob(job, message);
+      return this.createErrorResponse("스트리밍 처리 실패", job.error || message, 500);
     }
   }
 
@@ -278,20 +315,10 @@ export class SajuAnalysisWorker implements DurableObject {
     let latestUsageMetadata: any = null;
     const self = this;
     let streamCanceledByClient = false;
-    let heartbeatId: any = null;
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // 주기적 하트비트로 idle 타임아웃 방지
-          heartbeatId = setInterval(() => {
-            if (!streamCanceledByClient) {
-              // SSE 코멘트 또는 핑 이벤트
-              const ping = `: ping\n\n`;
-              controller.enqueue(new TextEncoder().encode(ping));
-            }
-          }, 8000);
-
           // 스트리밍 응답을 클라이언트로 전송하면서 응답 수집
           for await (const chunk of streamingResp) {
             // 타임아웃 등으로 실패 처리되었는지 확인하고 중단
@@ -365,7 +392,7 @@ export class SajuAnalysisWorker implements DurableObject {
             }
           }
         } finally {
-          if (heartbeatId) clearInterval(heartbeatId);
+          // no-op
         }
       },
       async cancel(_reason) {
@@ -464,6 +491,20 @@ export class SajuAnalysisWorker implements DurableObject {
 
     // 마지막 fallback: 문자열화
     return typeof resp === "string" ? resp : JSON.stringify(resp);
+  }
+
+  /**
+   * 간단한 SSE 알림 후 즉시 종료하는 스트림 생성
+   */
+  private createSSENoticeAndClose(message: string): Response {
+    const stream = new ReadableStream({
+      start(controller) {
+        const notice = `data: ${JSON.stringify({ type: "notice", message })}\n\n`;
+        controller.enqueue(new TextEncoder().encode(notice));
+        controller.close();
+      },
+    });
+    return new Response(stream);
   }
 
   /**
