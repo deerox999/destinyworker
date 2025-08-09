@@ -26,40 +26,48 @@ export function buildDailyFortuneUserPrompt(language: string, timezone: string) 
   const today = new Date().toISOString().slice(0, 10);
   const lang = getLanguageName(language || "ko");
 
-  return `다음 사주 데이터를 바탕으로 "오늘(${today}, timezone:${timezone})"의 운세만 분석하세요.
+  return `다음 사주 데이터를 바탕으로 오늘의 운세만 분석하세요.
 
-요구사항:
-1) 아래 스키마와 일치하는 JSON만 출력하세요. 마크다운, 설명문, 코드블록 금지.
-2) 각 점수는 0~100 정수, 합리적 분포로 설정.
-3) 각 설명은 1~2문장으로 짧고 행동지향적으로 작성. 귀엽고 다정한 말투를 사용하고, 과하지 않은 이모지(0~2개) 사용 가능.
-4) 요약과 조언은 중복 없이 실천 가능한 문장으로 작성하되, 따뜻하고 귀여운 톤을 유지. 조언은 정확히 5개를 출력.
-5) 차트 데이터는 categories의 score를 그대로 사용해 radar 차트로 구성하며, labels와 data의 항목 수는 categories와 동일해야 합니다.
+[사전계산 결과 사용 지침]
+- 아래에 제공되는 "사전계산 결과"의 date, overallScore, categories.score, chart.labels/data를 그대로 사용하고 수정하지 마세요.
+- elementsStrength가 제공되면 텍스트(설명/요약/조언) 작성의 참고로만 쓰세요.
 
-출력 스키마(JSON only):
+[출력 규칙]
+- JSON만 출력하세요. 마크다운/설명문/코드블록 금지.
+- 반드시 여는 { 로 시작해 닫는 } 로 끝나는 하나의 객체만 출력.
+- 모든 키와 문자열은 큰따옴표("")만 사용. 작은따옴표('), 주석(//, /* */), 트레일링 콤마 금지.
+- date/overallScore/categories[].score/chart.* 값은 사전계산 값을 그대로 사용. 수정 금지.
+- description/summary/advice만 작성. 내용은 간결하고 따뜻한 톤, 이모지 최대 1개.
+
+[작성 규칙]
+- description: 각 항목 1문장, 이모지 최대 1개.
+- summary: 가장 강한 1~2 오행과 일간의 관계를 1문장.
+- advice: 정확히 3개, 각 15~40자.
+- chart는 반드시 포함. labels/data는 아래 스키마와 동일 순서로 7개.
+- 내부 추론/아이디어 나열/대안 비교 없이, 정해진 공식만 적용해 즉시 결과를 산출하세요.
+
+출력(JSON only, 7개 카테고리):
 {
   "date": "YYYY-MM-DD",
-  "overallScore": number, // 0~100
+  "overallScore": number,
   "categories": [
     { "key": "love",       "label": "연애운",     "score": number, "description": string },
     { "key": "health",     "label": "건강운",     "score": number, "description": string },
     { "key": "wealth",     "label": "재물운",     "score": number, "description": string },
     { "key": "work",       "label": "직장운",     "score": number, "description": string },
     { "key": "study",      "label": "학업운",     "score": number, "description": string },
-    { "key": "family",     "label": "가정운",     "score": number, "description": string },
     { "key": "social",     "label": "대인관계운", "score": number, "description": string },
-    { "key": "creativity", "label": "창의운",     "score": number, "description": string },
-    { "key": "travel",     "label": "이동운",     "score": number, "description": string },
-    { "key": "luck",       "label": "행운",       "score": number, "description": string }
+    { "key": "creativity", "label": "창의운",     "score": number, "description": string }
   ],
   "summary": string,
-  "advice": [string, string, string, string, string],
+  "advice": [string, string, string],
   "chart": {
     "type": "radar",
     "labels": [
       "연애운", "건강운", "재물운", "직장운", "학업운",
-      "가정운", "대인관계운", "창의운", "이동운", "행운"
+      "대인관계운", "창의운"
     ],
-    "data": [number, number, number, number, number, number, number, number, number, number] // categories score 순서와 동일
+    "data": [number, number, number, number, number, number, number]
   }
 }
 

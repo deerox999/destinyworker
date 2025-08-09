@@ -2,6 +2,7 @@ import { Context } from "hono";
 import { GoogleGenAI } from "@google/genai";
 import { SERVER_MODEL_CONFIG } from "./utils";
 import { buildDailyFortunePrompts } from "./prompt/dailyFortunePrompt";
+import { calculateDailyFortuneScores } from "./prompt/dailyFortuneCalculator";
 
 interface DailyFortuneRequest {
   sajuData: any;
@@ -48,6 +49,52 @@ export async function DailyFortune(c: Context): Promise<Response> {
     }
     // 사전 검증을 통과한 간소화된 sajuData 문자열을 그대로 사용
 
+    // 사전 계산: 점수/카테고리/차트
+    let precomputed: any | null = null;
+    try {
+      const { overallScore, categories, elementsStrength } = calculateDailyFortuneScores(
+        body.sajuData as any
+      );
+      // console.log(`overallScore : `, overallScore)
+      // console.log(`categories : `, categories)
+      // console.log(`elementsStrength : `, elementsStrength)
+      precomputed = {
+        date: new Date().toISOString().slice(0, 10),
+        overallScore,
+        categories: categories.map((c) => ({
+          key: c.key,
+          label: (
+            c.key === "love" ? "연애운" :
+            c.key === "health" ? "건강운" :
+            c.key === "wealth" ? "재물운" :
+            c.key === "work" ? "직장운" :
+            c.key === "study" ? "학업운" :
+            c.key === "social" ? "대인관계운" :
+            "창의운"
+          ),
+          score: c.score,
+          description: "",
+        })),
+        elementsStrength,
+        chart: {
+          type: "radar",
+          labels: [
+            "연애운",
+            "건강운",
+            "재물운",
+            "직장운",
+            "학업운",
+            "대인관계운",
+            "창의운",
+          ],
+          data: categories.map((c) => c.score),
+        },
+      };
+    } catch (e) {
+      // 계산 실패 시에도 기존 프롬프트 경로로 진행
+      precomputed = null;
+    }
+
     const payload = {
       model,
       systemInstruction: systemPrompt,
@@ -56,7 +103,11 @@ export async function DailyFortune(c: Context): Promise<Response> {
           role: "user",
           parts: [
             {
-              text: `${userPrompt}\n\n사주 데이터:\n${sajuStr}`,
+              text: precomputed
+                ? `${userPrompt}\n\n사주 데이터:\n${sajuStr}\n\n사전계산 결과(반드시 사용):\n${JSON.stringify(
+                    precomputed
+                  )}`
+                : `${userPrompt}\n\n사주 데이터:\n${sajuStr}`,
             },
           ],
         },
