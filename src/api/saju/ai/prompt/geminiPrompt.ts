@@ -190,7 +190,7 @@ export interface PromptParams {
   선택된분석요소?: 분석요소[];
   user?: any;
   isDevelop?: boolean;
-  stream?: boolean; // 스트리밍 여부(비스트리밍일 때만 JSON 부록 요구)
+  highQuality?: boolean; // 고품질 분석 여부
 }
 
 // 해설 유형별 설정 타입 정의
@@ -294,13 +294,19 @@ const 해설유형별설정: Record<string, 해설설정> = {
 ### (필요 시) 특별한 특징 5
 **다섯 번째 주목할 만한 요소의 심층 분석...**
 
+## 오해 방지 FAQ
+- 사용자 질문과 위 해설을 바탕으로, 독자가 가질 수 있는 오해를 3~5개 선정하여 Q/A 형식으로 간단히 제시하세요.
+- 형식:
+  - Q: ...
+    A: ...
+
 ## 종합 조언
 ### 핵심 인생 조언
 **모든 분석을 종합한 핵심 조언...**
 
 ### 실천 방안
 **구체적이고 실천 가능한 행동 지침...**
- 
+
 ## 종합 분석 및 전망
 ### 인생 주요 전환점
 **각 대운별 주요 기회와 주의사항을 명리학적 근거와 함께 제시...**
@@ -433,7 +439,7 @@ export const generateAnalysisPrompts = (params: PromptParams) => {
     선택된분석요소 = [],
     user,
     isDevelop = false,
-    stream = true,
+    highQuality = false,
   } = params;
 
   const languageName = getLanguageName(language);
@@ -460,7 +466,8 @@ ${해설유형} 관점에서 추가적으로 덧붙일만한 내용이 있다면
 
 ${특별추가질문(user, isDevelop)}`;
 
-  if (["종합운세"].includes(해설유형) && !stream) {
+  // 변경 파라미터가 true일 경우에만 따라가야 함: highQuality(true)일 때만 JSON 부록 요구
+  if (["종합운세"].includes(해설유형) && highQuality) {
     userPrompt += `
 
 추가 지시(중요):

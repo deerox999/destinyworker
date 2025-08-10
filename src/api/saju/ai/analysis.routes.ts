@@ -79,9 +79,8 @@ export function createAnalysisRouter(
                     description: "시간대 설정",
                     example: "Asia/Seoul",
                   }),
-                  stream: z.boolean().optional().openapi({
-                    description:
-                      "스트리밍 응답 여부 (true: 동기 스트리밍, false: 비동기)",
+                  highQuality: z.boolean().optional().openapi({
+                    description: "고품질 분석 여부 (pro 모델 사용 여부). 기본값 false",
                     example: false,
                   }),
                 }).optional().openapi({
@@ -95,7 +94,7 @@ export function createAnalysisRouter(
     },
     responses: {
       200: {
-        description: "분석 작업 등록 성공 또는 스트리밍 응답",
+        description: "분석 작업 등록 성공",
         content: {
           "application/json": {
             schema: z
@@ -112,11 +111,6 @@ export function createAnalysisRouter(
                 data: z.any(),
               })
               .openapi({ type: "object" }),
-          },
-          "text/event-stream": {
-            schema: z.string().openapi({
-              description: "스트리밍 응답 (stream=true인 경우)",
-            }),
           },
         },
       },

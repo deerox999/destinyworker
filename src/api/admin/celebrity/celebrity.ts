@@ -217,44 +217,86 @@ export async function updateCelebrity(
     }
 
     const body = (await c.req.json()) as any;
-    const { translations, ...celebrityData } = body;
+    const { translations, ...rawCelebrityData } = body;
 
     const prisma = createPrismaClient(c.env.DB);
-    
-    const transactionQueries = [];
 
-    // 1. Celebrity 기본 정보 업데이트 (업데이트할 필드가 있는 경우)
-    if (Object.keys(celebrityData).length > 0) {
+    const transactionQueries: any[] = [];
+
+    // 1) Celebrity 기본 정보 업데이트: 허용된 필드만 선택적으로 반영(미전달 필드는 그대로 유지)
+    const allowedFields = [
+      "birthYear",
+      "birthMonth",
+      "birthDay",
+      "birthHour",
+      "birthMinute",
+      "calendar",
+      "gender",
+      "imageUrl",
+    ];
+
+    const updateData: any = {};
+    for (const key of allowedFields) {
+      if (rawCelebrityData[key] !== undefined) {
+        if (
+          key === "birthYear" ||
+          key === "birthMonth" ||
+          key === "birthDay" ||
+          key === "birthHour" ||
+          key === "birthMinute"
+        ) {
+          // 숫자 필드 변환 (null 허용)
+          updateData[key] =
+            rawCelebrityData[key] === null || rawCelebrityData[key] === ""
+              ? null
+              : parseInt(rawCelebrityData[key]);
+        } else {
+          updateData[key] = rawCelebrityData[key];
+        }
+      }
+    }
+
+    if (Object.keys(updateData).length > 0) {
       transactionQueries.push(
         prisma.celebrity.update({
           where: { id: celebrityId },
-          data: celebrityData,
+          data: updateData,
         })
       );
     }
 
-    // 2. Translations 정보 업데이트
-    if (translations?.length) {
-      // 기존 번역 데이터 삭제
-      transactionQueries.push(
-        prisma.celebrityTranslation.deleteMany({
-          where: { celebrityId },
-        })
-      );
-      
-      // 새로운 번역 데이터 생성
-      transactionQueries.push(
-        prisma.celebrityTranslation.createMany({
-          data: translations.map((t: any) => ({
-            celebrityId,
-            languageCode: t.languageCode,
-            name: t.name,
-            occupation: t.occupation,
-            description: t.description,
-            aiResponse: t.aiResponse || null,
-          })),
-        })
-      );
+    // 2) Translations 업데이트: 삭제하지 않고 언어별 upsert로 갱신
+    if (Array.isArray(translations) && translations.length > 0) {
+      for (const t of translations) {
+        if (!t?.languageCode) continue;
+        transactionQueries.push(
+          prisma.celebrityTranslation.upsert({
+            where: {
+              celebrityId_languageCode: {
+                celebrityId,
+                languageCode: t.languageCode,
+              },
+            },
+            update: {
+              name: t.name,
+              occupation: t.occupation,
+              description: t.description,
+              // aiResponse 필드는 undefined일 때는 업데이트하지 않음(기존 값 보존)
+              ...(t.aiResponse === undefined
+                ? {}
+                : { aiResponse: t.aiResponse }),
+            },
+            create: {
+              celebrityId,
+              languageCode: t.languageCode,
+              name: t.name,
+              occupation: t.occupation,
+              description: t.description,
+              aiResponse: t.aiResponse ?? null,
+            },
+          })
+        );
+      }
     }
 
     if (transactionQueries.length > 0) {

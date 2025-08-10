@@ -8,6 +8,7 @@ import {
   updateSajuAnalysis,
   type AnalysisJob
 } from "../utils";
+import { createPrismaClient } from "../../../../common/prismaUtils";
 /**
  * 524오류 때문에 논스트리밍 요청을 해도 내부적으로는 스트리밍 방식으로 호출 후 저장처리
  * 100초안에 ai가 응답을 내놓아야 하기때문
@@ -71,6 +72,7 @@ export class SajuAnalysisWorker implements DurableObject {
       conversationHistory: body.conversationHistory,
       model: body.model,
       fortuneType: body.fortuneType,
+      destination: body.destination,
       ...(analysisId && { analysisId }),
       createdAt: new Date().toISOString(),
       status: "pending",
@@ -579,6 +581,30 @@ export class SajuAnalysisWorker implements DurableObject {
     if (saveResult.success) {
       await this.updateJobAfterSave(job, fullResponse, saveResult, latestUsageMetadata);
       await this.state.storage.put(job.id, job);
+      // 후처리: 목적지가 지정된 경우 자동 반영 (예: celebrityTranslation 업데이트)
+      try {
+        if (job.destination && job.destination.type === "celebrityTranslation") {
+          const prisma = createPrismaClient(this.env.DB);
+          const { celebrityId, languageCode } = job.destination;
+
+          // 해당 번역이 존재하는지 확인 후 업데이트
+          const existing = await prisma.celebrityTranslation.findFirst({
+            where: { celebrityId, languageCode },
+            select: { id: true },
+          });
+
+          if (existing) {
+            const res = await prisma.celebrityTranslation.update({
+              where: { id: existing.id },
+              data: { aiResponse: fullResponse },
+            });
+          }
+          await prisma.$disconnect();
+        }
+      } catch (postProcessError) {
+        console.error("[SajuAnalysisWorker] 후처리(목적지 반영) 실패:", postProcessError);
+        // 후처리 실패는 작업 실패로 간주하지 않음
+      }
     } else {
       throw new Error(`분석 결과 저장 실패: ${saveResult.error}`);
     }

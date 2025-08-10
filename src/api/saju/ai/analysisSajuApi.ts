@@ -4,7 +4,7 @@ import {
   refundPoints,
   usePoints,
 } from "../../../common/paymentUtils";
-import { createPrismaClient } from "../../../common/prismaUtils";
+import { createPrismaClient, isAdmin } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
 import {
   generateAnalysisPrompts,
@@ -37,8 +37,14 @@ interface AnalysisSajuRequest {
     // 기타 설정
     i18n?: string; // 언어 설정
     timezone?: string; // 시간대 설정
-    stream?: boolean; // 스트리밍 여부
+    highQuality?: boolean; // 고품질 분석 여부 (모델 pro 사용)
     isDevelop?: boolean; // 개발자 모드 (특별추가질문 활성화)
+    // 완료 후 후처리 목적지(선택) - 자동 반영 모드
+    destination?: {
+      type: "celebrityTranslation"; // 확장 가능성 고려해 유니온 시작
+      celebrityId: string;
+      languageCode: string; // i18n과 동일하게 사용 가능
+    };
   };
 }
 
@@ -61,10 +67,10 @@ function generateServerPrompts(
     understandingLevel = "중수",
     selectedAnalysisElements = [],
     i18n = "ko",
-    stream = false,
+    highQuality = false,
     isDevelop = false,
   } = options;
-  let baseModel = ""; // stream 파라미터에 따라 모델 선택
+  let baseModel = ""; // highQuality 파라미터에 따라 모델 선택
   
   // 통합된 파라미터 객체 생성
   const promptParams: PromptParams = {
@@ -78,7 +84,7 @@ function generateServerPrompts(
     선택된분석요소: selectedAnalysisElements,
     user,
     isDevelop,
-    stream,
+    highQuality,
   };
 
   let prompts: { systemPrompt: string; userPrompt: string };
@@ -88,20 +94,8 @@ function generateServerPrompts(
     prompts = generateAnalysisPrompts(promptParams);
   }
 
-  if (stream) {
-    baseModel = "gemini-2.5-flash";
-  } else {
-    /* 
-      524 오류 관련해서 해결할 수 없음. DNS 프록시 꺼봐도 안됨. (api2.youram.me)
-      엔터프라이즈를 쓰면 된다고 하는데, 200달러 이상이라, 현 시점에서는 무리임.
-    */
-    if (c.env.ENVIRONMENT === "development") {
-      baseModel = "gemini-2.5-pro";
-    } else {
-      // baseModel = "gemini-2.5-flash";
-      baseModel = "gemini-2.5-pro";
-    }
-  }
+  // 환경과 무관하게 highQuality만으로 모델 선택
+  baseModel = highQuality ? "gemini-2.5-pro" : "gemini-2.5-flash";
 
   const result = {
     systemPrompt: prompts.systemPrompt,
@@ -276,8 +270,8 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     const analysisType = options.analysisType || "종합운세";
     let pointsCost = getAnalysisTypePoints(analysisType);
 
-    // streaming이 false일 때 (더 비싼 모델 사용) 포인트 가격을 1.5배로 조정
-    if (!options.stream) {
+    // highQuality(true → pro 모델 사용)일 때 포인트 가격을 1.5배로 조정
+    if (options.highQuality) {
       pointsCost = Math.round(pointsCost * 1.5);
     }
 
@@ -314,118 +308,70 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     // Durable Object 클라이언트 생성
     const doClient = new DurableObjectClient(c.env, user.id);
 
-    // 스트리밍 요청인지 확인
-    if (options.stream) {
-      // 스트리밍 처리
-      const jobData = {
-        userId: user.id,
-        analysisType,
-        type,
-        pointsCost,
-        reference,
-        i18n: options.i18n || "ko",
-        timezone: options.timezone || "Asia/Seoul",
-        userPrompt,
-        systemPrompt,
-        sajuData: body.sajuData,
-        model,
-      };
-
-      const streamResponse = await doClient.startStreaming(jobData);
-
-      // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)
-      updateProfileContext(c.env, user.id, options.profileId, options.userContext);
-
-      if (!streamResponse.ok) {
-        // 실패 시 포인트 환불
-        await refundPoints(
-          c.env.DB,
-          user.id,
-          pointsCost,
-          `스트리밍 분석 작업 제출 실패로 인한 포인트 환불 (${type})`,
-          `analysis_saju_${type}_stream_refund_${Date.now()}`
-        );
-
-        const errorData:any = await streamResponse.json();
-        return c.json(
-          {
-            error: "스트리밍 분석 작업 제출에 실패했습니다.",
-            details: errorData.error || "Unknown error",
-          },
-          500
-        );
+    // 항상 백그라운드 잡 생성 방식으로 처리
+    // 목적지(destination)는 관리자만 허용
+    let safeDestination = options.destination;
+    if (options.destination) {
+      const admin = await isAdmin(c);
+      if (!admin) {
+        safeDestination = undefined; // 비관리자는 목적지 반영 금지
       }
+    }
+    const jobData = {
+      userId: user.id,
+      analysisType,
+      type,
+      pointsCost,
+      reference,
+      i18n: options.i18n || "ko",
+      timezone: options.timezone || "Asia/Seoul",
+      userPrompt,
+      systemPrompt,
+      sajuData: body.sajuData,
+      model,
+      destination: safeDestination,
+    };
 
-      // 스트리밍 응답 반환
-      const headers = new Headers();
-      headers.set("Content-Type", "text/event-stream; charset=utf-8");
-      headers.set("Cache-Control", "no-cache");
-      headers.set("Connection", "keep-alive");
-      headers.set("X-AI-Model", model);
-      headers.set("X-Points-Deducted", pointsCost.toString());
-      headers.set("X-Points-Remaining", pointValidation.remainingPoints?.toString() || "0");
+    // Job 생성
+    const createResult = await doClient.createJob(jobData);
 
-      return new Response(streamResponse.body, {
-        status: 200,
-        headers: headers,
-      });
-    } else {
-      // 비동기 처리
-      const jobData = {
-        userId: user.id,
-        analysisType,
-        type,
+    if (!createResult.success) {
+      // 실패 시 포인트 환불
+      await refundPoints(
+        c.env.DB,
+        user.id,
         pointsCost,
-        reference,
-        i18n: options.i18n || "ko",
-        timezone: options.timezone || "Asia/Seoul",
-        userPrompt,
-        systemPrompt,
-        sajuData: body.sajuData,
-        model,
-      };
-
-      // Job 생성
-      const createResult = await doClient.createJob(jobData);
-
-      if (!createResult.success) {
-        // 실패 시 포인트 환불
-        await refundPoints(
-          c.env.DB,
-          user.id,
-          pointsCost,
-          `사주 분석 작업 제출 실패로 인한 포인트 환불 (${type})`,
-          `analysis_saju_${type}_refund_${Date.now()}`
-        );
-
-        return c.json(
-          {
-            error: "분석 작업 제출에 실패했습니다.",
-            details: createResult.error || "Unknown error",
-          },
-          500
-        );
-      }
-
-      // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)  
-      updateProfileContext(c.env, user.id, options.profileId, options.userContext);
+        `사주 분석 작업 제출 실패로 인한 포인트 환불 (${type})`,
+        `analysis_saju_${type}_refund_${Date.now()}`
+      );
 
       return c.json(
         {
-          success: true,
-          jobId: createResult.jobId,
-          message: "분석 작업이 등록되었습니다. 처리 대기 중입니다.",
-          status: "pending",
-          points: {
-            deducted: pointsCost,
-            remaining: pointValidation.remainingPoints || null,
-            message: pointValidation.message || null,
-          },
-          data: pointValidation.data,
+          error: "분석 작업 제출에 실패했습니다.",
+          details: createResult.error || "Unknown error",
         },
-        200
+        500
       );
     }
+
+    // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)  
+    updateProfileContext(c.env, user.id, options.profileId, options.userContext);
+
+    return c.json(
+      {
+        success: true,
+        jobId: createResult.jobId,
+        message: "분석 작업이 등록되었습니다. 처리 대기 중입니다.",
+        status: "pending",
+        points: {
+          deducted: pointsCost,
+          remaining: pointValidation.remainingPoints || null,
+          message: pointValidation.message || null,
+        },
+        data: pointValidation.data,
+      },
+      200
+    );
   } catch (error) {
     console.error("통합 사주 분석 API 오류:", error);
     return c.json(
