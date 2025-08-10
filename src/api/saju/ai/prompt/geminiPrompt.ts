@@ -456,6 +456,7 @@ ${특별추가질문(user, isDevelop)}`;
   - 각 대운마다 자유로운 1~2문장 설명(overview)과, 핵심 하이라이트/리스크/조언을 포함.
   - 각 대운마다 주요 차원별 점수(예: wealth, career, relationship, health, study, creativity, social, family, travel, luck)를 포함.
   - 차트는 전체 기간에 대해 다차원 점수 변화를 표현할 수 있도록 multi-line 시계열을 구성.
+  - 전체 대운 데이터를 분석해서 제공되어야 함.
 
 JSON 스키마 예시(참고):
 {
