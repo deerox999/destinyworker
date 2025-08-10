@@ -425,7 +425,7 @@ export class SajuAnalysisWorker implements DurableObject {
       let cleanedResponse = fullResponse;
       let extractedChartJson: string | null = null;
       try {
-        if (job.analysisType === "대운") {
+        if (["대운", '종합운세'].includes(job.analysisType)) {
           const startTag = "===JSON_START===";
           const endTag = "===JSON_END===";
           const startIdx = fullResponse.indexOf(startTag);
