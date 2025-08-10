@@ -100,7 +100,8 @@ ${톤설정.분석지침.join("\n")}
 ### **1. 핵심 분석 관점 (Core Perspectives)**
 
 **데이터 활용 원칙:**
-* 제공된 JSON 데이터는 분석을 위한 '참고 데이터'로 활용하되, 명리학 이론에 기반하여 독자적으로 신강약, 격국, 용신 등을 종합적으로 판단하고, 그 판단의 근거를 명확하게 제시하며 해설을 진행하세요.
+* 제공되는 모든 사주 데이터는 분석을 위한 '기초 원료(Raw Data)'입니다. 십성 배치, 천간/지지, 합/충/형/파/해, 십이운성, 대운/세운 등 사실 데이터만을 기반으로 판단하세요.
+* 신강약, 격국, 용신의 판정은 사전에 주어지지 않습니다. 반드시 명리학 이론에 따른 AI의 독립적 논리적 추론으로 도출하고, 도출 근거를 단계적으로 제시하세요.
 * 분석 첫 단계에서 종격(從格)이나 화기격(化氣格) 등 특수격국 성립 여부를 우선적으로 검토하세요.
 
 **통합적 동적 분석 (Holistic Dynamic Analysis):**
@@ -166,6 +167,7 @@ export interface PromptParams {
   선택된분석요소?: 분석요소[];
   user?: any;
   isDevelop?: boolean;
+  stream?: boolean; // 스트리밍 여부(비스트리밍일 때만 JSON 부록 요구)
 }
 
 // 해설 유형별 설정 타입 정의
@@ -408,6 +410,7 @@ export const generateAnalysisPrompts = (params: PromptParams) => {
     선택된분석요소 = [],
     user,
     isDevelop = false,
+    stream = true,
   } = params;
 
   const languageName = getLanguageName(language);
@@ -422,7 +425,7 @@ export const generateAnalysisPrompts = (params: PromptParams) => {
   )
 
   const 설정 = 해설유형별설정[해설유형] || 해설유형별설정["대운"]
-  const userPrompt = `다음 사주 데이터를 ${해설유형} 관점에서 해설하여 마크다운 형식으로 결과를 제공해주세요:
+  let userPrompt = `다음 사주 데이터를 ${해설유형} 관점에서 해설하여 마크다운 형식으로 결과를 제공해주세요:
 
 ${create질문섹션(해설유형, 설정, 사용자질문)}
 
@@ -435,6 +438,73 @@ ${["종합운세", "대운"].includes(해설유형)
 }
 
 ${특별추가질문(user, isDevelop)}`;
+
+  // 비스트리밍 + 대운일 때만: JSON 부록(차트/타임라인) 요구
+  if (해설유형 === "대운" && !stream) {
+    userPrompt += `
+
+추가 지시(중요, 대운-비스트리밍 전용):
+- 본문 마크다운 해설을 모두 마친 뒤, 마지막에 JSON 부록을 반드시 추가하세요.
+- JSON 부록은 다음 구분자를 정확히 사용하세요:
+  - ===JSON_START===
+  - (여기에 JSON 단일 객체 1개)
+  - ===JSON_END===
+- JSON 작성 규칙:
+  - JSON만, 객체 1개, 더블쿼트만 사용, 주석/코드펜스/트레일링 콤마 금지.
+  - 모든 점수는 0~100 정수. labels와 각 series.data는 동일 길이/순서.
+  - timeline은 대운 구간 순서대로 정렬.
+  - 각 대운마다 자유로운 1~2문장 설명(overview)과, 핵심 하이라이트/리스크/조언을 포함.
+  - 각 대운마다 주요 차원별 점수(예: wealth, career, relationship, health, study, creativity, social, family, travel, luck)를 포함.
+  - 차트는 전체 기간에 대해 다차원 점수 변화를 표현할 수 있도록 multi-line 시계열을 구성.
+
+JSON 스키마 예시(참고):
+{
+  "timeline": [
+    {
+      "label": "만 23세~32세 丙辰",
+      "startAge": 23,
+      "endAge": 32,
+      "gan": "丙",
+      "zhi": "辰",
+      "overallScore": 85,
+      "trend": "rising",
+      "overview": "기회가 많고 성장이 빠른 시기.",
+      "scores": {
+        "wealth": 82,
+        "career": 88,
+        "relationship": 70,
+        "health": 76,
+        "study": 68,
+        "creativity": 80,
+        "social": 73,
+        "family": 74,
+        "travel": 65,
+        "luck": 84
+      },
+      "highlights": ["경력 확장 기회", "명예 상승"],
+      "risks": ["과로 위험", "관계 소홀"],
+      "advice": ["일-생활 균형 유지", "장기 목표에 집중"]
+    }
+  ],
+  "chart": {
+    "type": "multi_line",
+    "labels": ["23-32세", "33-42세", "43-52세"],
+    "series": [
+      { "key": "overall", "label": "종합", "data": [85, 78, 72] },
+      { "key": "wealth", "label": "재물", "data": [82, 75, 68] },
+      { "key": "career", "label": "직업", "data": [88, 80, 70] },
+      { "key": "relationship", "label": "관계", "data": [70, 76, 74] },
+      { "key": "health", "label": "건강", "data": [76, 72, 69] },
+      { "key": "luck", "label": "행운", "data": [84, 79, 73] }
+    ]
+  }
+}
+
+아래 형식으로 출력 마무리:
+===JSON_START===
+{ JSON 단일 객체 }
+===JSON_END===`;
+  }
 
   return { systemPrompt, userPrompt };
 };

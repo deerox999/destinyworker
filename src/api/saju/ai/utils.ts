@@ -284,7 +284,8 @@ export async function updateSajuAnalysis(
   aiResponse: string,
   analysisCompletedAt: Date,
   env: any,
-  usageMetadata?: any
+  usageMetadata?: any,
+  chartJson?: string | null
 ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
   const prisma = createPrismaClient(env.DB);
   try {
@@ -296,6 +297,11 @@ export async function updateSajuAnalysis(
     // usageMetadata가 있으면 토큰 정보도 업데이트
     if (usageMetadata) {
       updateData.usageMetadata = JSON.stringify(usageMetadata);
+    }
+
+    // 차트 JSON이 있으면 저장
+    if (typeof chartJson === "string") {
+      updateData.chartJson = chartJson;
     }
 
     const analysis = await prisma.sajuAnalysis.update({
@@ -327,7 +333,8 @@ export async function saveSajuAnalysis(
   title: string,
   analysisCompletedAt: Date,
   env: any,
-  usageMetadata?: any
+  usageMetadata?: any,
+  chartJson?: string | null
 ): Promise<{ success: boolean; analysisId?: number; error?: string }> {
   const prisma = createPrismaClient(env.DB);
   try {
@@ -367,6 +374,11 @@ export async function saveSajuAnalysis(
     // usageMetadata가 있으면 토큰 정보도 저장
     if (usageMetadata) {
       createData.usageMetadata = JSON.stringify(usageMetadata);
+    }
+
+    // chartJson이 있으면 함께 저장
+    if (typeof chartJson === "string") {
+      createData.chartJson = chartJson;
     }
 
     const result = await prisma.sajuAnalysis.create({

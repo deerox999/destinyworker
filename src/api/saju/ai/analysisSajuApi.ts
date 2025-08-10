@@ -78,6 +78,7 @@ function generateServerPrompts(
     선택된분석요소: selectedAnalysisElements,
     user,
     isDevelop,
+    stream,
   };
 
   let prompts: { systemPrompt: string; userPrompt: string };

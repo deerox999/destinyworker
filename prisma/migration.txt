@@ -1,7 +1,9 @@
 /*
   # 직접 쿼리 실행 (로컬은 --remote제거해야 함.)
-  npx wrangler d1 execute destiny-local --command "ALTER TABLE CelebrityTranslation ADD COLUMN aiResponse TEXT;"
-  npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE CelebrityTranslation ADD COLUMN aiResponse TEXT;"
+  npx wrangler d1 execute destiny-local --command "ALTER TABLE SajuAnalysis ADD COLUMN chartJson TEXT;"
+  npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE SajuAnalysis ADD COLUMN chartJson TEXT;"
+
+  
 
   # 쿼리 직접실행
   npx prisma generate    (동기화)

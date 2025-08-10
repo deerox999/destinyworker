@@ -8,7 +8,10 @@ import {
   updateSajuAnalysis,
   type AnalysisJob
 } from "../utils";
-
+/**
+ * 524오류 때문에 논스트리밍 요청을 해도 내부적으로는 스트리밍 방식으로 호출 후 저장처리
+ * 100초안에 ai가 응답을 내놓아야 하기때문
+ */
 /**
 맞아요. 결론만 말하면:
 반드시 “클라이언트로의 스트리밍”이어야 100초를 회피하는 건 아닙니다.
@@ -418,8 +421,31 @@ export class SajuAnalysisWorker implements DurableObject {
       // 스트리밍 응답 처리
       const { fullResponse, latestUsageMetadata } = await this.processStreamChunks(streamingResp);
 
+      // 대운 비스트리밍 전용: JSON 부록 추출 (본문 끝의 ===JSON_START=== ~ ===JSON_END===)
+      let cleanedResponse = fullResponse;
+      let extractedChartJson: string | null = null;
+      try {
+        if (job.analysisType === "대운") {
+          const startTag = "===JSON_START===";
+          const endTag = "===JSON_END===";
+          const startIdx = fullResponse.indexOf(startTag);
+          const endIdx = fullResponse.indexOf(endTag);
+          if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+            const jsonRaw = fullResponse
+              .slice(startIdx + startTag.length, endIdx)
+              .trim();
+            // 본문에서 부록 제거
+            cleanedResponse = (fullResponse.slice(0, startIdx) + fullResponse.slice(endIdx + endTag.length)).trim();
+            // JSON 유효성 최소 확인 (저장은 원문 문자열로)
+            try { JSON.parse(jsonRaw); extractedChartJson = jsonRaw; } catch (_) { extractedChartJson = null; }
+          }
+        }
+      } catch (_) {
+        // 추출 실패 시 무시하고 본문만 저장
+      }
+
       // DB 업데이트 및 Job 상태 업데이트
-      await this.saveAnalysisAndUpdateJob(job, fullResponse, latestUsageMetadata);
+      await this.saveAnalysisAndUpdateJob(job, cleanedResponse, latestUsageMetadata, extractedChartJson);
       await this.state.storage.put(job.id, job);
       this.clearJobTimeout(job.id);
         
@@ -529,7 +555,7 @@ export class SajuAnalysisWorker implements DurableObject {
   /**
    * 분석 결과 저장 및 Job 업데이트 공통 로직
    */
-  private async saveAnalysisAndUpdateJob(job: AnalysisJob, fullResponse: string, latestUsageMetadata: any): Promise<void> {
+  private async saveAnalysisAndUpdateJob(job: AnalysisJob, fullResponse: string, latestUsageMetadata: any, chartJson?: string | null): Promise<void> {
     const analysisCompletedAt = new Date();
 
     if (!job.analysisId) {
@@ -546,7 +572,8 @@ export class SajuAnalysisWorker implements DurableObject {
       fullResponse,
       analysisCompletedAt,
       this.env,
-      latestUsageMetadata
+      latestUsageMetadata,
+      chartJson ?? null
     );
 
     if (saveResult.success) {
