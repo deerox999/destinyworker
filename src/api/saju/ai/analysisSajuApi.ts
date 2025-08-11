@@ -13,6 +13,7 @@ import {
   type 분석관점,
   type 분석요소,
   type 이해도레벨,
+  type 어조,
 } from "./prompt/geminiPrompt";
 
 // API 사용자가 보내는 요청 본문 타입 정의 (안전한 파라미터만 허용)
@@ -29,7 +30,7 @@ interface AnalysisSajuRequest {
     userQuestion?: string; // 사용자 추가 질문
     userContext?: string; // 사용자 맥락정보
     profileId?: number; // 프로필 ID (선택적 - 분석 후 해당 프로필의 context 업데이트용)
-    toneOption?: 분석관점; // '현실적', '약간긍정', '약간부정'
+    analysisStyle?: 분석관점; // '현실적', '약간긍정', '약간부정'
     targetYear?: number; // 연간운세용
     understandingLevel?: 이해도레벨; // '초보', '중수', '전문가'
     selectedAnalysisElements?: 분석요소[]; // ['십성', '신살', '십이신살']
@@ -39,6 +40,7 @@ interface AnalysisSajuRequest {
     timezone?: string; // 시간대 설정
     highQuality?: boolean; // 고품질 분석 여부 (모델 pro 사용)
     isDevelop?: boolean; // 개발자 모드 (특별추가질문 활성화)
+    responseStyle?: 어조; // 응답 어조: '유쾌한' | '전문적인' | '상냥한'
     // 완료 후 후처리 목적지(선택) - 자동 반영 모드
     destination?: {
       type: "celebrityTranslation"; // 확장 가능성 고려해 유니온 시작
@@ -62,13 +64,14 @@ function generateServerPrompts(
     analysisType,
     userQuestion = "",
     userContext = "",
-    toneOption = "현실적",
+    analysisStyle = "현실적",
     targetYear,
     understandingLevel = "중수",
     selectedAnalysisElements = [],
     i18n = "ko",
     highQuality = false,
     isDevelop = false,
+    responseStyle = "전문적인",
   } = options;
   let baseModel = ""; // highQuality 파라미터에 따라 모델 선택
   
@@ -78,10 +81,11 @@ function generateServerPrompts(
     해설유형: analysisType,
     사용자질문: userQuestion,
     사용자맥락정보: userContext,
-    톤옵션: toneOption,
+    분석관점: analysisStyle,
     타겟년도: targetYear,
     이해도레벨: understandingLevel,
     선택된분석요소: selectedAnalysisElements,
+    어조옵션: responseStyle,
     user,
     isDevelop,
     highQuality,

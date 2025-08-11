@@ -50,7 +50,7 @@ export function createAnalysisRouter(
                     description: "사용자 추가 질문",
                     example: "특별히 궁금한 점이 있나요?",
                   }),
-                  toneOption: z.string().optional().openapi({
+                  analysisStyle: z.string().optional().openapi({
                     description: "분석 톤 옵션 (예: 현실적, 약간긍정, 약간부정)",
                     example: "현실적",
                   }),
