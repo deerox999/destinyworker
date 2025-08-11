@@ -120,13 +120,7 @@ export function buildGeminiPayload(
         role: "user",
         parts: [
           {
-            text: `궁합 분석용 사주 데이터:\n\n첫 번째 사람 (${
-              message.sajuData.person1.name
-            }):\n${JSON.stringify(
-              message.sajuData.person1.sajuData
-            )}\n\n두 번째 사람 (${ 
-              message.sajuData.person2.name
-            }):\n${JSON.stringify(message.sajuData.person2.sajuData)}`,
+            text: `궁합 분석용 사주 데이터:\n${JSON.stringify(message.sajuData.person1)}\n${JSON.stringify(message.sajuData.person2)}`,
           },
         ],
       });
