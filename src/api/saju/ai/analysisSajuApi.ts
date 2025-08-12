@@ -248,14 +248,13 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
 
   try {
     const body: AnalysisSajuRequest = await c.req.json();
-    
+    const options = body.options || {};
+    const type = options.type || "individual";
+
     // 필수 필드 검증
     if (!body.sajuData) {
       return c.json({ error: "sajuData는 필수입니다." }, 400);
     }
-
-    const options = body.options || {};
-    const type = options.type || "individual";
 
     // 궁합 분석의 경우 추가 검증
     if (type === "compatibility") {
@@ -301,7 +300,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       );
     }
 
-    // 서버에서 안전하게 프롬프트 생성
+    // 서버에서 안전하게 프롬프트 생성 (초기 분석 전용)
     const { systemPrompt, userPrompt, model } = generateServerPrompts(
       body,
       type,

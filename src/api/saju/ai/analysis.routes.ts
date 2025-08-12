@@ -9,6 +9,7 @@ import {
   updateSajuAnalysisTitle,
 } from "./analysisManageApi";
 import { AnalysisSaju, GetAnalysisSajuStatus } from "./analysisSajuApi";
+import { FollowUpAnalysisSaju } from "./followupApi";
 
 export function createAnalysisRouter(
   authMiddleware: MiddlewareHandler
@@ -120,6 +121,72 @@ export function createAnalysisRouter(
       },
       401: { description: "인증 실패" },
       402: { description: "포인트 부족" },
+      500: { description: "서버 오류" },
+    },
+  });
+
+  // 재질문 전용 라우트
+  const FollowUpSajuRoute = createRoute({
+    method: "post",
+    path: "/analysis/follow-up",
+    summary: "사주 재질문 (기존 보고서 기반)",
+    description:
+      "이전 분석 보고서를 컨텍스트로 사용하여 후속 질문에만 집중해 답변합니다.",
+    tags: ["AI - 사주 분석"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                options: z
+                  .object({
+                    followUpOfAnalysisId: z
+                      .number()
+                      .int()
+                      .positive(),
+                    userQuestion: z.string().min(1),
+                  })
+                  .openapi({
+                    description: "재질문 옵션",
+                  }),
+              })
+              .openapi({ type: "object" }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "재질문 작업 등록 성공 (디버그용 프롬프트 반환 포함)",
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                success: z.boolean(),
+                jobId: z.string(),
+                message: z.string(),
+                status: z.string(),
+                points: z.object({
+                  deducted: z.number(),
+                  remaining: z.number().nullable(),
+                  message: z.string().nullable(),
+                }),
+                debugPrompts: z.object({
+                  model: z.string(),
+                  systemPrompt: z.string(),
+                  userPrompt: z.string(),
+                }),
+              })
+              .openapi({ type: "object" }),
+          },
+        },
+      },
+      400: { description: "잘못된 요청 (필수 필드 누락)" },
+      401: { description: "인증 실패" },
+      402: { description: "포인트 부족" },
+      404: { description: "이전 분석 없음" },
       500: { description: "서버 오류" },
     },
   });
@@ -380,6 +447,7 @@ export function createAnalysisRouter(
 
   // --- 라우트 등록 ---
   app.openapi(AnalysisSajuRoute, AnalysisSaju);
+  app.openapi(FollowUpSajuRoute, FollowUpAnalysisSaju);
   app.openapi(AnalysisSajuStatusRoute, GetAnalysisSajuStatus);
   app.openapi(SajuAnalysisListRoute, getSajuAnalysisList);
   app.openapi(SajuAnalysisDetailRoute, getSajuAnalysisDetail);

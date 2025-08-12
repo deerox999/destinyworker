@@ -64,6 +64,8 @@ export interface SajuAnalysisMessage {
   // 신규 추가 속성들
   useProcessBackground?: boolean; // 테스트용 플래그
   analysisId?: number; // DB 분석 ID (업데이트용)
+  // 재질문 모드 여부
+  followUpMode?: boolean;
 }
 
 // 분석 작업 상태
@@ -93,6 +95,8 @@ export interface AnalysisJob {
   result?: any;
   error?: string;
   analysisId?: number;
+  // 재질문 모드 여부
+  followUpMode?: boolean;
 }
 
 /**
@@ -113,8 +117,10 @@ export function buildGeminiPayload(
       message.systemPrompt || LANGUAGE_PROMPTS[message.i18n] || systemPrompt;
   }
 
-  // 사주 데이터 추가
-  if (message.sajuData) {
+  const isFollowUp = Boolean((message as any).followUpMode);
+
+  // 사주 데이터 추가 (재질문 모드에서는 강제로 생략)
+  if (!isFollowUp && message.sajuData) {
     if (message.sajuData.person1 && message.sajuData.person2) {
       contents.push({
         role: "user",
@@ -134,17 +140,22 @@ export function buildGeminiPayload(
     }
   }
 
-  // 대화 기록 추가
-  if (message.conversationHistory && message.conversationHistory.length > 0) {
-    contents.push(...message.conversationHistory);
-  }
-
   // 현재 사용자 프롬프트와 시스템 프롬프트 합치기
   const combinedPrompt = `${systemPrompt}\n\n${message.userPrompt}`;
-  contents.push({
-    role: "user",
-    parts: [{ text: combinedPrompt }],
-  });
+
+  if (isFollowUp) {
+    // 재질문: follow-up 지시를 맨 앞에 두고, 그 다음에 대화 히스토리 배치
+    contents.push({ role: "user", parts: [{ text: combinedPrompt }] });
+    if (message.conversationHistory && message.conversationHistory.length > 0) {
+      contents.push(...message.conversationHistory);
+    }
+  } else {
+    // 초기 분석: 기존 순서 유지 (사주데이터 → 히스토리 → 지시)
+    if (message.conversationHistory && message.conversationHistory.length > 0) {
+      contents.push(...message.conversationHistory);
+    }
+    contents.push({ role: "user", parts: [{ text: combinedPrompt }] });
+  }
 
   // SERVER_MODEL_CONFIG를 직접 사용
   return {
