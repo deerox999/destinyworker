@@ -56,7 +56,8 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
     const prisma = createPrismaClient(c.env.DB);
     const previous = await prisma.sajuAnalysis.findFirst({
       where: { id: followUpId, userId: user.id },
-      select: {
+      select: (
+        {
         userPrompt: true,
         aiResponse: true,
         analysisType: true,
@@ -64,7 +65,11 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
         i18n: true,
         timezone: true,
         modelUsed: true,
-      },
+        title: true,
+        // optionsJson은 현재 생성된 Prisma 타입에 없을 수 있어 any로 캐스팅
+        optionsJson: true,
+      } as any
+      ),
     });
     await prisma.$disconnect();
 
@@ -76,13 +81,38 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
     const type = previous.type || "individual";
     const i18n = previous.i18n || "ko";
     const timezone = previous.timezone || "Asia/Seoul";
-    const inheritedModel = previous.modelUsed || "gemini-2.5-flash";
+    const inheritedModel: string = (previous as any).modelUsed || "gemini-2.5-flash";
 
-    // 대화 히스토리: 직전 2턴
-    const conversationHistory = [
-      { role: "user", parts: [{ text: previous.userPrompt || "" }] },
-      { role: "model", parts: [{ text: previous.aiResponse || "" }] },
-    ];
+    // 이전 옵션 복원 (tone/context/language/understandingLevel 등)
+    let toneHint: string | undefined = undefined;
+    let contextHint: string | undefined = undefined;
+    let understandingLevelHint: string | undefined = undefined;
+    const optionsJsonStr: string | undefined = (previous as any)?.optionsJson;
+    try {
+      if (optionsJsonStr) {
+        const parsed = JSON.parse(optionsJsonStr);
+        // tone: responseStyle 사용
+        toneHint = parsed.responseStyle || parsed.tone || undefined;
+        contextHint = parsed.userContext || undefined;
+        understandingLevelHint = parsed.understandingLevel || undefined;
+      }
+    } catch (_) {
+      // ignore parse errors, fallback to defaults
+    }
+
+    // [TODO 테스트 필요함] 대화 히스토리 구성
+    // - 종합운세: 이전 userPrompt에 JSON/차트 생성 지시가 포함되어 충돌 가능 → userPrompt 제외, 모델 응답만 포함
+    // - 그 외 유형: 이전 userPrompt와 모델 응답을 그대로 포함
+    const conversationHistory = (
+      (analysisType || "종합운세") === "종합운세"
+        ? [
+            ...(previous.aiResponse ? [{ role: "model", parts: [{ text: previous.aiResponse }] }] : []),
+          ]
+        : [
+            { role: "user", parts: [{ text: previous.userPrompt || "" }] },
+            { role: "model", parts: [{ text: previous.aiResponse || "" }] },
+          ]
+    );
 
     // 포인트 비용 계산: 동일 모델 기준 정상가의 50%
     const basePrice = getAnalysisTypePoints(analysisType);
@@ -113,9 +143,9 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
     // 재질문 전용 프롬프트 생성
     const { systemPrompt, userPrompt } = buildFollowUpPrompts({
       language: (i18n as any) || "ko",
-      tone: "전문적인",
-      understandingLevel: "중수",
-      userContext: undefined,
+      tone: ((toneHint as any) || "전문적인"),
+      understandingLevel: ((understandingLevelHint as any) || "중수"),
+      userContext: contextHint,
       userQuestion,
     });
 
@@ -137,6 +167,10 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
       model,
       conversationHistory,
       followUpMode: true,
+      // 최초 요청 options 원본 전달(있을 경우)
+      optionsJson: optionsJsonStr || undefined,
+      // 타이틀 생성: 기존 타이틀 + 재질문
+      previousTitle: previous.title || undefined,
     };
 
     // 디버그용: 실제 AI에 전달될 payload 미리보기 구성
@@ -182,6 +216,7 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
           // conversationHistory,
           payloadPreview: {
             model: payloadPreview.model,
+            systemInstruction: payloadPreview.systemInstruction,
             contents: payloadPreview.contents,
           },
           // previous: {

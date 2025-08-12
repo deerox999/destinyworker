@@ -61,11 +61,13 @@ export interface SajuAnalysisMessage {
     celebrityId: string;
     languageCode: string;
   };
-  // 신규 추가 속성들
-  useProcessBackground?: boolean; // 테스트용 플래그
   analysisId?: number; // DB 분석 ID (업데이트용)
   // 재질문 모드 여부
   followUpMode?: boolean;
+  // 최초 요청 options 원본(JSON 문자열)
+  optionsJson?: string;
+  // 재질문 시 기존 타이틀 전달용
+  previousTitle?: string;
 }
 
 // 분석 작업 상태
@@ -97,6 +99,10 @@ export interface AnalysisJob {
   analysisId?: number;
   // 재질문 모드 여부
   followUpMode?: boolean;
+  // 최초 요청 options 원본(JSON 문자열)
+  optionsJson?: string;
+  // 재질문 시 기존 타이틀 전달용
+  previousTitle?: string;
 }
 
 /**
@@ -107,7 +113,7 @@ export function buildGeminiPayload(
 ): any {
   const contents: any[] = [];
 
-  // 시스템 프롬프트 구성
+  // 시스템 프롬프트 구성 → systemInstruction로 분리해 전달
   let systemPrompt =
     message.systemPrompt ||
     "당신은 전문 사주명리학자입니다. 사용자의 사주 정보를 바탕으로 상세하고 친절하게 운세를 분석해주세요.";
@@ -140,26 +146,25 @@ export function buildGeminiPayload(
     }
   }
 
-  // 현재 사용자 프롬프트와 시스템 프롬프트 합치기
-  const combinedPrompt = `${systemPrompt}\n\n${message.userPrompt}`;
-
   if (isFollowUp) {
-    // 재질문: follow-up 지시를 맨 앞에 두고, 그 다음에 대화 히스토리 배치
-    contents.push({ role: "user", parts: [{ text: combinedPrompt }] });
+    // 재질문: 대화 히스토리를 먼저 넣고, 마지막에 현재 사용자 질문을 배치해야 모델이 올바르게 응답함
     if (message.conversationHistory && message.conversationHistory.length > 0) {
       contents.push(...message.conversationHistory);
     }
+    contents.push({ role: "user", parts: [{ text: message.userPrompt }] });
   } else {
     // 초기 분석: 기존 순서 유지 (사주데이터 → 히스토리 → 지시)
     if (message.conversationHistory && message.conversationHistory.length > 0) {
       contents.push(...message.conversationHistory);
     }
-    contents.push({ role: "user", parts: [{ text: combinedPrompt }] });
+    contents.push({ role: "user", parts: [{ text: message.userPrompt }] });
   }
 
   // SERVER_MODEL_CONFIG를 직접 사용
   return {
     model: message.model,
+    // 시스템 지시는 별도로 전달 (role 지정 불필요; 지정 시 'user' | 'model'만 허용됨)
+    systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
     generationConfig: SERVER_MODEL_CONFIG.generationConfig,
     safetySettings: SERVER_MODEL_CONFIG.safetySettings,
@@ -172,6 +177,13 @@ export function buildGeminiPayload(
 export function generateTitle(
   message: SajuAnalysisMessage | AnalysisJob
 ): string {
+  // 재질문 모드이고, 기존 타이틀을 전달받은 경우 이를 우선 사용
+  const isFollowUp = Boolean((message as any).followUpMode);
+  const previousTitle = (message as any).previousTitle as string | undefined;
+  if (isFollowUp && previousTitle && previousTitle.trim().length > 0) {
+    return `${previousTitle} + 재질문`;
+  }
+
   let title = `[${message.analysisType}]`;
 
   if (message.fortuneType) {
@@ -275,6 +287,9 @@ export async function saveSajuAnalysisInitial(
         timezone: message.timezone,
         analysisStartedAt: analysisStartedAt,
         analysisCompletedAt: null, // 완료 시 업데이트
+        ...(message as any).optionsJson
+          ? { optionsJson: (message as any).optionsJson as string }
+          : {},
       },
     });
 
@@ -396,6 +411,11 @@ export async function saveSajuAnalysis(
     // chartJson이 있으면 함께 저장
     if (typeof chartJson === "string") {
       createData.chartJson = chartJson;
+    }
+
+    // 최초 요청 options 원본이 있으면 함께 저장
+    if (job.optionsJson) {
+      createData.optionsJson = job.optionsJson;
     }
 
     const result = await prisma.sajuAnalysis.create({

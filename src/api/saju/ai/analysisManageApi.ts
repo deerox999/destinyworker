@@ -1,8 +1,7 @@
 import { Context } from "hono";
+import { buildPaginationMeta, parsePagination } from "../../../common/paginationUtils";
 import { createPrismaClient } from "../../../common/prismaUtils";
-import { getUserFromToken } from "../../../common/utils";
-import { parsePagination, buildPaginationMeta } from "../../../common/paginationUtils";
-import { toUTC } from "../../../common/utils";
+import { getUserFromToken, toUTC } from "../../../common/utils";
 
 // UTC 변환은 공통 유틸 사용
 
@@ -56,6 +55,10 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
           createdAt: true,
           analysisStartedAt: true,
           analysisCompletedAt: true,
+          i18n: true,
+          timezone: true,
+          // optionsJson은 Prisma 타입 생성 상태에 따라 누락될 수 있어 any 캐스팅으로 안전 처리
+          ...( { optionsJson: true } as any ),
         },
         orderBy: [{ isFavorite: "desc" }, { createdAt: "desc" }],
         take,
@@ -65,7 +68,7 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
     ]);
 
     // UTC 변환 적용
-    const processedAnalyses = analyses.map((analysis) => ({
+    const processedAnalyses = analyses.map((analysis: any) => ({
       id: analysis.id,
       analysisType: analysis.analysisType,
       type: analysis.type,
@@ -78,6 +81,13 @@ export async function getSajuAnalysisList(c: Context): Promise<Response> {
       createdAt: toUTC(analysis.createdAt),
       analysisStartedAt: toUTC(analysis.analysisStartedAt),
       analysisCompletedAt: toUTC(analysis.analysisCompletedAt),
+      i18n: analysis.i18n || undefined,
+      timezone: analysis.timezone || undefined,
+      // 재질문 여부 식별: 타이틀에 '재질문' 포함
+      isFollowUp: typeof analysis.title === 'string' ? analysis.title.includes('재질문') : false,
+      // 최초 요청 options 원본(JSON 문자열)과 파싱된 객체 제공
+      optionsJson: analysis.optionsJson || null,
+      options: (() => { try { return analysis.optionsJson ? JSON.parse(analysis.optionsJson) : null; } catch { return null; } })(),
     }));
 
     await prisma.$disconnect();
@@ -136,6 +146,8 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         usageMetadata: true,
         analysisStartedAt: true,
         analysisCompletedAt: true,
+        // optionsJson은 Prisma 타입 생성 상태에 따라 누락될 수 있어 any 캐스팅으로 안전 처리
+        ...( { optionsJson: true } as any ),
       },
     });
 
@@ -148,7 +160,7 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
     // 사주 데이터를 JSON으로 파싱
     let sajuData = null;
     try {
-      if (analysis.sajuData && analysis.sajuData.trim() !== '') {
+      if (analysis.sajuData && typeof analysis.sajuData === 'string' && (analysis.sajuData as string).trim() !== '') {
         sajuData = JSON.parse(analysis.sajuData);
       }
     } catch (e) {
@@ -173,6 +185,9 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         i18n: analysis.i18n,
         timezone: analysis.timezone,
         usageMetadata: analysis.usageMetadata,
+        isFollowUp: typeof analysis.title === 'string' && (analysis.title as string).includes('재질문'),
+        optionsJson: (analysis as any).optionsJson || null,
+        options: (() => { try { return (analysis as any).optionsJson ? JSON.parse((analysis as any).optionsJson) : null; } catch { return null; } })(),
       },
       200
     );

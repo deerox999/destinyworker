@@ -73,6 +73,10 @@ export class SajuAnalysisWorker implements DurableObject {
       model: body.model,
       fortuneType: body.fortuneType,
       destination: body.destination,
+      // 재질문/옵션 관련 전달 필드 유지
+      followUpMode: body.followUpMode,
+      optionsJson: body.optionsJson,
+      previousTitle: body.previousTitle,
       ...(analysisId && { analysisId }),
       createdAt: new Date().toISOString(),
       status: "pending",

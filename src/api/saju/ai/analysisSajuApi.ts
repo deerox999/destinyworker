@@ -7,15 +7,16 @@ import {
 import { createPrismaClient, isAdmin } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
 import {
+  PromptParams,
+  분석관점,
+  분석요소,
+  어조,
+  이해도레벨
+} from "./prompt/commonPrompt";
+import {
   generateAnalysisPrompts,
   generateCompatibilityPrompts,
-  type PromptParams,
-  type 분석관점,
-  type 분석요소,
-  type 이해도레벨,
-  type 어조,
 } from "./prompt/geminiPrompt";
-
 // API 사용자가 보내는 요청 본문 타입 정의 (안전한 파라미터만 허용)
 interface AnalysisSajuRequest {
   // 사주 데이터 (필수)
@@ -74,7 +75,7 @@ function generateServerPrompts(
     responseStyle = "전문적인",
   } = options;
   let baseModel = ""; // highQuality 파라미터에 따라 모델 선택
-  
+
   // 통합된 파라미터 객체 생성
   const promptParams: PromptParams = {
     language: i18n,
@@ -119,12 +120,17 @@ function generateServerPrompts(
  * Durable Object와의 통신을 담당하는 헬퍼 함수
  */
 class DurableObjectClient {
-  constructor(private env: any, private userId: number) {}
+  constructor(
+    private env: any,
+    private userId: number
+  ) {}
 
   /**
    * Job 생성
    */
-  async createJob(jobData: any): Promise<{ success: boolean; jobId?: string; error?: string }> {
+  async createJob(
+    jobData: any
+  ): Promise<{ success: boolean; jobId?: string; error?: string }> {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const durableObjectId = this.env.SAJU_ANALYSIS_WORKER.idFromName(
       `user_${this.userId}_${jobId}`
@@ -132,11 +138,14 @@ class DurableObjectClient {
     const durableObject = this.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
 
     try {
-      const response = await durableObject.fetch("http://localhost/jobs/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...jobData, jobId }),
-      });
+      const response = await durableObject.fetch(
+        "http://localhost/jobs/create",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...jobData, jobId }),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -146,9 +155,9 @@ class DurableObjectClient {
       const result = await response.json();
       return { success: true, jobId: result.jobId };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : "Unknown error" 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -156,7 +165,9 @@ class DurableObjectClient {
   /**
    * Job 상태 조회
    */
-  async getJobStatus(jobId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  async getJobStatus(
+    jobId: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
     const durableObjectId = this.env.SAJU_ANALYSIS_WORKER.idFromName(
       `user_${this.userId}_${jobId}`
     );
@@ -176,9 +187,9 @@ class DurableObjectClient {
       const result = await response.json();
       return { success: true, data: result };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : "Unknown error" 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -194,11 +205,14 @@ class DurableObjectClient {
     const durableObject = this.env.SAJU_ANALYSIS_WORKER.get(durableObjectId);
 
     try {
-      const response = await durableObject.fetch("http://localhost/jobs/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...jobData, jobId }),
-      });
+      const response = await durableObject.fetch(
+        "http://localhost/jobs/stream",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...jobData, jobId }),
+        }
+      );
 
       return response;
     } catch (error) {
@@ -216,11 +230,16 @@ class DurableObjectClient {
 /**
  * 프로필의 context를 업데이트하는 헬퍼 함수
  */
-async function updateProfileContext(env: any, userId: number, profileId?: number, userContext?: string): Promise<void> {
+async function updateProfileContext(
+  env: any,
+  userId: number,
+  profileId?: number,
+  userContext?: string
+): Promise<void> {
   if (!profileId || !userContext) return;
   try {
     const prisma = createPrismaClient(env.DB);
-    
+
     // 해당 프로필이 사용자 소유인지 확인 후 업데이트
     await prisma.sajuProfile.updateMany({
       where: {
@@ -261,7 +280,8 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       if (!body.sajuData.person1 || !body.sajuData.person2) {
         return c.json(
           {
-            error: "궁합 분석을 위해서는 person1과 person2 데이터가 필요합니다.",
+            error:
+              "궁합 분석을 위해서는 person1과 person2 데이터가 필요합니다.",
             details: "sajuData에 person1과 person2가 포함되어야 합니다.",
           },
           400
@@ -333,6 +353,8 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       sajuData: body.sajuData,
       model,
       destination: safeDestination,
+      // 최초 요청 options 원본 저장용
+      optionsJson: JSON.stringify(options || {}),
     };
 
     // Job 생성
@@ -357,8 +379,13 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       );
     }
 
-    // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)  
-    updateProfileContext(c.env, user.id, options.profileId, options.userContext);
+    // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)
+    updateProfileContext(
+      c.env,
+      user.id,
+      options.profileId,
+      options.userContext
+    );
 
     return c.json(
       {

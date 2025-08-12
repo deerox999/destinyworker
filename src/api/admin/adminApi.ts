@@ -1066,6 +1066,7 @@ export async function getAnalysisById(
         usageMetadata: true,
         createdAt: true,
         updatedAt: true,
+        ...( { optionsJson: true } as any ),
       },
     });
 
@@ -1078,7 +1079,7 @@ export async function getAnalysisById(
     // 사주 데이터를 JSON으로 파싱
     let sajuData = null;
     try {
-      if (analysis.sajuData && analysis.sajuData.trim() !== '') {
+      if (analysis.sajuData && typeof analysis.sajuData === 'string' && (analysis.sajuData as string).trim() !== '') {
         sajuData = JSON.parse(analysis.sajuData);
       }
     } catch (e) {
@@ -1108,6 +1109,9 @@ export async function getAnalysisById(
         usageMetadata: analysis.usageMetadata,
         createdAt: toUTC(analysis.createdAt),
         updatedAt: toUTC(analysis.updatedAt),
+        isFollowUp: typeof analysis.title === 'string' && (analysis.title as string).includes('재질문'),
+        optionsJson: (analysis as any).optionsJson || null,
+        options: (() => { try { return (analysis as any).optionsJson ? JSON.parse((analysis as any).optionsJson) : null; } catch { return null; } })(),
       }
     });
 
@@ -1115,6 +1119,94 @@ export async function getAnalysisById(
     return c.json(
       {
         error: "분석 결과 조회 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+/**
+ * [Admin] 특정 사용자의 사주 분석 결과 목록 조회
+ */
+export async function getUserSajuAnalyses(c: Context): Promise<Response> {
+  try {
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const userId = Number(c.req.param("userId"));
+    if (!userId) {
+      return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
+    }
+
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 20, maxLimit: 100 });
+    const type = c.req.query("type");
+    const favorite = c.req.query("favorite");
+
+    const prisma = createPrismaClient(c.env.DB);
+
+    const where: any = { userId };
+    if (type) where.type = type;
+    if (favorite === "true") where.isFavorite = true;
+    if (favorite === "false") where.isFavorite = false;
+
+    const [analyses, total] = await Promise.all([
+      prisma.sajuAnalysis.findMany({
+        where,
+        select: {
+          id: true,
+          analysisType: true,
+          type: true,
+          title: true,
+          aiResponse: true,
+          chartJson: true,
+          modelUsed: true,
+          pointsSpent: true,
+          isFavorite: true,
+          createdAt: true,
+          analysisStartedAt: true,
+          analysisCompletedAt: true,
+          i18n: true,
+          timezone: true,
+          ...( { optionsJson: true } as any ),
+        },
+        orderBy: [{ isFavorite: "desc" }, { createdAt: "desc" }],
+        take,
+        skip,
+      }),
+      prisma.sajuAnalysis.count({ where }),
+    ]);
+
+    await prisma.$disconnect();
+
+    return c.json({
+      success: true,
+      analyses: analyses.map((a: any) => ({
+        id: a.id,
+        analysisType: a.analysisType,
+        type: a.type,
+        title: a.title,
+        aiResponse: a.aiResponse,
+        chartJson: (() => { try { return a.chartJson ? JSON.parse(a.chartJson) : null; } catch { return null; } })(),
+        modelUsed: a.modelUsed,
+        pointsSpent: a.pointsSpent,
+        isFavorite: a.isFavorite,
+        createdAt: toUTC(a.createdAt),
+        analysisStartedAt: toUTC(a.analysisStartedAt),
+        analysisCompletedAt: toUTC(a.analysisCompletedAt),
+        i18n: a.i18n || undefined,
+        timezone: a.timezone || undefined,
+        isFollowUp: typeof a.title === 'string' ? a.title.includes('재질문') : false,
+        optionsJson: a.optionsJson || null,
+        options: (() => { try { return a.optionsJson ? JSON.parse(a.optionsJson) : null; } catch { return null; } })(),
+      })),
+      pagination: buildPaginationMeta(total, page, take),
+    });
+  } catch (error) {
+    return c.json(
+      {
+        error: "사용자 분석 목록 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
       },
       500

@@ -14,6 +14,7 @@ import {
   getUserPointTransactions,
   getUserAnalysisTransactions,
   getAnalysisById,
+  getUserSajuAnalyses,
 } from "./adminApi";
 
 import { MiddlewareHandler } from "hono";
@@ -147,6 +148,63 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
       400: { description: "잘못된 사용자 ID" },
       403: { description: "관리자 권한이 필요합니다." },
       404: { description: "사용자를 찾을 수 없습니다." },
+    },
+  });
+
+  // [Admin] 특정 사용자의 사주 분석 결과 목록 조회
+  const getUserSajuAnalysesRoute = createRoute({
+    method: "get",
+    path: "/users/{userId}/saju-analyses",
+    summary: "[Admin] 특정 사용자의 사주 분석 결과 목록 조회",
+    description: "관리자가 특정 사용자의 사주 분석 결과 목록을 페이지네이션으로 조회합니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: z.object({
+        userId: z.coerce.number().int().positive().openapi({
+          param: { name: "userId", in: "path" },
+          description: "사용자 ID",
+          example: 1,
+        }),
+      }).openapi({ type: 'object' }),
+      query: PaginationQuerySchema.extend({
+        type: z.string().optional(),
+        favorite: z.enum(["true", "false"]).optional(),
+      }).openapi({ type: 'object' }),
+    },
+    responses: {
+      200: {
+        description: "성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              analyses: z.array(
+                z.object({
+                  id: z.number().int(),
+                  analysisType: z.string(),
+                  type: z.string(),
+                  title: z.string(),
+                  aiResponse: z.string(),
+                  chartJson: z.any().nullable(),
+                  modelUsed: z.string(),
+                  pointsSpent: z.number().int(),
+                  isFavorite: z.boolean(),
+                  createdAt: z.string(),
+                  analysisStartedAt: z.string().nullable(),
+                  analysisCompletedAt: z.string().nullable(),
+                  i18n: z.string().optional(),
+                  timezone: z.string().optional(),
+                  isFollowUp: z.boolean().openapi({ example: false }),
+                  optionsJson: z.string().nullable().optional(),
+                  options: z.any().nullable().optional(),
+                }).openapi({ type: 'object' })
+              ).openapi({ type: 'array' }),
+              pagination: PaginationResponseSchema,
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      403: { description: "관리자 권한이 필요합니다." },
     },
   });
 
@@ -635,6 +693,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   app.openapi(getAdminStatsRoute, (c) => getAdminStats(c));
   app.openapi(getUsersRoute, (c) => getUsers(c)); // 안됨
   app.openapi(getUserProfilesRoute, (c) => getUserProfiles(c)); // 안됨
+  app.openapi(getUserSajuAnalysesRoute, (c) => getUserSajuAnalyses(c));
   app.openapi(getLoginHistoryRoute, (c) => getLoginHistory(c)); // 안됨
   app.openapi(getAiUsageStatsByModelRoute, (c) => getAiUsageStatsByModel(c)); // 안됨
   app.openapi(getAiUsageStatsForModelRoute, (c) => getAiUsageStatsForModel(c)); // 안됨
