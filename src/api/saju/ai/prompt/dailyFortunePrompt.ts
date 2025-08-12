@@ -23,14 +23,15 @@ export function buildDailyFortuneSystemPrompt(language: string) {
 }
 
 export function buildDailyFortuneUserPrompt(language: string, timezone: string) {
-  const today = new Date().toISOString().slice(0, 10);
+  // const today = new Date().toISOString().slice(0, 10);
   const lang = getLanguageName(language || "ko");
-
   return `다음 사주 데이터를 바탕으로 오늘의 운세만 분석하세요.
+**중요** 반드시 ${lang}로만 답변하세요. 지정 된 언어로 번역해서 출력해야합니다.
 
 [사전계산 결과 사용 지침]
 - 아래에 제공되는 "사전계산 결과"의 date, overallScore, categories.score, chart.labels/data를 그대로 사용하고 수정하지 마세요.
 - elementsStrength가 제공되면 텍스트(설명/요약/조언) 작성의 참고로만 쓰세요.
+ - 사전계산 결과의 categories[].label 값은 무시하고, 응답 언어(${lang})로 새로 작성하세요.
 
 [출력 규칙]
 - JSON만 출력하세요. 마크다운/설명문/코드블록 금지.
@@ -38,6 +39,8 @@ export function buildDailyFortuneUserPrompt(language: string, timezone: string) 
 - 모든 키와 문자열은 큰따옴표("")만 사용. 작은따옴표('), 주석(//, /* */), 트레일링 콤마 금지.
 - date/overallScore/categories[].score/chart.* 값은 사전계산 값을 그대로 사용. 수정 금지.
 - description/summary/advice만 작성. 내용은 간결하고 따뜻한 톤, 이모지 최대 1개.
+ - categories[].label은 응답 언어(${lang})로 자연스러운 표시 이름으로 번역하여 작성하세요. (예: love → ${lang} 라벨)
+ - 예시의 <...> 플레이스홀더는 그대로 출력하지 말고, 실제 ${lang} 표현으로 치환하세요.
 
 [작성 규칙]
 - description: 각 항목 1문장, 이모지 최대 1개.
@@ -51,22 +54,19 @@ export function buildDailyFortuneUserPrompt(language: string, timezone: string) 
   "date": "YYYY-MM-DD",
   "overallScore": number,
   "categories": [
-    { "key": "love",       "label": "연애운",     "score": number, "description": string },
-    { "key": "health",     "label": "건강운",     "score": number, "description": string },
-    { "key": "wealth",     "label": "재물운",     "score": number, "description": string },
-    { "key": "work",       "label": "직장운",     "score": number, "description": string },
-    { "key": "study",      "label": "학업운",     "score": number, "description": string },
-    { "key": "creativity", "label": "창의운",     "score": number, "description": string },
-    { "key": "social",     "label": "대인관계운", "score": number, "description": string }
+    { "key": "love",       "label": "<love label in ${lang}>",       "score": number, "description": string },
+    { "key": "health",     "label": "<health label in ${lang}>",     "score": number, "description": string },
+    { "key": "wealth",     "label": "<wealth label in ${lang}>",     "score": number, "description": string },
+    { "key": "work",       "label": "<work label in ${lang}>",       "score": number, "description": string },
+    { "key": "study",      "label": "<study label in ${lang}>",      "score": number, "description": string },
+    { "key": "creativity", "label": "<creativity label in ${lang}>", "score": number, "description": string },
+    { "key": "social",     "label": "<social label in ${lang}>",     "score": number, "description": string }
   ],
   "summary": string,
   "advice": [string, string, string],
   "chart": {
     "type": "radar",
-    "labels": [
-      "연애운", "건강운", "재물운", "직장운", "학업운",
-      "창의운", "대인관계운"
-    ],
+    "labels": ["<use provided labels as-is>", "..."],
     "data": [number, number, number, number, number, number, number]
   }
 }
@@ -74,7 +74,7 @@ export function buildDailyFortuneUserPrompt(language: string, timezone: string) 
 주의:
 - 반드시 ${lang} JSON으로만 출력하세요. 여는 중괄호 { 부터 닫는 중괄호 } 까지 하나의 객체만 출력.
 - 오늘의 운세만. 과거/미래 장황한 설명 금지.
-- 텍스트 필드(description, summary, advice)는 귀엽고 다정한 말투를 사용하되, 과도한 이모지/감탄사/장문 금지.`;
+- 텍스트 필드(description, summary, advice, categories[].label)는 모두 ${lang}로 작성하되, 과도한 이모지/감탄사/장문 금지.`;
 }
 
 export function buildDailyFortunePrompts(params?: DailyFortunePromptParams) {

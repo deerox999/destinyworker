@@ -471,6 +471,8 @@ export async function getCelebrities(
     const order = searchParams.get("order")?.toLowerCase() || "desc";
     const id = searchParams.get("id") || "";
     const search = searchParams.get("search") || "";
+    const language = (searchParams.get("language") || "").toLowerCase();
+    const allowedLanguages = new Set(["ko", "en", "ja", "zh", "vi"]);
     
     let where = {};
     
@@ -518,17 +520,30 @@ export async function getCelebrities(
     const queryOptions = {
       where,
       include: {
-        translations: {
-          select: {
-            id: true,
-            celebrityId: true,
-            languageCode: true,
-            name: true,
-            occupation: true,
-            description: true,
-            aiResponse: true,
-          },
-        },
+        translations: allowedLanguages.has(language)
+          ? {
+              where: { languageCode: language },
+              select: {
+                id: true,
+                celebrityId: true,
+                languageCode: true,
+                name: true,
+                occupation: true,
+                description: true,
+                aiResponse: true,
+              },
+            }
+          : {
+              select: {
+                id: true,
+                celebrityId: true,
+                languageCode: true,
+                name: true,
+                occupation: true,
+                description: true,
+                aiResponse: true,
+              },
+            },
         viewCount: {
           select: {
             viewCount: true,
