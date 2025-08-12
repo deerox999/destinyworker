@@ -9,6 +9,8 @@ import { getUserFromToken } from "../../../common/utils";
 import {
   generateAnalysisPrompts,
   generateCompatibilityPrompts,
+  generateAnalysisPromptsV2,
+  generateCompatibilityPromptsV2,
   type PromptParams,
   type 분석관점,
   type 분석요소,
@@ -41,6 +43,7 @@ interface AnalysisSajuRequest {
     highQuality?: boolean; // 고품질 분석 여부 (모델 pro 사용)
     isDevelop?: boolean; // 개발자 모드 (특별추가질문 활성화)
     responseStyle?: 어조; // 응답 어조: '유쾌한' | '전문적인' | '상냥한'
+    promptVersion?: "v1" | "v2"; // 프롬프트 버전 선택 (기본 v1)
     // 완료 후 후처리 목적지(선택) - 자동 반영 모드
     destination?: {
       type: "celebrityTranslation"; // 확장 가능성 고려해 유니온 시작
@@ -72,6 +75,7 @@ function generateServerPrompts(
     highQuality = false,
     isDevelop = false,
     responseStyle = "전문적인",
+    promptVersion = "v1",
   } = options;
   let baseModel = ""; // highQuality 파라미터에 따라 모델 선택
   
@@ -93,9 +97,13 @@ function generateServerPrompts(
 
   let prompts: { systemPrompt: string; userPrompt: string };
   if (type === "compatibility") {
-    prompts = generateCompatibilityPrompts(promptParams);
+    prompts = promptVersion === "v2"
+      ? generateCompatibilityPromptsV2(promptParams)
+      : generateCompatibilityPrompts(promptParams);
   } else {
-    prompts = generateAnalysisPrompts(promptParams);
+    prompts = promptVersion === "v2"
+      ? generateAnalysisPromptsV2(promptParams)
+      : generateAnalysisPrompts(promptParams);
   }
 
   // 환경과 무관하게 highQuality만으로 모델 선택

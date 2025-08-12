@@ -83,6 +83,10 @@ export function createAnalysisRouter(
                     description: "고품질 분석 여부 (pro 모델 사용 여부). 기본값 false",
                     example: false,
                   }),
+                  promptVersion: z.enum(["v1", "v2"]).optional().openapi({
+                    description: "프롬프트 버전 선택 (미입력 시 v1)",
+                    example: "v2",
+                  }),
                 }).optional().openapi({
                   description: "분석 옵션",
                 }),
