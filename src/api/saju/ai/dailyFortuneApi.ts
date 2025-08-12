@@ -49,6 +49,74 @@ export async function DailyFortune(c: Context): Promise<Response> {
     }
     // 사전 검증을 통과한 간소화된 sajuData 문자열을 그대로 사용
 
+    // 라벨 국제화 매핑
+    const translateLabel = (key: string, lang: string): string => {
+      const maps: Record<string, Record<string, string>> = {
+        ko: {
+          love: "연애운",
+          health: "건강운",
+          wealth: "재물운",
+          work: "직장운",
+          study: "학업운",
+          social: "대인관계운",
+          creativity: "창의운",
+        },
+        en: {
+          love: "Love",
+          health: "Health",
+          wealth: "Wealth",
+          work: "Career",
+          study: "Study",
+          social: "Social",
+          creativity: "Creativity",
+        },
+        ja: {
+          love: "恋愛運",
+          health: "健康運",
+          wealth: "金運",
+          work: "仕事運",
+          study: "学業運",
+          social: "社交運",
+          creativity: "創造運",
+        },
+        zh: {
+          love: "恋爱运",
+          health: "健康运",
+          wealth: "财运",
+          work: "事业运",
+          study: "学业运",
+          social: "社交运",
+          creativity: "创造力运",
+        },
+        vi: {
+          love: "Tình cảm",
+          health: "Sức khỏe",
+          wealth: "Tài lộc",
+          work: "Sự nghiệp",
+          study: "Học tập",
+          social: "Xã hội",
+          creativity: "Sáng tạo",
+        },
+      };
+      const table = maps[lang as keyof typeof maps] || maps.ko;
+      return table[key] || key;
+    };
+
+    const formatOverallScore = (score: number, lang: string): string => {
+      switch (lang) {
+        case "en":
+          return `Total ${score}`;
+        case "ja":
+          return `合計${score}点`;
+        case "zh":
+          return `总分${score}分`;
+        case "vi":
+          return `Tổng ${score} điểm`;
+        default:
+          return `총 ${score}점`;
+      }
+    };
+
     // 사전 계산: 점수/카테고리/차트
     let precomputed: any | null = null;
     try {
@@ -63,30 +131,14 @@ export async function DailyFortune(c: Context): Promise<Response> {
         overallScore,
         categories: categories.map((c) => ({
           key: c.key,
-          label: (
-            c.key === "love" ? "연애운" :
-            c.key === "health" ? "건강운" :
-            c.key === "wealth" ? "재물운" :
-            c.key === "work" ? "직장운" :
-            c.key === "study" ? "학업운" :
-            c.key === "social" ? "대인관계운" :
-            "창의운"
-          ),
+          label: translateLabel(c.key, i18n),
           score: c.score,
           description: "",
         })),
         elementsStrength,
         chart: {
           type: "radar",
-          labels: [
-            "연애운",
-            "건강운",
-            "재물운",
-            "직장운",
-            "학업운",
-            "대인관계운",
-            "창의운",
-          ],
+          labels: categories.map((c) => translateLabel(c.key, i18n)),
           data: categories.map((c) => c.score),
         },
       };
@@ -166,6 +218,19 @@ export async function DailyFortune(c: Context): Promise<Response> {
         labels: json.categories.map((c: any) => c.label),
         data: json.categories.map((c: any) => c.score),
       };
+    }
+
+    // overallScore를 문자열로 포맷팅 (언어별)
+    try {
+      const numericOverall = precomputed?.overallScore ?? (typeof json.overallScore === "number" ? json.overallScore : parseInt(String(json.overallScore).replace(/\D/g, ""), 10));
+      if (!Number.isNaN(numericOverall)) {
+        json.overallScore = formatOverallScore(numericOverall, i18n);
+      }
+    } catch {}
+
+    // 차트 라벨을 사전계산 라벨로 강제 동기화 (있을 경우)
+    if (precomputed?.chart?.labels && json?.chart?.labels) {
+      json.chart.labels = precomputed.chart.labels;
     }
 
     return c.json({ success: true, data: json, model }, 200);
