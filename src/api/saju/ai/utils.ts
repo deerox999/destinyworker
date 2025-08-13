@@ -172,11 +172,11 @@ export function buildGeminiPayload(
   const generationConfig = { ...baseGen } as any;
   let tone: string | undefined = responseTone;
   if (tone === "유쾌한") {
-    generationConfig.temperature = Math.max(generationConfig.temperature || 0.4, 0.8);
-    generationConfig.topP = Math.max(generationConfig.topP || 0.4, 0.9);
+    generationConfig.temperature = Math.max(generationConfig.temperature || 0.4, 0.9);
+    generationConfig.topP = Math.max(generationConfig.topP || 0.4, 0.95);
   } else if (tone === "상냥한") {
-    generationConfig.temperature = Math.max(generationConfig.temperature || 0.4, 0.6);
-    generationConfig.topP = Math.max(generationConfig.topP || 0.4, 0.8);
+    generationConfig.temperature = Math.max(generationConfig.temperature || 0.4, 0.7);
+    generationConfig.topP = Math.max(generationConfig.topP || 0.4, 0.9);
   }
 
   // 페이로드 반환

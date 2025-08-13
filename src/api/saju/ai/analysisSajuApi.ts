@@ -32,7 +32,6 @@ interface AnalysisSajuRequest {
     userContext?: string; // 사용자 맥락정보
     profileId?: number; // 프로필 ID (선택적 - 분석 후 해당 프로필의 context 업데이트용)
     analysisStyle?: 분석관점; // '현실적', '약간긍정', '약간부정'
-    targetYear?: number; // 연간운세용
     understandingLevel?: 이해도레벨; // '초보', '중수', '전문가'
     selectedAnalysisElements?: 분석요소[]; // ['십성', '신살', '십이신살']
 
@@ -66,7 +65,6 @@ function generateServerPrompts(
     userQuestion = "",
     userContext = "",
     analysisStyle = "현실적",
-    targetYear,
     understandingLevel = "중수",
     selectedAnalysisElements = [],
     i18n = "ko",
@@ -83,7 +81,6 @@ function generateServerPrompts(
     사용자질문: userQuestion,
     사용자맥락정보: userContext,
     분석관점: analysisStyle,
-    타겟년도: targetYear,
     이해도레벨: understandingLevel,
     선택된분석요소: selectedAnalysisElements,
     어조옵션: responseStyle,

@@ -55,10 +55,6 @@ export function createAnalysisRouter(
                     description: "분석 톤 옵션 (예: 현실적, 약간긍정, 약간부정)",
                     example: "현실적",
                   }),
-                  targetYear: z.number().optional().openapi({
-                    description: "타겟 년도 (연간운세용)",
-                    example: 2025,
-                  }),
                   understandingLevel: z.string().optional().openapi({
                     description: "사용자 이해도 레벨 (예: 초보, 중수, 전문가)",
                     example: "중수",
