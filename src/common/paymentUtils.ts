@@ -4,8 +4,8 @@ import { createPrismaClient } from './prismaUtils';
 // analysisType에 따른 포인트 계산 함수
 export function getAnalysisTypePoints(analysisType: string): number {
   switch (analysisType) {
-    case "연간운세": return 200;
-    case "종합운세": return 1000;
+    case "연간운세": return 500;
+    case "종합운세": return 2000;
     default: return 1000;
   }
 }

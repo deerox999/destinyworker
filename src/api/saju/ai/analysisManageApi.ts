@@ -1,6 +1,6 @@
 import { Context } from "hono";
 import { buildPaginationMeta, parsePagination } from "../../../common/paginationUtils";
-import { createPrismaClient } from "../../../common/prismaUtils";
+import { createPrismaClient, isAdmin } from "../../../common/prismaUtils";
 import { getUserFromToken, toUTC, toJSON } from "../../../common/utils";
 
 // UTC 변환은 공통 유틸 사용
@@ -125,31 +125,37 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
 
     const prisma = createPrismaClient(c.env.DB);
 
-    const analysis = await prisma.sajuAnalysis.findFirst({
-      where: {
-        id: parseInt(analysisId),
-        userId: user.id,
-      },
-      select: {
-        id: true,
-        analysisType: true,
-        type: true,
-        title: true,
-        sajuData: true,
-        aiResponse: true,
-        chartJson: true,
-        modelUsed: true,
-        pointsSpent: true,
-        isFavorite: true,
-        i18n: true,
-        timezone: true,
-        usageMetadata: true,
-        analysisStartedAt: true,
-        analysisCompletedAt: true,
-        // optionsJson은 Prisma 타입 생성 상태에 따라 누락될 수 있어 any 캐스팅으로 안전 처리
-        ...( { optionsJson: true } as any ),
-      },
-    });
+    const admin = await isAdmin(c);
+
+    const analysis = admin
+      ? await prisma.sajuAnalysis.findFirst({
+          where: { id: parseInt(analysisId) },
+        })
+      : await prisma.sajuAnalysis.findFirst({
+          where: {
+            id: parseInt(analysisId),
+            userId: user.id,
+          },
+          select: {
+            id: true,
+            analysisType: true,
+            type: true,
+            title: true,
+            sajuData: true,
+            aiResponse: true,
+            chartJson: true,
+            modelUsed: true,
+            pointsSpent: true,
+            isFavorite: true,
+            i18n: true,
+            timezone: true,
+            usageMetadata: true,
+            analysisStartedAt: true,
+            analysisCompletedAt: true,
+            // optionsJson은 Prisma 타입 생성 상태에 따라 누락될 수 있어 any 캐스팅으로 안전 처리
+            ...( { optionsJson: true } as any ),
+          },
+        });
 
     await prisma.$disconnect();
 
@@ -168,6 +174,28 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
       console.error("원본 sajuData:", analysis.sajuData);
     }
 
+    // 관리자라면 테이블 컬럼 전체 + 파싱/포맷된 유틸 필드들을 함께 반환
+    if (admin) {
+      const full = analysis as any;
+      return c.json(
+        {
+          ...full,
+          sajuData: sajuData,
+          chartJson: (() => { try { return full.chartJson ? JSON.parse(full.chartJson) : null; } catch { return null; } })(),
+          analysisStartedAt: toUTC(full.analysisStartedAt),
+          analysisCompletedAt: toUTC(full.analysisCompletedAt),
+          createdAt: toUTC(full.createdAt),
+          updatedAt: toUTC(full.updatedAt),
+          usageMetadata: toJSON(full.usageMetadata),
+          isFollowUp: typeof full.title === 'string' && (full.title as string).includes('재질문'),
+          optionsJson: full.optionsJson || null,
+          options: (() => { try { return full.optionsJson ? JSON.parse(full.optionsJson) : null; } catch { return null; } })(),
+        },
+        200
+      );
+    }
+
+    // 일반 사용자 응답 (기존 동작 유지)
     return c.json(
       {
         id: analysis.id,

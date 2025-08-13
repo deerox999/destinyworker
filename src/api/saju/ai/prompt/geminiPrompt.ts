@@ -1,5 +1,5 @@
 import { getLanguageName } from "../../../../common/utils";
-import { getCommonSystemPrompt, getUserPrompt, PromptParams, 분석관점, 특별추가질문 } from "./commonPrompt";
+import { getCommonSystemPrompt, getUserPrompt, PromptParams, 분석관점, 특별추가질문, buildCommonSystemPromptSections, joinSections, getOutputFormatTemplate } from "./commonPrompt";
 
 // 해설유형 해석 함수 (스위치-케이스 + 기본값 처리)
 const 유형별해설설정 = (유형: string) => {
@@ -127,19 +127,21 @@ export const generateAnalysisPrompts = (params: PromptParams) => {
   } = params;
 
   const languageName = getLanguageName(language);
-  const systemPrompt = getCommonSystemPrompt(
-    languageName,
-    false,
+  // 조립식: 공통 섹션 빌더 사용 (기존 내용 동일)
+  const systemSections = buildCommonSystemPromptSections({
+    language: languageName,
+    isCompatibility: false,
     해설유형,
-    분석관점,
+    분석관점옵션: 분석관점,
     어조옵션,
-    이해도레벨,
+    이해도레벨옵션: 이해도레벨,
     선택된분석요소,
-    사용자맥락정보
-  )
+    사용자맥락정보,
+  });
+  const systemPrompt = joinSections(systemSections);
 
   const 설정 = 유형별해설설정(해설유형);
-  const 출력형식지시 = 설정.출력형식();
+  const 출력형식지시 = 설정.출력형식 ? 설정.출력형식() : getOutputFormatTemplate(해설유형);
   let userPrompt = getUserPrompt(해설유형, 사용자질문);
   userPrompt += `${특별추가질문(user, isDevelop)}`;
   return { systemPrompt: `${systemPrompt}\n${출력형식지시}`, userPrompt };

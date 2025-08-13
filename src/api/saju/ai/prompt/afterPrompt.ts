@@ -1,4 +1,4 @@
-import {  PromptLanguage, PromptTone, PromptUnderstanding, getCommonSystemPrompt } from "./commonPrompt";
+import {  PromptLanguage, PromptTone, PromptUnderstanding, buildCommonSystemPromptSections, joinSections } from "./commonPrompt";
 import { getLanguageName } from "../../../../common/utils";
 export type FollowUpLanguage = PromptLanguage;
 export type FollowUpTone = PromptTone;
@@ -17,17 +17,18 @@ export interface FollowUpPromptParams {
 // 재질문 전용 시스템 프롬프트
 export function buildFollowUpSystemPrompt(params: Omit<FollowUpPromptParams, "userQuestion">): string {
   const languageLabel = getLanguageName(params.language ?? "ko");
-  // 공통 시스템 프롬프트를 기반으로, 재질문 전용 제약을 덧붙임
-  const common = getCommonSystemPrompt(
-    languageLabel,
-    false,
-    "재질문",
-    "현실적",
-    params.tone ?? "전문적인",
-    params.understandingLevel ?? "중수",
-    [],
-    params.userContext ?? ""
-  );
+  // 공통 시스템 프롬프트 섹션을 조립해 재질문 전용 제약을 덧붙임 (내용은 기존과 동일)
+  const sections = buildCommonSystemPromptSections({
+    language: languageLabel,
+    isCompatibility: false,
+    해설유형: "재질문",
+    분석관점옵션: "현실적",
+    어조옵션: params.tone ?? "전문적인",
+    이해도레벨옵션: params.understandingLevel ?? "중수",
+    선택된분석요소: [],
+    사용자맥락정보: params.userContext ?? "",
+  });
+  const common = joinSections(sections);
 
   return [
     common,
