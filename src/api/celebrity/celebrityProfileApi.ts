@@ -17,25 +17,25 @@ const getAllCommentIds = (comments: any[]): number[] => {
   return ids;
 };
 
-// 댓글 데이터 변환 (사용자의 추천 여부 포함)
+// 댓글 데이터 변환 (사용자의 추천 여부 포함) - camelCase 통일
 const toCommentFields = (comment: any, userLikes?: Set<number>) => ({
   id: comment.id,
-  내용: comment.content,
-  작성자: comment.user?.userName || comment.user?.name || "알 수 없음", // 프로필 이름 우선, 없으면 실제 이름
-  작성자ID: comment.userId,
-  부모댓글ID: comment.parentId,
-  추천수: comment.likeCount || 0,
-  내가추천함: userLikes ? userLikes.has(comment.id) : false,
-  답글:
+  content: comment.content,
+  author: comment.user?.userName || comment.user?.name || "알 수 없음",
+  authorId: comment.userId,
+  parentId: comment.parentId,
+  likeCount: comment.likeCount || 0,
+  likedByMe: userLikes ? userLikes.has(comment.id) : false,
+  replies:
     comment.replies?.map((reply: any) => toCommentFields(reply, userLikes)) ||
     [],
-  작성일: comment.createdAt,
-  수정일: comment.updatedAt,
+  createdAt: comment.createdAt,
+  updatedAt: comment.updatedAt,
 });
 
-// 댓글 데이터 검증
+// 댓글 데이터 검증 (camelCase)
 const validateCommentData = (data: any): boolean => {
-  return data?.내용?.trim();
+  return data?.content?.trim();
 };
 
 // 클라이언트 식별자 생성
@@ -147,16 +147,16 @@ export async function getCelebrities(
       const t = celeb.translations[0];
       return {
         id: celeb.id,
-        이름: t?.name || "",
-        성별: celeb.gender === "MALE" ? "남자" : "여자",
-        직업: t?.occupation || "",
-        설명: t?.description || "",
+        name: t?.name || "",
+        gender: celeb.gender, // "MALE" | "FEMALE"
+        occupation: t?.occupation || "",
+        description: t?.description || "",
         aiResponse: t?.aiResponse || null,
-        이미지: celeb.imageUrl,
-        년: celeb.birthYear,
-        월: celeb.birthMonth,
-        일: celeb.birthDay,
-        달력: celeb.calendar === "SOLAR" ? "양력" : "음력",
+        imageUrl: celeb.imageUrl,
+        birthYear: celeb.birthYear,
+        birthMonth: celeb.birthMonth,
+        birthDay: celeb.birthDay,
+        calendar: celeb.calendar, // "SOLAR" | "LUNAR"
       };
     });
 
@@ -209,16 +209,16 @@ export async function getCelebrityById(
     const t = celebrity.translations[0];
     const result = {
       id: celebrity.id,
-      이름: t?.name || "",
-      성별: celebrity.gender === "MALE" ? "남자" : "여자",
-      직업: t?.occupation || "",
-      설명: t?.description || "",
+      name: t?.name || "",
+      gender: celebrity.gender, // "MALE" | "FEMALE"
+      occupation: t?.occupation || "",
+      description: t?.description || "",
       aiResponse: t?.aiResponse || null,
-      이미지: celebrity.imageUrl,
-      년: celebrity.birthYear,
-      월: celebrity.birthMonth,
-      일: celebrity.birthDay,
-      달력: celebrity.calendar === "SOLAR" ? "양력" : "음력",
+      imageUrl: celebrity.imageUrl,
+      birthYear: celebrity.birthYear,
+      birthMonth: celebrity.birthMonth,
+      birthDay: celebrity.birthDay,
+      calendar: celebrity.calendar, // "SOLAR" | "LUNAR"
     };
 
     return c.json({
@@ -337,7 +337,7 @@ export async function getCelebrityComments(
     return c.json({
       success: true,
       celebrityId,
-      조회수: viewCount,
+      viewCount: viewCount,
       comments: comments.map((comment: any) =>
         toCommentFields(comment, userLikes)
       ),
@@ -391,9 +391,9 @@ export async function createCelebrityComment(
     }
 
     // 부모 댓글 존재 확인 (대댓글인 경우)
-    if (body.부모댓글ID) {
+    if (body.parentId) {
       const parentComment = await prisma.celebrityComment.findUnique({
-        where: { id: body.부모댓글ID },
+        where: { id: body.parentId },
         select: { celebrityId: true },
       });
       if (!parentComment || parentComment.celebrityId !== celebrityId) {
@@ -406,8 +406,8 @@ export async function createCelebrityComment(
       data: {
         celebrityId,
         userId: user.id,
-        content: body.내용,
-        parentId: body.부모댓글ID || null,
+        content: body.content,
+        parentId: body.parentId || null,
       },
       include: {
         user: { select: { name: true, userName: true } },
@@ -471,7 +471,7 @@ export async function updateCelebrityComment(
 
     await prisma.celebrityComment.update({
       where: { id: commentId },
-      data: { content: body.내용 },
+      data: { content: body.content },
     });
 
     await prisma.$disconnect();

@@ -12,7 +12,7 @@ import { getCelebrities } from "../admin/celebrity/celebrity";
 import { createCelebrityRequest } from "./celebrityRequestApi";
 
 import { MiddlewareHandler } from "hono";
-import { CelebrityBaseSchema, CelebrityIdParamSchema, CelebritySchema, CommentFieldsSchema, CommentIdParamSchema, LangQuerySchema, PaginationQuerySchema, RecursiveCommentSchema, SortQuerySchema, SuccessSchema, PaginationResponseSchema } from "../../common/schemas";
+import { CelebrityBaseSchema, CelebrityIdParamSchema, CelebritySchema, CommentFieldsSchema, CelebrityCommentIdParamSchema, LangQuerySchema, PaginationQuerySchema, RecursiveCommentSchema, SortQuerySchema, SuccessSchema, PaginationResponseSchema } from "../../common/schemas";
 
 export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -78,6 +78,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
         content: {
           "application/json": {
             schema: SuccessSchema.extend({
+              viewCount: z.number().int().openapi({ example: 1234 }),
               comments: z.array(RecursiveCommentSchema).openapi({ type: 'array' }),
               pagination: PaginationResponseSchema
             }).openapi({ type: 'object' })
@@ -99,10 +100,10 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
       params: CelebrityIdParamSchema,
       body: {
         content: {
-          "application/json": { 
+          "application/json": {
             schema: z.object({
-              내용: z.string().min(1).openapi({ description: "댓글 내용", example: "응원합니다!" }),
-              부모댓글ID: z.number().int().positive().optional().nullable().openapi({ description: "대댓글일 경우 부모 댓글의 ID", example: 123 }),
+              content: z.string().min(1).openapi({ description: "댓글 내용", example: "응원합니다!" }),
+              parentId: z.number().int().positive().optional().nullable().openapi({ description: "대댓글일 경우 부모 댓글의 ID", example: 123 }),
             }).openapi({ type: 'object' })
           },
         },
@@ -134,13 +135,13 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
     tags: ["유명인물"],
     security: [{ BearerAuth: [] }],
     request: {
-        params: CelebrityIdParamSchema.merge(CommentIdParamSchema).openapi({ type: 'object' }),
+        params: CelebrityIdParamSchema.merge(CelebrityCommentIdParamSchema).openapi({ type: 'object' }),
         body: {
             content: {
-                "application/json": { 
+                "application/json": {
                   schema: z.object({
-                    내용: z.string().min(1).openapi({ description: "댓글 내용", example: "정말 멋져요!" }),
-                    부모댓글ID: z.number().int().positive().optional().nullable().openapi({ description: "대댓글일 경우 부모 댓글의 ID", example: null }),
+                    content: z.string().min(1).openapi({ description: "댓글 내용", example: "정말 멋져요!" }),
+                    parentId: z.number().int().positive().optional().nullable().openapi({ description: "대댓글일 경우 부모 댓글의 ID", example: null }),
                   }).openapi({ type: 'object' })
                 }
             }
@@ -172,7 +173,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
     tags: ["유명인물"],
     security: [{ BearerAuth: [] }],
     request: {
-        params: CelebrityIdParamSchema.merge(CommentIdParamSchema).openapi({ type: 'object' })
+        params: CelebrityIdParamSchema.merge(CelebrityCommentIdParamSchema).openapi({ type: 'object' })
     },
     responses: {
         200: { 
@@ -199,7 +200,7 @@ export function createCelebrityRouter(authMiddleware: MiddlewareHandler): OpenAP
       tags: ["유명인물"],
       security: [{ BearerAuth: [] }],
       request: {
-          params: CelebrityIdParamSchema.merge(CommentIdParamSchema).openapi({ type: 'object' })
+          params: CelebrityIdParamSchema.merge(CelebrityCommentIdParamSchema).openapi({ type: 'object' })
       },
       responses: {
           200: {

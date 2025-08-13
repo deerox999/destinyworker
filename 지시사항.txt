@@ -1,1 +1,100 @@
-ㅋㅌㅊㅋ
+### 전반 진단 요약
+- 핵심 개선 포인트를 보안 → API 일관성 → DX/운영 순으로 정리했습니다. 즉시 수정해야 할 항목에 우선순위를 부여했습니다.
+
+### 보안/인증(Critical)
+- JWT 서명키로 Google OAuth 클라이언트 시크릿을 재사용
+  - 분리 필요: `JWT_SECRET` 환경변수 신설, 전 구간 교체.
+```25:33:src/api/routes.ts
+const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
+```
+- 서명 검증 없이 페이로드만 디코드해 사용자 식별
+  - `getUserFromToken`은 단순 base64 디코드+exp 체크로 위조 토큰 통과 위험. 전면 교체 필요.
+```35:58:src/common/utils.ts
+export const getUserFromToken = async (c: Context): Promise<{ id: number; email: string; role: string } | null> => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  try {
+    const token = authHeader.substring(7);
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]...
+```
+- 라우터별 인증 강제 불일치
+  - 일부 라우트는 미들웨어 없이 수동 검사(또는 미검증)로 운영됨. 예: 유명인물 댓글/좋아요 라우트는 `authMiddleware` 미적용, 내부에서 `getUserFromToken` 사용.
+  - 조치: 인증 필요한 라우트에 공통 미들웨어 강제 적용하고, 핸들러에서는 `c.get("user")`만 사용.
+- JWT 직접 구현 리스크
+  - 수동 구현은 미세한 취약점·호환성 문제 유발 가능. 조치: `jose`로 교체(alg, iss/aud, clock skew 포함), 액세스·리프레시 토큰 이원화 권장.
+
+### API 설계/일관성(Major)
+- 응답 필드 언어·케이스 혼재
+  - 한국어 키(예: `내용`, `작성자`)와 영어/camelCase가 혼재. 팀 규칙상 camelCase 유지 권장 [[memory:4718312]].
+  - 조치: 내부 도메인은 영어 camelCase 통일, 다국어는 UI 레벨에서 표시 문자열만 지역화. 필요 시 Response Mapper 도입.
+- 스키마와 실제 응답 형태 불일치
+  - 예: 유명인물 목록/상세는 한국어 키 반환인데, OpenAPI 스키마는 영문 `CelebritySchema` 구조를 기대. 코드 주석의 “안됨”의 원인.
+  - 예: `CommentFieldsSchema`의 `작성자ID`가 string 스키마인데 실제 number 반환.
+- 보안 스키마 누락
+  - OpenAPI에 `BearerAuth` security scheme 미등록 상태로 보임. Swagger UI에서 인증 테스트 곤란. 문서 생성 시 `components.securitySchemes` 추가 필요.
+
+### 데이터/DB(Major)
+- 관리자 판별 로직에 하드코드 이메일 존재
+  - `isAdmin`에서 특정 이메일 화이트리스트. 조치: DB role 기반만 신뢰, 하드코드 제거.
+- 세션/토큰 모델 단순화 필요
+  - 현재 “JWT=세션” 혼합 모델. 권장: 짧은 액세스 토큰(+검증 미들웨어) + 긴 리프레시 토큰(저장/회전) 또는 전면 세션화 중 하나로 일관성 확보.
+- 마이그레이션 스크립트 누락
+  - `package.json`의 `scripts/migrate-d1.js` 등 실행 스크립트 폴더가 없음. 실제 운영/로컬 작업 불가. 스크립트 제공 또는 문서/명령 갱신 필요.
+
+### 성능/신뢰성(Major)
+- 댓글 트리 조회 N+1/중첩 include 비용
+  - 3단계 중첩은 D1/Prisma에서 비용 큼. 페이징/레벨 제한·요약 API 도입 검토.
+- 이메일 인증 코드 요청 무제한
+  - 레이트리밋/Turnstile 미적용. KV 기반 IP+메일 단위 제한 권장.
+- 뷰 카운트 중복 방지
+  - KV 활용은 적절하나 TTL/키 전략 점검 필요(모바일 UA 변동 고려). Fallback 경로도 OK.
+
+### 운영/설정(DX)
+- 환경별 CORS 분기 부족
+  - 현재 하드코드 오리진. `ENVIRONMENT` 기반 동적 허용, `Vary: Origin` 설정 권장.
+- 설정 중복/혼란 여지
+  - `wrangler.toml`에 `DB`, `DB_LOCAL`, `DB_DEV` 다수 바인딩이나 코드에선 `DB`만 사용. 실제 사용 바인딩만 남기고 주석/문서화.
+- 타입 환경
+  - `tsconfig`에 `types: ["node"]` 포함은 Workers 환경 혼동 유발. 필요 최소화·분리 권장.
+- 라우팅 케이스 불일치
+  - `"/api/R2"` 같이 대문자 경로 존재. 일관된 소문자 경로 권장.
+
+### 문서/가시성
+- OpenAPI 문서 강화
+  - 서버 URL, 보안 스키마, 공통 에러 스키마 정의. 모듈 라우터 간 태그/설명 일관화.
+- 감사/로그
+  - 인증/결제/AI 호출 주요 경로에 구조화 로그(JSON)와 식별자 포함 추천.
+
+### 우선순위 액션 리스트
+1) 보안
+- `JWT_SECRET` 도입 후 전역 치환, `getUserFromToken` 제거 → 미들웨어 강제 + `c.get("user")` 표준화
+- JWT 구현을 `jose`로 교체(iss/aud, 만료, clock skew, alg 고정)
+
+2) API/스키마
+- 응답 키 camelCase로 통일(영문), 기존 한글 키는 제거 또는 Mapper로 호환
+- OpenAPI 스키마를 실제 응답과 동기화, `BearerAuth` 등록
+
+3) 권한
+- `isAdmin` 하드코드 이메일 삭제, DB role 기반만 사용
+
+4) 신뢰성/악용 방지
+- 이메일 인증 코드 요청 레이트리밋(KV/IP 기준, 5분 N회)
+- 댓글 트리 조회 최적화(레벨 제한 명시, 요약 API 제공)
+
+5) DX/운영
+- CORS 동적 구성(ENV 기반), 소문자 경로 통일
+- 마이그레이션 스크립트 추가 또는 문서 갱신
+- `types`에서 Node 의존 최소화(Workers 전용 타입 우선)
+
+작업 볼륨이 크지 않은 빠른 이득
+- 라우터별 `authMiddleware` 적용 통합
+- OpenAPI `BearerAuth`/servers 추가
+- `작성자ID` 타입 불일치 수정
+- CORS 동적 허용으로 로컬/스테이징/프로덕션 분리
+
+요청 주시면 위 항목 중 우선순위 1~2번을 바로 적용하는 edits까지 진행하겠습니다.
+
+- 핵심 이슈: JWT 비밀키 재사용, 서명 미검증 경로 존재, API 스키마/응답 불일치
+- 기대 효과: 인증 보안 강도 향상, 문서-실행 일치, 운영 안정성/유지보수성 개선

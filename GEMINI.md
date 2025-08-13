@@ -28,7 +28,7 @@
 - `src/api/`: 모든 API 라우트 정의가 포함되어 있습니다. `admin`, `ai`, `celebrity`, `saju`, `user` 등 도메인별로 구조화되어 있습니다.
 - `src/common/`: 유틸리티 함수(`utils.ts`, `prismaUtils.ts`), 공유 클래스 및 Swagger 설정이 포함되어 있습니다.
 - `prisma/schema.prisma`: 데이터베이스 스키마를 정의합니다. 사용자, 사주 프로필, 유명인, AI 대화, 문서 등 애플리케이션의 핵심 데이터 모델을 파악할 수 있습니다.
-- `scripts/migrate-d1.js`: Cloudflare D1 데이터베이스 마이그레이션을 처리하는 사용자 정의 스크립트입니다.
+
 - `wrangler.json`: Cloudflare Worker의 설정 파일. D1, KV, R2, AI, Vectorize 등 서비스 바인딩을 정의합니다.
 - `package.json`: 프로젝트의 의존성과 스크립트를 정의합니다.
 
@@ -37,10 +37,6 @@
 - `dev`: `wrangler dev --remote --port 9393`
   - 원격 Cloudflare 서비스에 연결된 로컬 개발 서버를 시작합니다.
 - `deploy`: `wrangler deploy`
-  - 애플리케이션을 Cloudflare에 배포합니다.
-- `db:migrate:remote`: `node scripts/migrate-d1.js --remote`
-  - 원격 D1 데이터베이스에 대해 마이그레이션을 실행합니다.
-- `db:migrate:force`: `node scripts/migrate-d1.js --force`
   - 데이터 손실을 유발할 수 있는 강제 마이그레이션을 실행합니다. 주의가 필요합니다.
 - `check`: `tsc && wrangler deploy --dry-run`
   - 코드를 타입 체크하고 배포를 시뮬레이션합니다.

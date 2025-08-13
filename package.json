@@ -52,13 +52,6 @@
     "dev:remote": "wrangler dev --x-remote-bindings",
     "deploy": "wrangler deploy",
     "check": "tsc && wrangler deploy --dry-run",
-    "secret:put": "wrangler secret put RESEND_API_KEY",
-    "db:migrate:dev": "node scripts/migrate-d1.js --dev",
-    "db:migrate:local": "node scripts/migrate-d1.js --local",
-    "db:migrate:remote": "node scripts/migrate-d1.js --remote",
-    "db:migrate:force": "node scripts/migrate-d1.js --force",
-    "db:seed:community:local": "node scripts/seed-community.js --local",
-    "db:seed:community:remote": "node scripts/seed-community.js --remote",
-    "db:copy:remote-to-local": "node scripts/copy-remote-to-local.js"
+    "secret:put": "wrangler secret put RESEND_API_KEY"
   }
 }

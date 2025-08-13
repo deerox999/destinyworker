@@ -195,12 +195,15 @@ export function createAnalysisRouter(
     tags: ["AI - 사주 분석"],
     security: [{ BearerAuth: [] }],
     request: {
-      query: z.object({
-        jobId: z.string().openapi({
-          description: "작업 ID",
-          example: "job_1703123456789_abc123def",
-        }),
-      }),
+      query: z
+        .object({
+          jobId: z.string().openapi({
+            param: { name: "jobId", in: "query" },
+            description: "작업 ID",
+            example: "job_1703123456789_abc123def",
+          }),
+        })
+        .openapi({ type: "object" }),
     },
     responses: {
       200: {
@@ -243,10 +246,47 @@ export function createAnalysisRouter(
     security: [{ BearerAuth: [] }],
     request: {
       query: z.object({
-        page: z.coerce.number().int().min(1).default(1).optional(),
-        limit: z.coerce.number().int().min(1).max(50).default(10).optional(),
-        type: z.string().optional(),
-        favorite: z.enum(["true", "false"]).optional(),
+        page: z
+          .coerce
+          .number()
+          .int()
+          .min(1)
+          .default(1)
+          .optional()
+          .openapi({
+            param: { name: "page", in: "query" },
+            description: "페이지 번호",
+            example: 1,
+          }),
+        limit: z
+          .coerce
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .default(10)
+          .optional()
+          .openapi({
+            param: { name: "limit", in: "query" },
+            description: "페이지당 항목 수",
+            example: 10,
+          }),
+        type: z
+          .string()
+          .optional()
+          .openapi({
+            param: { name: "type", in: "query" },
+            description: "분석 타입 (individual, compatibility)",
+            example: "individual",
+          }),
+        favorite: z
+          .enum(["true", "false"])
+          .optional()
+          .openapi({
+            param: { name: "favorite", in: "query" },
+            description: "즐겨찾기 여부 필터",
+            example: "true",
+          }),
       }),
     },
     responses: {
@@ -293,7 +333,16 @@ export function createAnalysisRouter(
     security: [{ BearerAuth: [] }],
     request: {
       params: z.object({
-        id: z.coerce.number().int().positive(),
+        id: z
+          .coerce
+          .number()
+          .int()
+          .positive()
+          .openapi({
+            param: { name: "id", in: "path" },
+            description: "사주 분석 결과 ID",
+            example: 1,
+          }),
       }),
     },
     responses: {
@@ -339,7 +388,16 @@ export function createAnalysisRouter(
     security: [{ BearerAuth: [] }],
     request: {
       params: z.object({
-        id: z.coerce.number().int().positive(),
+        id: z
+          .coerce
+          .number()
+          .int()
+          .positive()
+          .openapi({
+            param: { name: "id", in: "path" },
+            description: "사주 분석 결과 ID",
+            example: 1,
+          }),
       }),
     },
     responses: {
@@ -370,7 +428,16 @@ export function createAnalysisRouter(
     security: [{ BearerAuth: [] }],
     request: {
       params: z.object({
-        id: z.coerce.number().int().positive(),
+        id: z
+          .coerce
+          .number()
+          .int()
+          .positive()
+          .openapi({
+            param: { name: "id", in: "path" },
+            description: "사주 분석 결과 ID",
+            example: 1,
+          }),
       }),
       body: {
         content: {

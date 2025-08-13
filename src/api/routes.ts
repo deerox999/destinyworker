@@ -49,7 +49,23 @@ export function createAppRouter(): OpenAPIHono {
   app.get("/openapi.json", (c) => {
     try {
       return c.json(
-        app.getOpenAPIDocument({ openapi: "3.0.0", info: apiConfig })
+        app.getOpenAPIDocument({
+          openapi: "3.0.0",
+          info: apiConfig,
+          servers: [
+            { url: "https://destiny-91f.pages.dev", description: "Production" },
+            { url: "http://localhost:9393", description: "Local Dev" },
+          ],
+          components: {
+            securitySchemes: {
+              BearerAuth: {
+                type: "http",
+                scheme: "bearer",
+                bearerFormat: "JWT",
+              },
+            },
+          },
+        } as any)
       );
     } catch (error: any) {
       console.error(`Error:`, error.message);

@@ -127,42 +127,42 @@ export const CelebrityCommentIdParamSchema = z.object({
 
 export const CommentFieldsSchema = z.object({
   id: z.number().int().openapi({ example: 1 }),
-  내용: z.string().openapi({ example: "정말 멋져요!" }),
-  작성자: z.string().openapi({ example: "사용자1" }),
-  작성자ID: z.string().openapi({ example: "user123" }),
-  부모댓글ID: z.number().int().nullable().openapi({ example: null }),
-  추천수: z.number().int().openapi({ example: 5 }),
-  내가추천함: z.boolean().openapi({ example: true }),
-  작성일: z
+  content: z.string().openapi({ example: "정말 멋져요!" }),
+  author: z.string().openapi({ example: "사용자1" }),
+  authorId: z.number().int().openapi({ example: 123 }),
+  parentId: z.number().int().nullable().openapi({ example: null }),
+  likeCount: z.number().int().openapi({ example: 5 }),
+  likedByMe: z.boolean().openapi({ example: true }),
+  createdAt: z
     .string()
     .datetime()
     .openapi({ example: "2023-01-01T00:00:00.000Z" }),
-  수정일: z
+  updatedAt: z
     .string()
     .datetime()
     .openapi({ example: "2023-01-01T00:00:00.000Z" }),
 });
 
 export const RecursiveCommentSchema = CommentFieldsSchema.extend({
-  답글: z.array(CommentFieldsSchema).openapi({ type: "array" }),
+  replies: z.array(CommentFieldsSchema).openapi({ type: "array" }),
 });
 
 export const CelebrityBaseSchema = z
   .object({
     id: z.string().openapi({ example: "iu" }),
-    이름: z.string().openapi({ example: "아이유" }),
-    성별: z.string().openapi({ example: "여" }),
-    직업: z.string().openapi({ example: "가수" }),
-    설명: z.string().openapi({ example: "대한민국의 가수 겸 배우" }),
-    이미지: z
+    name: z.string().openapi({ example: "아이유" }),
+    gender: z.string().openapi({ example: "FEMALE" }),
+    occupation: z.string().openapi({ example: "가수" }),
+    description: z.string().openapi({ example: "대한민국의 가수 겸 배우" }),
+    imageUrl: z
       .string()
       .url()
       .nullable()
       .openapi({ example: "https://example.com/iu.jpg" }),
-    년: z.number().int().openapi({ example: 1993 }),
-    월: z.number().int().openapi({ example: 5 }),
-    일: z.number().int().openapi({ example: 16 }),
-    달력: z.string().openapi({ example: "양력" }),
+    birthYear: z.number().int().openapi({ example: 1993 }),
+    birthMonth: z.number().int().openapi({ example: 5 }),
+    birthDay: z.number().int().openapi({ example: 16 }),
+    calendar: z.string().openapi({ example: "SOLAR" }),
   })
   .openapi({ type: "object" });
 
