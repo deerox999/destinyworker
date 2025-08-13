@@ -25,70 +25,32 @@ export function createAnalysisRouter(
     description: "통합 사주 분석 API",
     tags: ["AI - 사주 분석"],
     security: [{ BearerAuth: [] }],
-    request: {
-      body: {
-        content: {
-          "application/json": {
-            schema: z
-              .object({
-                // 사주 데이터 (필수)
-                sajuData: z.object({}).openapi({
-                  description: "사주 데이터 (필수)",
-                }),
-
-                // 분석 옵션
-                options: z.object({
-                  // 분석 설정
-                  analysisType: z.string().optional().openapi({
-                    description: "분석 유형",
-                    example: "종합운세",
-                  }),
-                  type: z.string().optional().openapi({
-                    description: "분석 타입 (예: individual, compatibility)",
-                    example: "individual",
-                  }),
-                  userQuestion: z.string().optional().openapi({
-                    description: "사용자 추가 질문",
-                    example: "특별히 궁금한 점이 있나요?",
-                  }),
-                  analysisStyle: z.string().optional().openapi({
-                    description: "분석 톤 옵션 (예: 현실적, 약간긍정, 약간부정)",
-                    example: "현실적",
-                  }),
-                  understandingLevel: z.string().optional().openapi({
-                    description: "사용자 이해도 레벨 (예: 초보, 중수, 전문가)",
-                    example: "중수",
-                  }),
-                  selectedAnalysisElements: z
-                    .array(z.string())
-                    .optional()
-                    .openapi({
-                      description: "선택된 분석 요소들",
-                      example: ["십성", "신살"],
-                    }),
-
-                  // 기타 설정
-                  i18n: z.string().optional().openapi({
-                    description: "언어 설정",
-                    example: "ko",
-                  }),
-                  timezone: z.string().optional().openapi({
-                    description: "시간대 설정",
-                    example: "Asia/Seoul",
-                  }),
-                  highQuality: z.boolean().optional().openapi({
-                    description: "고품질 분석 여부 (pro 모델 사용 여부). 기본값 false",
-                    example: false,
-                  }),
-                }).optional().openapi({
-                  description: "분석 옵션",
-                }),
-              })
-              .openapi({ type: "object" }),
-          },
-        },
-      },
-    },
+    // request: {
+    //   body: {
+    //     content: {
+    //       "application/json": {
+    //         schema: z
+    //           .object({
+    //             sajuData: z.object({}).openapi({ description: "사주 데이터 (필수)" }),
+    //             options: z
+    //               .object({
+    //                 analysisType: z.string().optional(),
+    //                 type: z.string().optional(),
+    //                 userQuestion: z.string().optional(),
+    //                 analysisStyle: z.string().optional(),
+    //                 understandingLevel: z.string().optional(),
+    //                 selectedAnalysisElements: z.array(z.string()).optional(),
+    //                 i18n: z.string().optional(),
+    //                 timezone: z.string().optional(),
+    //                 highQuality: z.boolean().optional(),
+    //               })
+    //               .optional(),
+    //           })
+    //           .openapi({ type: "object" }),
+    //       },
+    //     },
+    //   },
+    // },
     responses: {
       200: {
         description: "분석 작업 등록 성공",
@@ -130,29 +92,22 @@ export function createAnalysisRouter(
       "이전 분석 보고서를 컨텍스트로 사용하여 후속 질문에만 집중해 답변합니다.",
     tags: ["AI - 사주 분석"],
     security: [{ BearerAuth: [] }],
-    request: {
-      body: {
-        content: {
-          "application/json": {
-            schema: z
-              .object({
-                options: z
-                  .object({
-                    followUpOfAnalysisId: z
-                      .number()
-                      .int()
-                      .positive(),
-                    userQuestion: z.string().min(1),
-                  })
-                  .openapi({
-                    description: "재질문 옵션",
-                  }),
-              })
-              .openapi({ type: "object" }),
-          },
-        },
-      },
-    },
+    // request: {
+    //   body: {
+    //     content: {
+    //       "application/json": {
+    //         schema: z
+    //           .object({
+    //             options: z.object({
+    //               followUpOfAnalysisId: z.number().int().positive(),
+    //               userQuestion: z.string().min(1),
+    //             }),
+    //           })
+    //           .openapi({ type: "object" }),
+    //       },
+    //     },
+    //   },
+    // },
     responses: {
       200: {
         description: "재질문 작업 등록 성공 (디버그용 프롬프트 반환 포함)",
@@ -194,17 +149,11 @@ export function createAnalysisRouter(
     description: "사주 분석 작업의 진행 상황을 조회합니다.",
     tags: ["AI - 사주 분석"],
     security: [{ BearerAuth: [] }],
-    request: {
-      query: z
-        .object({
-          jobId: z.string().openapi({
-            param: { name: "jobId", in: "query" },
-            description: "작업 ID",
-            example: "job_1703123456789_abc123def",
-          }),
-        })
-        .openapi({ type: "object" }),
-    },
+    // request: {
+    //   query: z.object({
+    //     jobId: z.string(),
+    //   }),
+    // },
     responses: {
       200: {
         description: "작업 상태 조회 성공",
@@ -244,78 +193,82 @@ export function createAnalysisRouter(
       "사용자의 사주 분석 결과 목록을 페이지네이션과 필터링과 함께 조회합니다.",
     tags: ["AI - 사주 분석 결과"],
     security: [{ BearerAuth: [] }],
-    request: {
-      query: z.object({
-        page: z
-          .coerce
-          .number()
-          .int()
-          .min(1)
-          .default(1)
-          .optional()
-          .openapi({
-            param: { name: "page", in: "query" },
-            description: "페이지 번호",
-            example: 1,
-          }),
-        limit: z
-          .coerce
-          .number()
-          .int()
-          .min(1)
-          .max(50)
-          .default(10)
-          .optional()
-          .openapi({
-            param: { name: "limit", in: "query" },
-            description: "페이지당 항목 수",
-            example: 10,
-          }),
-        type: z
-          .string()
-          .optional()
-          .openapi({
-            param: { name: "type", in: "query" },
-            description: "분석 타입 (individual, compatibility)",
-            example: "individual",
-          }),
-        favorite: z
-          .enum(["true", "false"])
-          .optional()
-          .openapi({
-            param: { name: "favorite", in: "query" },
-            description: "즐겨찾기 여부 필터",
-            example: "true",
-          }),
-      }),
-    },
+    // request: {
+    //   query: z.object({
+    //     page: z
+    //       .coerce
+    //       .number()
+    //       .int()
+    //       .min(1)
+    //       .default(1)
+    //       .optional()
+    //       .openapi({
+    //         param: { name: "page", in: "query" },
+    //         description: "페이지 번호",
+    //         example: 1,
+    //       }),
+    //     limit: z
+    //       .coerce
+    //       .number()
+    //       .int()
+    //       .min(1)
+    //       .max(50)
+    //       .default(10)
+    //       .optional()
+    //       .openapi({
+    //         param: { name: "limit", in: "query" },
+    //         description: "페이지당 항목 수",
+    //         example: 10,
+    //       }),
+    //     type: z
+    //       .string()
+    //       .optional()
+    //       .openapi({
+    //         param: { name: "type", in: "query" },
+    //         description: "분석 타입 (individual, compatibility)",
+    //         example: "individual",
+    //       }),
+    //     favorite: z
+    //       .enum(["true", "false"])
+    //       .optional()
+    //       .openapi({
+    //         param: { name: "favorite", in: "query" },
+    //         description: "즐겨찾기 여부 필터",
+    //         example: "true",
+    //       }),
+    //   }).openapi({ type: "object" }),
+    // },
     responses: {
       200: {
         description: "분석 결과 목록 조회 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              analyses: z.array(
-                z.object({
-                  id: z.number().int(),
-                  analysisType: z.string(),
-                  type: z.string(),
-                  title: z.string(),
-                  aiResponse: z.string(),
-                  chartJson: z.any().nullable(),
-                  modelUsed: z.string(),
-                  pointsSpent: z.number().int(),
-                  isFavorite: z.boolean(),
-                  createdAt: z.string(),
-                  i18n: z.string().optional(),
-                  timezone: z.string().optional(),
-                  isFollowUp: z.boolean().openapi({ example: false }),
-                  optionsJson: z.string().nullable().optional(),
-                  options: z.any().nullable().optional(),
-                })
-              ),
-              pagination: PaginationResponseSchema,
-            }),
+            schema: z
+              .object({
+                analyses: z.array(
+                  z
+                    .object({
+                      id: z.number().int(),
+                      analysisType: z.string(),
+                      type: z.string(),
+                      title: z.string(),
+                      aiResponse: z.string(),
+                      chartJson: z.any().nullable(),
+                      modelUsed: z.string(),
+                      pointsSpent: z.number().int(),
+                      isFavorite: z.boolean(),
+                      createdAt: z.string(),
+                      i18n: z.string().optional(),
+                      timezone: z.string().optional(),
+                      isFollowUp: z.boolean().openapi({ example: false }),
+                      optionsJson: z.string().nullable().optional(),
+                      options: z.any().nullable().optional(),
+                    })
+                    .openapi({ type: "object" })
+                ).openapi({ type: "array" }),
+                pagination: PaginationResponseSchema,
+              })
+              .openapi({ type: "object" }),
           },
         },
       },
@@ -331,45 +284,38 @@ export function createAnalysisRouter(
     description: "특정 사주 분석 결과의 상세 정보를 조회합니다.",
     tags: ["AI - 사주 분석 결과"],
     security: [{ BearerAuth: [] }],
-    request: {
-      params: z.object({
-        id: z
-          .coerce
-          .number()
-          .int()
-          .positive()
-          .openapi({
-            param: { name: "id", in: "path" },
-            description: "사주 분석 결과 ID",
-            example: 1,
-          }),
-      }),
-    },
+    // request: {
+    //   params: z.object({
+    //     id: z.coerce.number().int().positive(),
+    //   }),
+    // },
     responses: {
       200: {
         description: "분석 결과 상세 조회 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              id: z.number().int(),
-              analysisType: z.string(),
-              type: z.string(),
-              title: z.string(),
-              sajuData: z.any().nullable(),
-              aiResponse: z.string(),
-              chartJson: z.any().nullable(),
-              modelUsed: z.string(),
-              pointsSpent: z.number().int(),
-              isFavorite: z.boolean(),
-              i18n: z.string().optional(),
-              timezone: z.string().optional(),
-              analysisStartedAt: z.string().nullable(),
-              analysisCompletedAt: z.string().nullable(),
-              usageMetadata: z.any().nullable().optional(),
-              isFollowUp: z.boolean().openapi({ example: false }),
-              optionsJson: z.string().nullable().optional(),
-              options: z.any().nullable().optional(),
-            }),
+            schema: z
+              .object({
+                id: z.number().int(),
+                analysisType: z.string(),
+                type: z.string(),
+                title: z.string(),
+                sajuData: z.any().nullable(),
+                aiResponse: z.string(),
+                chartJson: z.any().nullable(),
+                modelUsed: z.string(),
+                pointsSpent: z.number().int(),
+                isFavorite: z.boolean(),
+                i18n: z.string().optional(),
+                timezone: z.string().optional(),
+                analysisStartedAt: z.string().nullable(),
+                analysisCompletedAt: z.string().nullable(),
+                usageMetadata: z.any().nullable().optional(),
+                isFollowUp: z.boolean().openapi({ example: false }),
+                optionsJson: z.string().nullable().optional(),
+                options: z.any().nullable().optional(),
+              })
+              .openapi({ type: "object" }),
           },
         },
       },
@@ -386,30 +332,23 @@ export function createAnalysisRouter(
     description: "사주 분석 결과의 즐겨찾기 상태를 토글합니다.",
     tags: ["AI - 사주 분석 결과"],
     security: [{ BearerAuth: [] }],
-    request: {
-      params: z.object({
-        id: z
-          .coerce
-          .number()
-          .int()
-          .positive()
-          .openapi({
-            param: { name: "id", in: "path" },
-            description: "사주 분석 결과 ID",
-            example: 1,
-          }),
-      }),
-    },
+    // request: {
+    //   params: z.object({
+    //     id: z.coerce.number().int().positive(),
+    //   }),
+    // },
     responses: {
       200: {
         description: "즐겨찾기 토글 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean(),
-              isFavorite: z.boolean(),
-              message: z.string(),
-            }),
+            schema: z
+              .object({
+                success: z.boolean(),
+                isFavorite: z.boolean(),
+                message: z.string(),
+              })
+              .openapi({ type: "object" }),
           },
         },
       },
@@ -426,39 +365,30 @@ export function createAnalysisRouter(
     description: "사주 분석 결과의 제목을 수정합니다.",
     tags: ["AI - 사주 분석 결과"],
     security: [{ BearerAuth: [] }],
-    request: {
-      params: z.object({
-        id: z
-          .coerce
-          .number()
-          .int()
-          .positive()
-          .openapi({
-            param: { name: "id", in: "path" },
-            description: "사주 분석 결과 ID",
-            example: 1,
-          }),
-      }),
-      body: {
-        content: {
-          "application/json": {
-            schema: z.object({
-              title: z.string().min(1).max(100),
-            }),
-          },
-        },
-      },
-    },
+    // request: {
+    //   params: z.object({
+    //     id: z.coerce.number().int().positive(),
+    //   }),
+    //   body: {
+    //     content: {
+    //       "application/json": {
+    //         schema: z.object({ title: z.string().min(1).max(100) }),
+    //       },
+    //     },
+    //   },
+    // },
     responses: {
       200: {
         description: "제목 수정 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean(),
-              title: z.string(),
-              message: z.string(),
-            }),
+            schema: z
+              .object({
+                success: z.boolean(),
+                title: z.string(),
+                message: z.string(),
+              })
+              .openapi({ type: "object" }),
           },
         },
       },
@@ -476,36 +406,33 @@ export function createAnalysisRouter(
     description: "여러 사주 분석 결과를 한 번에 삭제합니다.",
     tags: ["AI - 사주 분석 결과"],
     security: [{ BearerAuth: [] }],
-    request: {
-      body: {
-        content: {
-          "application/json": {
-            schema: z
-              .object({
-                ids: z.array(z.number().int().positive()).openapi({
-                  description: "삭제할 분석 결과 ID 배열",
-                  example: [1, 2, 3],
-                }),
-              })
-              .openapi({ type: "object" }),
-          },
-        },
-      },
-    },
+    // request: {
+    //   body: {
+    //     content: {
+    //       "application/json": {
+    //         schema: z.object({
+    //           ids: z.array(z.number().int().positive()),
+    //         }),
+    //       },
+    //     },
+    //   },
+    // },
     responses: {
       200: {
         description: "삭제 성공",
         content: {
           "application/json": {
-            schema: z.object({
-              success: z.boolean(),
-              message: z.string(),
-              deletedCount: z.number().int().openapi({ example: 3 }),
-              failedIds: z
-                .array(z.number())
-                .optional()
-                .openapi({ example: [] }),
-            }),
+            schema: z
+              .object({
+                success: z.boolean(),
+                message: z.string(),
+                deletedCount: z.number().int().openapi({ example: 3 }),
+                failedIds: z
+                  .array(z.number())
+                  .optional()
+                  .openapi({ example: [] }),
+              })
+              .openapi({ type: "object" }),
           },
         },
       },

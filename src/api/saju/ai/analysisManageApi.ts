@@ -188,7 +188,7 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
           updatedAt: toUTC(full.updatedAt),
           usageMetadata: toJSON(full.usageMetadata),
           isFollowUp: typeof full.title === 'string' && (full.title as string).includes('재질문'),
-          optionsJson: full.optionsJson || null,
+          // optionsJson: full.optionsJson || null,
           options: (() => { try { return full.optionsJson ? JSON.parse(full.optionsJson) : null; } catch { return null; } })(),
         },
         200
@@ -214,7 +214,7 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         timezone: analysis.timezone,
         usageMetadata: toJSON(analysis.usageMetadata),
         isFollowUp: typeof analysis.title === 'string' && (analysis.title as string).includes('재질문'),
-        optionsJson: (analysis as any).optionsJson || null,
+        // optionsJson: (analysis as any).optionsJson || null,
         options: (() => { try { return (analysis as any).optionsJson ? JSON.parse((analysis as any).optionsJson) : null; } catch { return null; } })(),
       },
       200
