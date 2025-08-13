@@ -165,3 +165,18 @@ export async function withPrisma<T>(db: D1Database, handler: (prisma: any) => Pr
     await prisma.$disconnect();
   }
 }
+
+export const toJSON = (value: any) => {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    try {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      return JSON.parse(trimmed);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value === "object") return value;
+  return null;
+};

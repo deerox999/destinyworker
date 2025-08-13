@@ -1,7 +1,7 @@
 import { Context } from "hono";
 import { buildPaginationMeta, parsePagination } from "../../../common/paginationUtils";
 import { createPrismaClient } from "../../../common/prismaUtils";
-import { getUserFromToken, toUTC } from "../../../common/utils";
+import { getUserFromToken, toUTC, toJSON } from "../../../common/utils";
 
 // UTC 변환은 공통 유틸 사용
 
@@ -184,7 +184,7 @@ export async function getSajuAnalysisDetail(c: Context): Promise<Response> {
         sajuData: sajuData,
         i18n: analysis.i18n,
         timezone: analysis.timezone,
-        usageMetadata: analysis.usageMetadata,
+        usageMetadata: toJSON(analysis.usageMetadata),
         isFollowUp: typeof analysis.title === 'string' && (analysis.title as string).includes('재질문'),
         optionsJson: (analysis as any).optionsJson || null,
         options: (() => { try { return (analysis as any).optionsJson ? JSON.parse((analysis as any).optionsJson) : null; } catch { return null; } })(),

@@ -127,23 +127,26 @@ export function buildGeminiPayload(
 
   // 사주 데이터 추가 (재질문 모드에서는 강제로 생략)
   if (!isFollowUp && message.sajuData) {
-    if (message.sajuData.person1 && message.sajuData.person2) {
-      contents.push({
-        role: "user",
-        parts: [
-          {
-            text: `궁합 분석용 사주 데이터:\n${JSON.stringify(message.sajuData.person1)}\n${JSON.stringify(message.sajuData.person2)}`,
-          },
-        ],
-      });
-    } else {
-      contents.push({
-        role: "user",
-        parts: [
-          { text: `사주 데이터: ${JSON.stringify(message.sajuData)}` },
-        ],
-      });
-    }
+    // 초기 분석 시에는 프론트에서 넘어온 sajuData 원문 전체를 그대로 포함 (궁합 포함 전체 필드 보존)
+    contents.push({
+      role: "user",
+      parts: [
+        { text: `사주 데이터: ${JSON.stringify(message.sajuData)}` },
+      ],
+    });
+  }
+
+  // 유쾌한 톤 Few-shot 스타일 앵커(모델이 systemInstruction를 약하게 처리할 경우 보강) - 초기/재질문 모두 적용
+  let responseTone: string | undefined = undefined;
+  try {
+    const options = (message as any).optionsJson ? JSON.parse((message as any).optionsJson) : undefined;
+    responseTone = options?.responseStyle;
+  } catch (_) { /* ignore */ }
+  if (responseTone === "유쾌한") {
+    contents.push(
+      { role: "user", parts: [{ text: "스타일 샘플: 다음 답변은 재치 있는 한 줄로 시작하고, 각 섹션마다 자연스러운 위트를 한 줄 포함해줘." }] },
+      { role: "model", parts: [{ text: "오늘 운세, 시작부터 한 줄 위트로 문을 열어볼게요!\n\n## 핵심 포인트\n- 에너지 흐름이 좋아요. (스포일러: 기대해도 좋아요)\n\n## 조언\n- 작은 시도를 오늘의 이벤트로 만들기! (의식의 차이가 반전을 만듭니다)" }] },
+    );
   }
 
   if (isFollowUp) {
@@ -160,13 +163,29 @@ export function buildGeminiPayload(
     contents.push({ role: "user", parts: [{ text: message.userPrompt }] });
   }
 
-  // SERVER_MODEL_CONFIG를 직접 사용
+  // console.log("message.sajuData", message.sajuData);
+  // console.log("message.systemPrompt", message.systemPrompt);
+  // console.log("message.userPrompt", message.userPrompt);
+  
+  // 톤에 따른 생성 설정 동적 조정
+  const baseGen = SERVER_MODEL_CONFIG.generationConfig;
+  const generationConfig = { ...baseGen } as any;
+  let tone: string | undefined = responseTone;
+  if (tone === "유쾌한") {
+    generationConfig.temperature = Math.max(generationConfig.temperature || 0.4, 0.8);
+    generationConfig.topP = Math.max(generationConfig.topP || 0.4, 0.9);
+  } else if (tone === "상냥한") {
+    generationConfig.temperature = Math.max(generationConfig.temperature || 0.4, 0.6);
+    generationConfig.topP = Math.max(generationConfig.topP || 0.4, 0.8);
+  }
+
+  // 페이로드 반환
   return {
     model: message.model,
     // 시스템 지시는 별도로 전달 (role 지정 불필요; 지정 시 'user' | 'model'만 허용됨)
     systemInstruction: { parts: [{ text: systemPrompt }] },
-    contents,
-    generationConfig: SERVER_MODEL_CONFIG.generationConfig,
+    contents: contents,
+    generationConfig,
     safetySettings: SERVER_MODEL_CONFIG.safetySettings,
   };
 }

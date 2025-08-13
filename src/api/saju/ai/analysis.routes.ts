@@ -320,7 +320,7 @@ export function createAnalysisRouter(
               timezone: z.string().optional(),
               analysisStartedAt: z.string().nullable(),
               analysisCompletedAt: z.string().nullable(),
-              usageMetadata: z.string().nullable().optional(),
+              usageMetadata: z.any().nullable().optional(),
               isFollowUp: z.boolean().openapi({ example: false }),
               optionsJson: z.string().nullable().optional(),
               options: z.any().nullable().optional(),

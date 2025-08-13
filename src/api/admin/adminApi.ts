@@ -2,7 +2,7 @@ import { Context } from "hono";
 import { buildPaginationMeta, paginate, parsePagination } from "../../common/paginationUtils";
 import { addPoints, deductPoints, getPointTransactions, getUserPoints } from "../../common/paymentUtils";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
-import { toUTC } from "../../common/utils";
+import { toUTC, toJSON } from "../../common/utils";
 
 // 영어 -> 한글 필드 변환 (사주 프로필용)
 const toKoreanFields = (profile: any) => ({
@@ -1106,7 +1106,7 @@ export async function getAnalysisById(
         sajuData: sajuData,
         i18n: analysis.i18n,
         timezone: analysis.timezone,
-        usageMetadata: analysis.usageMetadata,
+        usageMetadata: toJSON(analysis.usageMetadata),
         createdAt: toUTC(analysis.createdAt),
         updatedAt: toUTC(analysis.updatedAt),
         isFollowUp: typeof analysis.title === 'string' && (analysis.title as string).includes('재질문'),
