@@ -1,7 +1,7 @@
 import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
-import { deleteR2Object } from "./r2Api";
+import { deleteR2Object, deleteImagesFromR2 } from "../common/r2Api";
 
 
 
@@ -21,57 +21,6 @@ const isR2ImageUrl = (url: string, R2_PUBLIC_URL: string): boolean => {
 const getObjectKeyFromUrl = (url: string, R2_PUBLIC_URL: string): string => {
   return url.replace(`${R2_PUBLIC_URL}/`, "");
 };
-
-// 사용자 정보 조회
-export async function getUserProfile(
-  c: Context
-): Promise<Response> {
-  try {
-    const userInfo = await getUserFromToken(c);
-    if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
-
-    const prisma = createPrismaClient(c.env.DB);
-    const user = await prisma.user.findUnique({
-      where: { id: userInfo.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        userName: true,
-        picture: true,
-        privacyConsent: true,
-        privacyConsentVersion: true,
-        privacyConsentAt: true,
-        reportStorageConsent: true,
-        reportStorageConsentVersion: true,
-        reportStorageConsentAt: true,
-        lastConsentAt: true,
-        consentStatus: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-    await prisma.$disconnect();
-
-    if (!user) {
-      return c.json({ error: "사용자를 찾을 수 없습니다." }, 404);
-    }
-
-    return c.json({
-      success: true,
-      user: user,
-    });
-  } catch (error) {
-    console.error("사용자 정보 조회 실패:", error);
-    return c.json(
-      {
-        error: "사용자 정보 조회 실패",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-      500
-    );
-  }
-}
 
 // 프로필 수정
 export async function updateUserProfile(
@@ -190,8 +139,6 @@ export async function updateUserProfile(
   }
 }
 
-
-
 // 개인정보 동의 업데이트
 export async function updateConsent(
   c: Context
@@ -286,6 +233,80 @@ export async function updateConsent(
     return c.json(
       {
         error: "동의 정보 업데이트 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
+// 회원 탈퇴: 사용자와 관련된 모든 기록 삭제
+export async function deleteAccount(
+  c: Context
+): Promise<Response> {
+  try {
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
+
+    const prisma = createPrismaClient(c.env.DB);
+
+    // 프로필 이미지가 R2에 있으면 삭제를 위해 현재 사용자 조회
+    const existingUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { picture: true },
+    });
+
+    // 사용자가 작성한 게시글/댓글에 포함된 R2 이미지 삭제
+    try {
+      const [userPosts, userComments] = await Promise.all([
+        prisma.post.findMany({ where: { authorId: user.id }, select: { content: true } }),
+        prisma.comment.findMany({ where: { authorId: user.id }, select: { content: true } }),
+      ]);
+      for (const p of userPosts) {
+        if (p.content) {
+          await deleteImagesFromR2(p.content, c.env);
+        }
+      }
+      for (const cm of userComments) {
+        if (cm.content) {
+          await deleteImagesFromR2(cm.content, c.env);
+        }
+      }
+    } catch (e) {
+      console.error("R2 이미지 정리 중 오류:", e);
+    }
+
+    // 커뮤니티 데이터 정리 (외래키 onDelete가 없는 항목 수동 정리)
+    // 1) 사용자가 작성한 게시글 삭제 (게시글 삭제 시 해당 게시글의 댓글/추천은 Cascade)
+    await prisma.post.deleteMany({ where: { authorId: user.id } });
+
+    // 2) 사용자가 작성한 댓글 삭제 (해당 댓글의 추천은 Cascade)
+    await prisma.comment.deleteMany({ where: { authorId: user.id } });
+
+    // 기타 데이터는 Prisma 스키마에서 onDelete: Cascade로 연결되어 있어
+    // 사용자 삭제 시 함께 제거됩니다. (세션, 사주 프로필, 대화기록, 분석, 포인트, 로그 등)
+
+    // 사용자 삭제
+    await prisma.user.delete({ where: { id: user.id } });
+
+    // 프로필 이미지 R2에서 삭제 (사용자 레코드 삭제 후에도 URL 정보는 위에서 확보함)
+    if (existingUser?.picture && c.env.R2_PUBLIC_URL && existingUser.picture.startsWith(c.env.R2_PUBLIC_URL)) {
+      try {
+        const objectKey = existingUser.picture.replace(`${c.env.R2_PUBLIC_URL}/`, "");
+        await deleteR2Object(objectKey, c.env);
+      } catch (e) {
+        console.error("Failed to delete profile image from R2:", e);
+      }
+    }
+
+    await prisma.$disconnect();
+
+    return c.json({ success: true, message: "회원탈퇴가 완료되었습니다. 모든 기록이 삭제되었습니다." });
+  } catch (error) {
+    console.error("회원탈퇴 실패:", error);
+    return c.json(
+      {
+        error: "회원탈퇴 실패",
         message: error instanceof Error ? error.message : "Unknown error",
       },
       500

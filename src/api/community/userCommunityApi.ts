@@ -1,7 +1,7 @@
 import { Context } from "hono";
 import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken, requireLanguageParam } from "../../common/utils";
-import { deleteImagesFromR2, deleteR2Object, extractR2ImageUrls } from '../user/r2Api';
+import { deleteImagesFromR2, deleteR2Object, extractR2ImageUrls } from '../common/r2Api';
 import { addPoints, deductPoints } from "../../common/paymentUtils";
 
 export const userCommunityApi = {

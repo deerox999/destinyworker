@@ -97,6 +97,8 @@ export interface AnalysisJob {
   result?: any;
   error?: string;
   analysisId?: number;
+  // 품질 미달 시 1회 재시도 제어용 시도 횟수
+  retryAttempt?: number;
   // 재질문 모드 여부
   followUpMode?: boolean;
   // 최초 요청 options 원본(JSON 문자열)

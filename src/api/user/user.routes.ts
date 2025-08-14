@@ -1,5 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { getUserProfile, updateUserProfile, updateConsent } from "./userApi";
+import { updateUserProfile, updateConsent, deleteAccount } from "./userApi";
 
 import { MiddlewareHandler } from "hono";
 import { SuccessSchema } from "../../common/schemas";
@@ -7,92 +7,6 @@ import { SuccessSchema } from "../../common/schemas";
 export function createUserRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
   app.use(authMiddleware);
-
-  const getUserProfileRoute = createRoute({
-    method: "get",
-    path: "/profile",
-    summary: "사용자 프로필 조회",
-    description: "현재 로그인한 사용자의 프로필 정보를 조회합니다.",
-    tags: ["사용자"],
-    security: [{ BearerAuth: [] }],
-    responses: {
-      200: {
-        description: "프로필 조회 성공",
-        content: {
-          "application/json": {
-            schema: SuccessSchema.extend({
-              user: z.object({
-                id: z.number().openapi({
-                  description: "사용자 ID",
-                  example: 1,
-                }),
-                이메일: z.string().email().openapi({
-                  description: "사용자 이메일",
-                  example: "user@example.com",
-                }),
-                이름: z.string().openapi({
-                  description: "사용자 이름",
-                  example: "홍길동",
-                }),
-                프로필이름: z.string().openapi({
-                  description: "사용자 프로필 이름",
-                  example: "쾌남",
-                }),
-                프로필사진: z.string().url().openapi({
-                  description: "사용자 프로필 사진 URL",
-                  example: "https://example.com/profile.jpg",
-                }),
-                가입일: z.string().datetime().openapi({
-                  description: "가입일",
-                  example: "2023-01-01T00:00:00.000Z",
-                }),
-                수정일: z.string().datetime().openapi({
-                  description: "수정일",
-                  example: "2023-01-01T00:00:00.000Z",
-                }),
-                개인정보동의: z.boolean().openapi({
-                  description: "개인정보 수집 및 이용 동의 여부",
-                  example: false,
-                }),
-                개인정보동의버전: z.string().openapi({
-                  description: "개인정보 수집 및 이용 동의 버전",
-                  example: "1.0",
-                }),
-                개인정보동의일시: z.string().datetime().nullable().openapi({
-                  description: "개인정보 수집 및 이용 동의 일시",
-                  example: null,
-                }),
-                리포트저장동의: z.boolean().openapi({
-                  description: "분석 리포트 저장 동의 여부",
-                  example: false,
-                }),
-                리포트저장동의버전: z.string().openapi({
-                  description: "분석 리포트 저장 동의 버전",
-                  example: "1.0",
-                }),
-                리포트저장동의일시: z.string().datetime().nullable().openapi({
-                  description: "분석 리포트 저장 동의 일시",
-                  example: null,
-                }),
-                최종동의일시: z.string().datetime().nullable().openapi({
-                  description: "전체 동의 일시",
-                  example: null,
-                }),
-                동의상태: z.string().openapi({
-                  description: "동의 상태 (none, partial, complete)",
-                  example: "none",
-                }),
-              }).openapi({ type: 'object' }),
-            }).openapi({ type: 'object' }),
-          },
-        },
-      },
-      401: { description: "인증 실패" },
-      404: { description: "사용자를 찾을 수 없음" },
-    },
-  });
-
-  app.openapi(getUserProfileRoute, (c) => getUserProfile(c));
 
   const updateUserProfileRoute = createRoute({
     method: "put",
@@ -240,6 +154,35 @@ export function createUserRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
   });
 
   app.openapi(updateConsentRoute, (c) => updateConsent(c));
+
+  // 회원 탈퇴 라우트
+  const deleteAccountRoute = createRoute({
+    method: "delete",
+    path: "/account",
+    summary: "회원탈퇴",
+    description: "로그인/가입된 사용자의 모든 기록을 삭제하고 계정을 제거합니다.",
+    tags: ["사용자"],
+    security: [{ BearerAuth: [] }],
+    responses: {
+      200: {
+        description: "회원탈퇴 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              message: z.string().openapi({
+                description: "성공 메시지",
+                example: "회원탈퇴가 완료되었습니다. 모든 기록이 삭제되었습니다.",
+              }),
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      401: { description: "인증 실패" },
+      500: { description: "서버 오류" },
+    },
+  });
+
+  app.openapi(deleteAccountRoute, (c) => deleteAccount(c));
 
   return app;
 }

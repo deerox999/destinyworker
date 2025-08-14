@@ -10,7 +10,7 @@ import { createCommunityRouter } from "./community/routes";
 import { createSajuRouter } from "./saju/profile/saju.routes";
 import { createAuthRouter } from "./user/auth/auth.routes";
 import { createPaymentRouter } from "./user/payment/payment.routes";
-import { createR2Router } from "./user/r2.routes";
+import { createR2Router } from "./common/r2.routes";
 import { createUserRouter } from "./user/user.routes";
 
 /**

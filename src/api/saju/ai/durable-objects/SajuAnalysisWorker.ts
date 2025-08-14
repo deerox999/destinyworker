@@ -359,15 +359,9 @@ export class SajuAnalysisWorker implements DurableObject {
             }
           }
 
-          // 스트리밍 완료 후 DB 업데이트
-          try {
-            await self.saveAnalysisAndUpdateJob(job, fullResponse, latestUsageMetadata);
-          } catch (saveError) {
-            console.error("스트리밍 응답 업데이트 실패:", saveError);
-          }
-
-          // 타임아웃 클리어
-          self.clearJobTimeout(job.id);
+          // 스트리밍 완료 후 저장/업데이트는 항상 백그라운드에서만 수행
+          // 품질 검증/재시도/환불까지 포함한 최종화 로직으로 위임
+          self.state.waitUntil(self.finalizeAndPersist(job.id, fullResponse, latestUsageMetadata));
           if (!streamCanceledByClient) {
             controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
             controller.close();
@@ -427,102 +421,20 @@ export class SajuAnalysisWorker implements DurableObject {
       // 스트리밍 응답 처리
       const { fullResponse, latestUsageMetadata } = await this.processStreamChunks(streamingResp);
 
-      // 대운 비스트리밍 전용: JSON 부록 추출 (본문 끝의 ===JSON_START=== ~ ===JSON_END===)
-      let cleanedResponse = fullResponse;
-      let extractedChartJson: string | null = null;
-      try {
-        if (["대운", '종합운세'].includes(job.analysisType)) {
-          const startTag = "===JSON_START===";
-          const endTag = "===JSON_END===";
-          const startIdx = fullResponse.indexOf(startTag);
-          const endIdx = fullResponse.indexOf(endTag);
-          if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-            const jsonRaw = fullResponse
-              .slice(startIdx + startTag.length, endIdx)
-              .trim();
-            // 본문에서 부록 제거
-            cleanedResponse = (fullResponse.slice(0, startIdx) + fullResponse.slice(endIdx + endTag.length)).trim();
-            // JSON 유효성 최소 확인 (저장은 원문 문자열로)
-            try { JSON.parse(jsonRaw); extractedChartJson = jsonRaw; } catch (_) { extractedChartJson = null; }
-          }
-        }
-      } catch (_) {
-        // 추출 실패 시 무시하고 본문만 저장
-      }
+      // 저장/업데이트는 백그라운드 최종화 로직으로 위임
+      this.state.waitUntil(this.finalizeAndPersist(job.id, fullResponse, latestUsageMetadata));
 
-      // DB 업데이트 및 Job 상태 업데이트
-      await this.saveAnalysisAndUpdateJob(job, cleanedResponse, latestUsageMetadata, extractedChartJson);
-      await this.state.storage.put(job.id, job);
-      this.clearJobTimeout(job.id);
-        
       return this.createSuccessResponse({
         success: true,
         jobId: jobId,
         analysisId: job.analysisId,
-        status: "completed",
-        message: "분석이 완료되었습니다.",
+        status: "processing",
+        message: "분석 결과를 검증 중입니다. 필요 시 1회 재시도 후 최종 반영됩니다.",
       });
     } catch (error) {
       await this.failJob(job, error instanceof Error ? error.message : "Unknown error");
       return this.createErrorResponse("내부 스트리밍 처리 실패", job.error || "Unknown error", 500);
     }
-  }
-
-  /**
-   * 비스트리밍 처리 (generateContent 사용)
-   */
-  private async processNonStreamingJob(ai: any, job: AnalysisJob, payload: any, jobId: string): Promise<Response> {
-    try {
-      const resp = await ai.models.generateContent(payload);
-
-      // 다양한 SDK 응답 형태를 견고하게 처리
-      const fullResponse = this.extractTextFromGenerateResponse(resp);
-      const latestUsageMetadata = resp?.response?.usageMetadata || resp?.usageMetadata || null;
-
-      await this.saveAnalysisAndUpdateJob(job, fullResponse, latestUsageMetadata);
-      await this.state.storage.put(job.id, job);
-      this.clearJobTimeout(job.id);
-
-      return this.createSuccessResponse({
-        success: true,
-        jobId,
-        analysisId: job.analysisId,
-        status: "completed",
-        message: "분석이 완료되었습니다.",
-      });
-    } catch (error) {
-      await this.failJob(job, error instanceof Error ? error.message : "Unknown error");
-      return this.createErrorResponse("비스트리밍 처리 실패", job.error || "Unknown error", 500);
-    }
-  }
-
-  /**
-   * generateContent 응답에서 텍스트를 추출
-   */
-  private extractTextFromGenerateResponse(resp: any): string {
-    // 신 SDK (@google/genai) 또는 구 SDK 호환 처리
-    if (!resp) return "";
-
-    // 신 SDK 형태 추정
-    if (resp.response?.text) {
-      try {
-        return typeof resp.response.text === "function" ? resp.response.text() : resp.response.text;
-      } catch (_) { /* ignore */ }
-    }
-
-    // 일반 텍스트 속성 시도
-    if (typeof resp.text === "string") return resp.text;
-
-    // candidates → parts → text 추출 시도
-    const candidates = resp.response?.candidates || resp.candidates || [];
-    for (const c of candidates) {
-      const parts = c?.content?.parts || c?.parts || [];
-      const texts = parts.map((p: any) => p?.text).filter(Boolean);
-      if (texts.length) return texts.join("");
-    }
-
-    // 마지막 fallback: 문자열화
-    return typeof resp === "string" ? resp : JSON.stringify(resp);
   }
 
   /**
@@ -569,7 +481,7 @@ export class SajuAnalysisWorker implements DurableObject {
     }
 
     // 이미 실패 처리된 작업이면 저장을 건너뜁니다.
-    if (job.status === "failed") {
+    if (job.status === "failed" || job.status === "completed") {
       return;
     }
 
@@ -611,6 +523,88 @@ export class SajuAnalysisWorker implements DurableObject {
       }
     } else {
       throw new Error(`분석 결과 저장 실패: ${saveResult.error}`);
+    }
+  }
+
+  /**
+   * 응답 품질 검사: 빈값, 30자 이하, 생성 시작 후 10초 이내 완료
+   */
+  private isPoorResponse(job: AnalysisJob, fullResponse: string, completedAt: Date): boolean {
+    const text = (fullResponse || "").trim();
+    if (text.length === 0) return true;
+    if (text.length <= 30) return true;
+    const startedMs = Date.parse(job.createdAt);
+    if (isFinite(startedMs)) {
+      const elapsed = completedAt.getTime() - startedMs;
+      if (elapsed <= 10_000) return true;
+    }
+    return false;
+  }
+
+  /**
+   * 최종화: 품질검사 → 재시도(1회) → 성공 저장 또는 실패 환불
+   * 항상 백그라운드에서만 호출되어야 함
+   */
+  private async finalizeAndPersist(jobId: string, fullResponse: string, latestUsageMetadata: any): Promise<void> {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+    let shouldClearTimeout = true;
+    try {
+      // 이미 완료/실패된 작업은 중복 저장 방지
+      if (job.status === "completed" || job.status === "failed") {
+        return;
+      }
+      const completedAt = new Date();
+
+      // 대운/종합운세의 경우 본문 부록 JSON 추출 및 본문 정리
+      let cleanedResponse = fullResponse;
+      let extractedChartJson: string | null = null;
+      try {
+        if (["대운", "종합운세"].includes(job.analysisType)) {
+          const startTag = "===JSON_START===";
+          const endTag = "===JSON_END===";
+          const startIdx = fullResponse.indexOf(startTag);
+          const endIdx = fullResponse.indexOf(endTag);
+          if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+            const jsonRaw = fullResponse.slice(startIdx + startTag.length, endIdx).trim();
+            cleanedResponse = (fullResponse.slice(0, startIdx) + fullResponse.slice(endIdx + endTag.length)).trim();
+            try { JSON.parse(jsonRaw); extractedChartJson = jsonRaw; } catch (_) { extractedChartJson = null; }
+          }
+        }
+      } catch (_) { /* ignore */ }
+
+      // 품질 검사 및 재시도 제어
+      const attempt = job.retryAttempt || 0;
+      const poor = this.isPoorResponse(job, cleanedResponse, completedAt);
+
+      if (poor) {
+        if (attempt < 1) {
+          // 1회 재시도: 포인트 재차감 없음, 동일 analysisId 유지
+          job.retryAttempt = attempt + 1;
+          this.jobs.set(job.id, job);
+          await this.state.storage.put(job.id, job);
+          await this.scheduleAlarmSoon();
+          // 다시 업스트림 호출 (내부 처리) - 백그라운드로 스케줄
+          this.state.waitUntil(this.processStreamingJob(job.id, false));
+          shouldClearTimeout = false; // 재시도 진행 중이므로 타임아웃 유지
+          return;
+        }
+
+        // 재시도 후에도 품질 미달 → 실패 및 환불
+        await this.failJob(job, "응답 품질 미달(빈 응답/짧은 응답/너무 빠른 완료)");
+        return;
+      }
+
+      // 품질 통과 → 저장 및 완료 처리
+      await this.saveAnalysisAndUpdateJob(job, cleanedResponse, latestUsageMetadata, extractedChartJson);
+      await this.state.storage.put(job.id, job);
+    } catch (e) {
+      await this.failJob(job!, e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      // 재시도 중이 아닐 때만 타임아웃 정리
+      if (shouldClearTimeout) {
+        this.clearJobTimeout(jobId);
+      }
     }
   }
 
@@ -716,6 +710,26 @@ export class SajuAnalysisWorker implements DurableObject {
    */
   private async failJob(job: AnalysisJob, message: string): Promise<void> {
     try {
+      // 타임아웃 초과 같은 명시적 종료 사유는 즉시 실패 처리(재시도 없음)
+      const isTimeoutMessage = /10분|시간을\s*초과/.test(message || "");
+
+      if (!isTimeoutMessage) {
+        const attempt = job.retryAttempt || 0;
+        if (attempt < 1) {
+          // 1회 재시도: 포인트 재차감 없음, 동일 analysisId 유지
+          job.retryAttempt = attempt + 1;
+          job.status = "processing";
+          job.error = undefined;
+          this.jobs.set(job.id, job);
+          await this.state.storage.put(job.id, job);
+          await this.scheduleAlarmSoon();
+          // 백그라운드로 재시도 실행
+          this.state.waitUntil(this.processStreamingJob(job.id, false));
+          return;
+        }
+      }
+
+      // 최종 실패 처리 및 환불
       job.status = "failed";
       job.error = message;
       this.jobs.set(job.id, job);
