@@ -73,10 +73,7 @@ export function createAnalysisRouter(
           },
         },
       },
-      400: {
-        description:
-          "잘못된 요청 (sajuData 누락, 궁합 분석 시 person1/person2 누락 등)",
-      },
+      400: { description: "잘못된 요청 (sajuData 누락)" },
       401: { description: "인증 실패" },
       402: { description: "포인트 부족" },
       500: { description: "서버 오류" },
@@ -245,27 +242,29 @@ export function createAnalysisRouter(
           "application/json": {
             schema: z
               .object({
-                analyses: z.array(
-                  z
-                    .object({
-                      id: z.number().int(),
-                      analysisType: z.string(),
-                      type: z.string(),
-                      title: z.string(),
-                      aiResponse: z.string(),
-                      chartJson: z.any().nullable(),
-                      modelUsed: z.string(),
-                      pointsSpent: z.number().int(),
-                      isFavorite: z.boolean(),
-                      createdAt: z.string(),
-                      i18n: z.string().optional(),
-                      timezone: z.string().optional(),
-                      isFollowUp: z.boolean().openapi({ example: false }),
-                      optionsJson: z.string().nullable().optional(),
-                      options: z.any().nullable().optional(),
-                    })
-                    .openapi({ type: "object" })
-                ).openapi({ type: "array" }),
+                analyses: z
+                  .array(
+                    z
+                      .object({
+                        id: z.number().int(),
+                        analysisType: z.string(),
+                        type: z.string(),
+                        title: z.string(),
+                        aiResponse: z.string(),
+                        chartJson: z.any().nullable(),
+                        modelUsed: z.string(),
+                        pointsSpent: z.number().int(),
+                        isFavorite: z.boolean(),
+                        createdAt: z.string(),
+                        i18n: z.string().optional(),
+                        timezone: z.string().optional(),
+                        isFollowUp: z.boolean().openapi({ example: false }),
+                        optionsJson: z.string().nullable().optional(),
+                        options: z.any().nullable().optional(),
+                      })
+                      .openapi({ type: "object" })
+                  )
+                  .openapi({ type: "array" }),
                 pagination: PaginationResponseSchema,
               })
               .openapi({ type: "object" }),

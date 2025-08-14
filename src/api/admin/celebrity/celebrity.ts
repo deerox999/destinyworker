@@ -1,12 +1,13 @@
-
 import { isAdmin, createPrismaClient } from "../../../common/prismaUtils";
-import { paginate, parsePagination, buildPaginationMeta } from "../../../common/paginationUtils";
+import {
+  paginate,
+  parsePagination,
+  buildPaginationMeta,
+} from "../../../common/paginationUtils";
 import { Context } from "hono";
 
 // [Admin] 유명인물 대량 생성
-export async function createCelebritiesBatch(
-  c: Context,
-): Promise<Response> {
+export async function createCelebritiesBatch(c: Context): Promise<Response> {
   try {
     if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
@@ -45,7 +46,9 @@ export async function createCelebritiesBatch(
         !gender ||
         !translations?.length
       ) {
-        validationErrors.push(`${index + 1}번째 유명인물: 필수 데이터가 누락되었습니다.`);
+        validationErrors.push(
+          `${index + 1}번째 유명인물: 필수 데이터가 누락되었습니다.`
+        );
         return;
       }
 
@@ -55,30 +58,35 @@ export async function createCelebritiesBatch(
         birthMonth: parseInt(birthMonth),
         birthDay: parseInt(birthDay),
         birthHour: celebrity.birthHour ? parseInt(celebrity.birthHour) : null,
-        birthMinute: celebrity.birthMinute ? parseInt(celebrity.birthMinute) : null,
+        birthMinute: celebrity.birthMinute
+          ? parseInt(celebrity.birthMinute)
+          : null,
         calendar, // "SOLAR" | "LUNAR"
         gender, // "MALE" | "FEMALE"
         imageUrl: celebrity.imageUrl,
       });
 
-             // 번역 데이터 추가
-       translations.forEach((t: any) => {
-         allTranslations.push({
-           celebrityId: id,
-           languageCode: t.languageCode,
-           name: t.name,
-           occupation: t.occupation,
-           description: t.description,
-           aiResponse: t.aiResponse || null,
-         });
-       });
+      // 번역 데이터 추가
+      translations.forEach((t: any) => {
+        allTranslations.push({
+          celebrityId: id,
+          languageCode: t.languageCode,
+          name: t.name,
+          occupation: t.occupation,
+          description: t.description,
+          aiResponse: t.aiResponse || null,
+        });
+      });
     });
 
     if (validationErrors.length > 0) {
-      return c.json({ 
-        error: "데이터 검증 실패", 
-        details: validationErrors 
-      }, 400);
+      return c.json(
+        {
+          error: "데이터 검증 실패",
+          details: validationErrors,
+        },
+        400
+      );
     }
 
     const prisma = createPrismaClient(c.env.DB);
@@ -99,10 +107,10 @@ export async function createCelebritiesBatch(
       await prisma.$disconnect();
 
       return c.json(
-        { 
-          success: true, 
+        {
+          success: true,
           message: `${validCelebrities.length}명의 유명인물이 생성되었습니다.`,
-          createdCount: validCelebrities.length
+          createdCount: validCelebrities.length,
         },
         201
       );
@@ -122,9 +130,7 @@ export async function createCelebritiesBatch(
 }
 
 // [Admin] 유명인물 생성
-export async function createCelebrity(
-  c: Context,
-): Promise<Response> {
+export async function createCelebrity(c: Context): Promise<Response> {
   try {
     if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
@@ -203,9 +209,7 @@ export async function createCelebrity(
 }
 
 // [Admin] 유명인물 수정
-export async function updateCelebrity(
-  c: Context,
-): Promise<Response> {
+export async function updateCelebrity(c: Context): Promise<Response> {
   try {
     if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
@@ -321,9 +325,7 @@ export async function updateCelebrity(
 }
 
 // [Admin] 유명인물 삭제
-export async function deleteCelebrity(
-  c: Context
-): Promise<Response> {
+export async function deleteCelebrity(c: Context): Promise<Response> {
   try {
     if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
@@ -358,9 +360,7 @@ export async function deleteCelebrity(
 }
 
 // [Admin] 유명인물 업데이트
-export async function updateCelebrityAiResponse(
-  c: Context,
-): Promise<Response> {
+export async function updateCelebrityAiResponse(c: Context): Promise<Response> {
   try {
     if (!(await isAdmin(c))) {
       return c.json({ error: "관리자 권한이 필요합니다." }, 403);
@@ -383,7 +383,7 @@ export async function updateCelebrityAiResponse(
     }
 
     const prisma = createPrismaClient(c.env.DB);
-    
+
     // 해당 언어의 번역 데이터가 존재하는지 확인
     const existingTranslation = await prisma.celebrityTranslation.findFirst({
       where: {
@@ -394,10 +394,13 @@ export async function updateCelebrityAiResponse(
 
     if (!existingTranslation) {
       await prisma.$disconnect();
-      return c.json({ 
-        error: "해당 언어의 번역 데이터를 찾을 수 없습니다.",
-        message: `Celebrity ID: ${celebrityId}, Language: ${languageCode}`
-      }, 404);
+      return c.json(
+        {
+          error: "해당 언어의 번역 데이터를 찾을 수 없습니다.",
+          message: `Celebrity ID: ${celebrityId}, Language: ${languageCode}`,
+        },
+        404
+      );
     }
 
     // aiResponse만 업데이트
@@ -435,9 +438,7 @@ export async function updateCelebrityAiResponse(
 /**
  * 유명인물 요청 목록 조회 (관리자용)
  */
-export async function getCelebrityRequests(
-  c: Context,
-): Promise<Response> {
+export async function getCelebrityRequests(c: Context): Promise<Response> {
   try {
     return await paginate(c, c.env.DB, {
       tableName: "celebrity_requests",
@@ -459,23 +460,24 @@ export async function getCelebrityRequests(
 /**
  * 유명인물 목록 조회
  */
-export async function getCelebrities(
-  c: Context,
-): Promise<Response> {
+export async function getCelebrities(c: Context): Promise<Response> {
   try {
     const prisma = createPrismaClient(c.env.DB);
     const { searchParams } = new URL(c.req.url);
 
-    const { page, take, skip } = parsePagination(c, { defaultLimit: 10, maxLimit: 100 });
+    const { page, take, skip } = parsePagination(c, {
+      defaultLimit: 10,
+      maxLimit: 100,
+    });
     const sort = searchParams.get("sort") || "createdAt";
     const order = searchParams.get("order")?.toLowerCase() || "desc";
     const id = searchParams.get("id") || "";
     const search = searchParams.get("search") || "";
     const language = (searchParams.get("language") || "").toLowerCase();
     const allowedLanguages = new Set(["ko", "en", "ja", "zh", "vi"]);
-    
+
     let where = {};
-    
+
     if (id) {
       where = {
         id: {
@@ -561,22 +563,47 @@ export async function getCelebrities(
       skip,
       take,
     };
-    
+
     const [celebrities, totalCount] = await Promise.all([
       prisma.celebrity.findMany(queryOptions),
       prisma.celebrity.count({ where }),
     ]);
 
-    // 각 유명인물에 대해 aiResponse 유무 확인 및 추가 정보 계산
-    const celebritiesWithStats = celebrities.map(celebrity => {
+    // 각 유명인물에 대해 출력 스키마를 명시적으로 구성 (중복 상위 필드 제거)
+    const celebritiesWithStats = celebrities.map((celebrity) => {
       const viewCountValue = celebrity.viewCount?.viewCount || 0;
       const commentCount = celebrity._count.comments;
-      
-      // celebrity 객체에서 viewCount와 _count 속성을 제거하고 새로운 속성들 추가
+
       const { viewCount: _, _count: __, ...celebrityWithoutStats } = celebrity;
-      
+
+      const {
+        id,
+        birthYear,
+        birthMonth,
+        birthDay,
+        birthHour,
+        birthMinute,
+        calendar,
+        gender,
+        imageUrl,
+        createdAt,
+        updatedAt,
+        translations,
+      } = celebrityWithoutStats as any;
+
       return {
-        ...celebrityWithoutStats,
+        id,
+        birthYear,
+        birthMonth,
+        birthDay,
+        birthHour,
+        birthMinute,
+        calendar,
+        gender,
+        imageUrl,
+        createdAt,
+        updatedAt,
+        translations,
         viewCount: viewCountValue,
         commentCount,
       };

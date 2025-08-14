@@ -3,7 +3,6 @@ import { getAnalysisTypePoints, updatePointTransactionAnalysisId, refundPoints }
 import {
   buildGeminiPayload,
   generateTitle,
-  getResponseType,
   saveSajuAnalysisInitial,
   updateSajuAnalysis,
   type AnalysisJob
@@ -71,7 +70,6 @@ export class SajuAnalysisWorker implements DurableObject {
       sajuData: body.sajuData,
       conversationHistory: body.conversationHistory,
       model: body.model,
-      fortuneType: body.fortuneType,
       destination: body.destination,
       // 재질문/옵션 관련 전달 필드 유지
       followUpMode: body.followUpMode,
@@ -631,7 +629,6 @@ export class SajuAnalysisWorker implements DurableObject {
       metadata: {
         modelUsed: job.model,
         timestamp: new Date().toISOString(),
-        responseType: getResponseType(job.type),
         // usageMetadata 저장
         ...(latestUsageMetadata && {
           usageMetadata: latestUsageMetadata,

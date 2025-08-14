@@ -16,39 +16,40 @@ export function createSajuRouter(authMiddleware: MiddlewareHandler): OpenAPIHono
 
   // 스키마 정의
   const SajuProfileSchema = z.object({
-    이름: z.string().openapi({ description: "이름", example: "홍길동" }),
-    년: z
+    name: z.string().openapi({ description: "이름", example: "홍길동" }),
+    year: z
       .string()
       .length(4)
       .regex(/^\d{4}$/)
       .openapi({ description: "출생년도 (YYYY)", example: "1990" }),
-    월: z
+    month: z
       .string()
       .length(2)
       .regex(/^(0[1-9]|1[0-2])$/)
       .openapi({ description: "출생월 (MM)", example: "01" }),
-    일: z
+    day: z
       .string()
       .length(2)
       .regex(/^(0[1-9]|[12]\d|3[01])$/)
       .openapi({ description: "출생일 (DD)", example: "15" }),
-    시간: z
+    hour: z
       .string()
       .length(2)
       .regex(/^([01]\d|2[0-3])$/)
       .optional()
       .openapi({ description: "출생시간 (HH, 00-23)", example: "14" }),
-    분: z
+    minute: z
       .string()
       .length(2)
       .regex(/^[0-5]\d$/)
       .optional()
       .openapi({ description: "출생분 (MM, 00-59)", example: "30" }),
-    달력: z.enum(["양력", "음력"]).openapi({ description: "달력 종류", example: "양력" }),
-    성별: z.enum(["남자", "여자"]).openapi({ description: "성별", example: "남자" }),
-    국가: z.string().openapi({ description: "국가", example: "한국" }),
-    도시: z.string().openapi({ description: "도시", example: "서울" }),
-    계산방법: z.string().openapi({ description: "계산 방법", example: "일반" }),
+    calendar: z.enum(["양력", "음력"]).openapi({ description: "달력 종류", example: "양력" }),
+    gender: z.enum(["남자", "여자"]).openapi({ description: "성별", example: "남자" }),
+    country: z.string().openapi({ description: "국가", example: "한국" }),
+    city: z.string().openapi({ description: "도시", example: "서울" }),
+    calculationMethod: z.string().openapi({ description: "계산 방법", example: "일반" }),
+    context: z.string().nullable().optional().openapi({ description: "맥락 정보", example: "특이사항 메모" }),
   }).openapi({ type: 'object' });
 
   const SajuProfileResponseSchema = SajuProfileSchema.extend({

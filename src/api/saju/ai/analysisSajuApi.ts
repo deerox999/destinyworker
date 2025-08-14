@@ -274,12 +274,12 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
 
     // 궁합 분석의 경우 추가 검증
     if (type === "compatibility") {
-      if (!body.sajuData.person1 || !body.sajuData.person2) {
+      if (body.sajuData.length < 2) {
         return c.json(
           {
             error:
-              "궁합 분석을 위해서는 person1과 person2 데이터가 필요합니다.",
-            details: "sajuData에 person1과 person2가 포함되어야 합니다.",
+              "궁합 분석을 위해서는 최소 2명 이상의 데이터가 필요합니다.",
+            details: "sajuData에 최소 2명 이상의 데이터가 포함되어야 합니다.",
           },
           400
         );

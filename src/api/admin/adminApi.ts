@@ -4,21 +4,6 @@ import { addPoints, deductPoints, getPointTransactions, getUserPoints } from "..
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
 import { toUTC, toJSON } from "../../common/utils";
 
-// 영어 -> 한글 필드 변환 (사주 프로필용)
-const toKoreanFields = (profile: any) => ({
-  id: profile.id,
-  이름: profile.name,
-  년: profile.year,
-  월: profile.month,
-  일: profile.day,
-  시간: profile.hour,
-  분: profile.minute,
-  달력: profile.calendar,
-  성별: profile.gender,
-  createdAt: toUTC(profile.createdAt),
-  updatedAt: toUTC(profile.updatedAt),
-});
-
 // 가입한 유저 목록 조회
 export async function getUsers(c: Context): Promise<any> {
   try {
@@ -149,7 +134,23 @@ export async function getUserProfiles(
         point: user.point,
         createdAt: toUTC(user.createdAt),
       },
-      profiles: profiles.map(toKoreanFields),
+      profiles: profiles.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        year: p.year,
+        month: p.month,
+        day: p.day,
+        hour: p.hour,
+        minute: p.minute,
+        calendar: p.calendar,
+        gender: p.gender,
+        country: p.country,
+        city: p.city,
+        calculationMethod: p.calculationMethod,
+        context: p.context,
+        createdAt: toUTC(p.createdAt),
+        updatedAt: toUTC(p.updatedAt),
+      })),
       count: profiles.length,
     });
   } catch (error) {

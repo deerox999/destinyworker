@@ -250,6 +250,25 @@ export async function deleteAccount(
 
     const prisma = createPrismaClient(c.env.DB);
 
+    // 세션 유효성 확인 (만료/삭제 여부 검증)
+    const authHeader = c.req.header("Authorization");
+    const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : null;
+    if (!token) {
+      await prisma.$disconnect();
+      return c.json({ error: "인증 토큰이 필요합니다." }, 401);
+    }
+    const now = new Date();
+    const session = await prisma.session.findFirst({
+      where: {
+        jwtToken: token,
+        expiresAt: { gt: now },
+      },
+    });
+    if (!session) {
+      await prisma.$disconnect();
+      return c.json({ error: "만료된 세션입니다." }, 401);
+    }
+
     // 프로필 이미지가 R2에 있으면 삭제를 위해 현재 사용자 조회
     const existingUser = await prisma.user.findUnique({
       where: { id: user.id },

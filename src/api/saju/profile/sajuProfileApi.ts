@@ -2,67 +2,34 @@ import { Context } from "hono";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
 
-// 한글 -> 영어 필드 변환
-const toDbFields = (data: any) => ({
-  name: data.이름,
-  year: data.년,
-  month: data.월,
-  day: data.일,
-  hour: data.시간 === "" || data.시간 === null ? null : data.시간,
-  minute: data.분 === "" || data.분 === null ? null : data.분,
-  calendar: data.달력,
-  gender: data.성별,
-  country: data.국가,
-  city: data.도시,
-  calculationMethod: data.계산방법,
-  context: data.맥락정보 || null,
-});
+// 빈 문자열을 null로 변환하여 DB 저장 호환성 유지
+const normalizeOptionalTime = (value: unknown) => (value === "" ? null : value);
 
-// 영어 -> 한글 필드 변환
-const toKoreanFields = (profile: any) => ({
-  id: profile.id,
-  이름: profile.name,
-  년: profile.year,
-  월: profile.month,
-  일: profile.day,
-  시간: profile.hour,
-  분: profile.minute,
-  달력: profile.calendar,
-  성별: profile.gender,
-  국가: profile.country,
-  도시: profile.city,
-  계산방법: profile.calculationMethod,
-  맥락정보: profile.context,
-  createdAt: profile.createdAt,
-  updatedAt: profile.updatedAt,
-});
-
-// 데이터 검증
+// 데이터 검증 (camelCase)
 const validateSajuData = (data: any): boolean => {
   const isHourValid =
-    data.시간 === undefined ||
-    data.시간 === null ||
-    data.시간 === "" ||
-    /^([01]\d|2[0-3])$/.test(data.시간);
+    data.hour === undefined ||
+    data.hour === null ||
+    data.hour === "" ||
+    /^([01]\d|2[0-3])$/.test(data.hour);
   const isMinuteValid =
-    data.분 === undefined ||
-    data.분 === null ||
-    data.분 === "" ||
-    /^[0-5]\d$/.test(data.분);
+    data.minute === undefined ||
+    data.minute === null ||
+    data.minute === "" ||
+    /^[0-5]\d$/.test(data.minute);
 
   return (
-    data?.이름?.trim() &&
-    /^\d{4}$/.test(data.년) &&
-    /^(0[1-9]|1[0-2])$/.test(data.월) &&
-    /^(0[1-9]|[12]\d|3[01])$/.test(data.일) &&
+    data?.name?.trim() &&
+    /^\d{4}$/.test(data.year) &&
+    /^(0[1-9]|1[0-2])$/.test(data.month) &&
+    /^(0[1-9]|[12]\d|3[01])$/.test(data.day) &&
     isHourValid &&
     isMinuteValid &&
-    ["양력", "음력"].includes(data.달력) &&
-    ["남자", "여자"].includes(data.성별) &&
-    // 선택적 필드들은 존재할 경우에만 검증
-    (data.국가 === undefined || typeof data.국가 === 'string') &&
-    (data.도시 === undefined || typeof data.도시 === 'string') &&
-    (data.계산방법 === undefined || typeof data.계산방법 === 'string')
+    ["양력", "음력"].includes(data.calendar) &&
+    ["남자", "여자"].includes(data.gender) &&
+    (data.country === undefined || typeof data.country === 'string') &&
+    (data.city === undefined || typeof data.city === 'string') &&
+    (data.calculationMethod === undefined || typeof data.calculationMethod === 'string')
   );
 };
 
@@ -83,7 +50,7 @@ export async function getSajuProfiles(
 
     return c.json({
       success: true,
-      profiles: profiles.map(toKoreanFields),
+      profiles,
       count: profiles.length,
     });
   } catch (error) {
@@ -112,7 +79,21 @@ export async function createSajuProfile(
     }
     const prisma = createPrismaClient(c.env.DB);
     const profile = await prisma.sajuProfile.create({
-      data: { userId: user.id, ...toDbFields(body) },
+      data: {
+        userId: user.id,
+        name: body.name,
+        year: body.year,
+        month: body.month,
+        day: body.day,
+        hour: normalizeOptionalTime(body.hour) as string | null | undefined,
+        minute: normalizeOptionalTime(body.minute) as string | null | undefined,
+        calendar: body.calendar,
+        gender: body.gender,
+        country: body.country,
+        city: body.city,
+        calculationMethod: body.calculationMethod,
+        context: body.context ?? null,
+      },
     });
     await prisma.$disconnect();
 
@@ -120,7 +101,7 @@ export async function createSajuProfile(
       {
         success: true,
         id: profile.id,
-        profile: toKoreanFields(profile),
+        profile,
         message: "생성 완료",
       },
       201
@@ -173,7 +154,20 @@ export async function updateSajuProfile(
 
     await prisma.sajuProfile.update({
       where: { id: profileId },
-      data: toDbFields(body),
+      data: {
+        name: body.name,
+        year: body.year,
+        month: body.month,
+        day: body.day,
+        hour: normalizeOptionalTime(body.hour) as string | null | undefined,
+        minute: normalizeOptionalTime(body.minute) as string | null | undefined,
+        calendar: body.calendar,
+        gender: body.gender,
+        country: body.country,
+        city: body.city,
+        calculationMethod: body.calculationMethod,
+        context: body.context ?? null,
+      },
     });
     await prisma.$disconnect();
 
@@ -282,7 +276,7 @@ export async function getSajuProfile(
 
     return c.json({
       success: true,
-      profile: toKoreanFields(profile),
+      profile,
     });
   } catch (error) {
     console.error("사주 프로필 조회 실패:", error);

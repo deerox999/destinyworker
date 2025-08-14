@@ -22,30 +22,31 @@ export const getLanguageName = (language: string): string => {
 };
 
 export const supportedLanguages = ["ko", "en", "ja", "zh", "vi"] as const;
-export type SupportedLanguage = typeof supportedLanguages[number];
+export type SupportedLanguage = (typeof supportedLanguages)[number];
 
 export function requireLanguageParam(c: Context): SupportedLanguage {
   const language = c.req.query("language");
-  if (!language || !supportedLanguages.includes(language as SupportedLanguage)) {
+  if (
+    !language ||
+    !supportedLanguages.includes(language as SupportedLanguage)
+  ) {
     throw new Error("INVALID_LANGUAGE");
   }
   return language as SupportedLanguage;
 }
 
 // JWT 토큰에서 사용자 정보 추출
-export const getUserFromToken = async (c: Context): Promise<{ id: number; email: string; role: string } | null> => {
+export const getUserFromToken = async (
+  c: Context
+): Promise<{ id: number; email: string; role: string } | null> => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
 
   try {
     const token = authHeader.substring(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-    );
-    if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
+    // 1단계: GOOGLE_CLIENT_SECRET로 서명 검증
+    const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
+    if (!payload) return null;
 
     return {
       id: payload.userId,
@@ -150,14 +151,19 @@ export async function verifyJWT(
 }
 
 // 날짜를 UTC 문자열로 변환
-export const toUTC = (date: Date | string | null | undefined): string | null => {
+export const toUTC = (
+  date: Date | string | null | undefined
+): string | null => {
   if (!date) return null;
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toISOString();
 };
 
 // Prisma 핸들러 감싸기 (연결 생성/종료 보장)
-export async function withPrisma<T>(db: D1Database, handler: (prisma: any) => Promise<T>): Promise<T> {
+export async function withPrisma<T>(
+  db: D1Database,
+  handler: (prisma: any) => Promise<T>
+): Promise<T> {
   const prisma = createPrismaClient(db);
   try {
     return await handler(prisma);
