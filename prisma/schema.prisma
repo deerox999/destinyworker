@@ -410,3 +410,28 @@ model SajuAnalysis {
   @@index([userId, createdAt]) /// 사용자별 최신 분석 조회를 위한 인덱스
   @@index([userId, isFavorite]) /// 즐겨찾기 조회를 위한 인덱스
 }
+
+/// API 호출/에러 간단 로깅 테이블
+model ApiLog {
+  id           Int       @id @default(autoincrement()) /// 로그 고유 ID
+  method       String    /// HTTP 메서드
+  url          String    /// 요청 URL(쿼리 포함 가능)
+  statusCode   Int?      /// 응답 상태 코드
+  durationMs   Int?      /// 소요 시간(ms)
+
+  // 통합 JSON 슬롯들(문자열로 저장)
+  userJson     String?   /// 사용자 객체 스냅샷(JSON 문자열)
+  paramsJson   String?   /// 파라미터 통합(JSON 문자열: query/path/body/headers 등)
+  responseJson String?   /// 응답(JSON 문자열) - 기본 미사용
+
+  // 환경 메타
+  ip           String?   /// 클라이언트 IP(cf-connecting-ip)
+  userAgent    String?   /// User-Agent
+  notes        String?   /// 비고(호출 용도 기록 등)
+
+  createdAt    DateTime  @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간(UTC)
+
+  @@index([createdAt])
+  @@index([statusCode, createdAt])
+  @@index([url, createdAt])
+}

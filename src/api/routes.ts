@@ -12,12 +12,32 @@ import { createAuthRouter } from "./user/auth/auth.routes";
 import { createPaymentRouter } from "./user/payment/payment.routes";
 import { createR2Router } from "./common/r2.routes";
 import { createUserRouter } from "./user/user.routes";
+import { createHistoryRouter } from "./history/routes";
+import { createPrismaClient } from "../common/prismaUtils";
+import { logApi } from "../common/historyLogger";
 
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터 (Hono 기반)
  */
-export function createAppRouter(): OpenAPIHono {
-  const app = new OpenAPIHono();
+type AppEnv = {
+  Bindings: {
+    DB: any;
+    GOOGLE_CLIENT_SECRET?: string;
+  };
+  Variables: {
+    user?: { id: number; email: string; role: string };
+    reqStartedAtMs?: number;
+  };
+};
+
+export function createAppRouter(): OpenAPIHono<AppEnv> {
+  const app = new OpenAPIHono<AppEnv>();
+
+  // 요청 시작 시각 저장(에러 로깅용 duration 계산)
+  app.use("*", async (c, next) => {
+    c.set("reqStartedAtMs", Date.now());
+    await next();
+  });
 
   const authMiddleware = bearerAuth({
     verifyToken: async (token, c) => {
@@ -75,6 +95,35 @@ export function createAppRouter(): OpenAPIHono {
   });
   app.get("/swagger", swaggerUI({ url: "/openapi.json" }));
 
+   // 전역 에러 로깅(에러만 기록)
+  app.onError(async (err, c) => {
+    try {
+      const prisma = createPrismaClient(c.env.DB);
+      const started = c.get("reqStartedAtMs");
+      const durationMs = typeof started === "number" ? Date.now() - started : undefined;
+      const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? undefined;
+      const userAgent = c.req.header("user-agent") ?? undefined;
+      const status = (err as any)?.status ?? 500;
+      await logApi(prisma as any, {
+        method: c.req.method,
+        url: c.req.url,
+        statusCode: status,
+        durationMs,
+        user: c.get("user"),
+        params: undefined,
+        ip,
+        userAgent,
+        notes: err?.message ?? "Unhandled error",
+      });
+      await (prisma as any).$disconnect?.();
+    } catch (_) {}
+
+    // 표준 에러 응답
+    const status = (err as any)?.status ?? 500;
+    const message = (err as any)?.message ?? "Internal Server Error";
+    return c.json({ success: false, error: message }, status as any);
+  });
+
   // 모듈화된 라우터 병합
   app.route("/api/auth", createAuthRouter());
   app.route("/api/R2", createR2Router(authMiddleware));
@@ -86,6 +135,7 @@ export function createAppRouter(): OpenAPIHono {
   app.route("/api/celebrities", createCelebrityRouter(authMiddleware));
   app.route("/api/admin/celebrities", createCelebrityAdminRouter(authMiddleware));
   app.route("/api/community", createCommunityRouter());
+  app.route("/api/history", createHistoryRouter());
 
   return app;
 }

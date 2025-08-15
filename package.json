@@ -24,7 +24,7 @@
     "lunar-javascript": "^1.7.3",
     "swagger-typescript-api": "^13.2.7",
     "typescript": "5.8.3",
-    "wrangler": "^4.28.1"
+    "wrangler": "^4.30.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.844.0",
@@ -52,6 +52,10 @@
     "dev:remote": "wrangler dev --x-remote-bindings",
     "deploy": "wrangler deploy",
     "check": "tsc && wrangler deploy --dry-run",
-    "secret:put": "wrangler secret put RESEND_API_KEY"
+    "secret:put": "wrangler secret put RESEND_API_KEY",
+    "whoami": "npx wrangler whoami",
+    "logout": "npx wrangler logout",
+    "login": "npx wrangler login",
+    "db:list": "npx wrangler d1 list"
   }
 }

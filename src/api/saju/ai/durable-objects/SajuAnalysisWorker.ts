@@ -8,6 +8,7 @@ import {
   type AnalysisJob
 } from "../utils";
 import { createPrismaClient } from "../../../../common/prismaUtils";
+import { logApi } from "../../../../common/historyLogger";
 /**
  * 524오류 때문에 논스트리밍 요청을 해도 내부적으로는 스트리밍 방식으로 호출 후 저장처리
  * 100초안에 ai가 응답을 내놓아야 하기때문
@@ -44,6 +45,7 @@ export class SajuAnalysisWorker implements DurableObject {
   private jobs: Map<string, AnalysisJob> = new Map();
   private jobTimeouts: Map<string, any> = new Map();
   private isProcessingFromAlarm: boolean = false;
+  private historyLoggedJobIds: Set<string> = new Set();
 
   constructor(state: DurableObjectState, env: any) {
     this.state = state;
@@ -79,6 +81,32 @@ export class SajuAnalysisWorker implements DurableObject {
       createdAt: new Date().toISOString(),
       status: "pending",
     };
+  }
+
+  /**
+   * 실패 시 히스토리 로깅(중복 방지)
+   */
+  private async logHistoryOnce(job: AnalysisJob, message: string, routeHint?: string): Promise<void> {
+    try {
+      if (!job?.id || this.historyLoggedJobIds.has(job.id)) return;
+      this.historyLoggedJobIds.add(job.id);
+      const prisma = createPrismaClient(this.env.DB);
+      const createdAtMs = Date.parse(job.createdAt || "");
+      const durationMs = isFinite(createdAtMs) ? (Date.now() - createdAtMs) : undefined;
+      const route = (job as any)?.route || routeHint || "/jobs/unknown";
+      await logApi(prisma as any, {
+        method: "POST",
+        url: route,
+        statusCode: 500,
+        durationMs,
+        user: job.userId ? { id: job.userId } : undefined,
+        params: { analysisType: job.analysisType, type: job.type, model: job.model },
+        notes: message,
+      });
+      await (prisma as any).$disconnect?.();
+    } catch {
+      // ignore logging errors
+    }
   }
 
   /**
@@ -238,6 +266,7 @@ export class SajuAnalysisWorker implements DurableObject {
       // 1. 임시 job 객체 생성 (DB 저장용)
       const tempJob = this.createJob(body, body.jobId);
       tempJob.status = "processing";
+      (tempJob as any).route = "/jobs/stream";
 
       // 2. DB에 초기 레코드 생성 (스트리밍도 미리 생성하여 통일)
       const analysisStartedAt = new Date();
@@ -648,6 +677,7 @@ export class SajuAnalysisWorker implements DurableObject {
       
       const job = this.createJob(body, body.jobId, body.analysisId);
       job.status = "processing";
+      (job as any).route = "/jobs/process";
       
       this.jobs.set(job.id, job);
 
@@ -696,9 +726,11 @@ export class SajuAnalysisWorker implements DurableObject {
       this.scheduleJobTimeout(job);
       await this.scheduleAlarmSoon();
 
+      (job as any).route = (job as any).route || "/jobs/create";
       await this.processStreamingJob(job.id, false);
     } catch (error) {
-      await this.failJob(job, error instanceof Error ? error.message : "Unknown error");
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      await this.failJob(job, msg);
     }
   }
 
@@ -759,6 +791,8 @@ export class SajuAnalysisWorker implements DurableObject {
       } catch (refundError) {
         console.error("[SajuAnalysisWorker] 환불 처리 오류:", refundError);
       }
+      // 실패 히스토리 로깅(중복 방지)
+      await this.logHistoryOnce(job, message);
     } finally {
       this.clearJobTimeout(job.id);
     }

@@ -19,6 +19,7 @@ import {
 
 import { MiddlewareHandler } from "hono";
 import { PaginationQuerySchema, SuccessSchema, PaginationResponseSchema } from "../../common/schemas";
+import { getErrorLogs } from "./historyApi";
 
 export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -396,6 +397,55 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
     },
   });
 
+  // [Admin] 에러 로그 조회
+  const getErrorLogsRoute = createRoute({
+    method: "get",
+    path: "/history/logs",
+    summary: "[Admin] 실패 오류 로그 조회",
+    description: "statusCode가 400 이상인 API 에러 로그를 페이지네이션으로 조회합니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      query: PaginationQuerySchema.extend({
+        urlContains: z.string().optional().openapi({ param: { name: "urlContains", in: "query" }, description: "URL 포함 검색", example: "/api/ai" }),
+        from: z.string().optional().openapi({ param: { name: "from", in: "query" }, description: "시작일시(ISO)", example: "2025-01-01T00:00:00Z" }),
+        to: z.string().optional().openapi({ param: { name: "to", in: "query" }, description: "종료일시(ISO)", example: "2025-12-31T23:59:59Z" }),
+      }).openapi({ type: 'object' }),
+    },
+    responses: {
+      200: {
+        description: "성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              logs: z.array(
+                z.object({
+                  id: z.number().int(),
+                  method: z.string(),
+                  url: z.string(),
+                  statusCode: z.number().int().nullable(),
+                  durationMs: z.number().int().nullable(),
+                  ip: z.string().nullable(),
+                  userAgent: z.string().nullable(),
+                  notes: z.string().nullable(),
+                  createdAt: z.string(),
+                  user: z.any().nullable(),
+                }).openapi({ type: 'object' })
+              ).openapi({ type: 'array' }),
+              pagination: z.object({
+                totalItems: z.number().int(),
+                totalPages: z.number().int(),
+                currentPage: z.number().int(),
+                pageSize: z.number().int(),
+              }).openapi({ type: 'object' })
+            }).openapi({ type: 'object' }),
+          },
+        },
+      },
+      403: { description: "관리자 권한이 필요합니다." },
+    },
+  });
+
   const getAiUsageLogsForUserRoute = createRoute({
     method: "get",
     path: "/users/{userId}/ai-logs",
@@ -699,6 +749,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   app.openapi(getAiUsageStatsForModelRoute, (c) => getAiUsageStatsForModel(c)); // 안됨
   app.openapi(getAiUsageStatsByUserRoute, (c) => getAiUsageStatsByUser(c)); // 안됨
   app.openapi(getAiUsageLogsForUserRoute, (c) => getAiUsageLogsForUser(c)); // 안됨
+  app.openapi(getErrorLogsRoute, (c) => getErrorLogs(c));
   
   // 포인트 관련 라우트
   app.openapi(addUserPointsRoute, (c) => addUserPoints(c));
