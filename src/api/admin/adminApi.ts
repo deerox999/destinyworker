@@ -79,6 +79,142 @@ export async function getUsers(c: Context): Promise<any> {
   }
 }
 
+/**
+ * [Admin] 사용자 정보 수정 (role 포함, 범용 업데이트)
+ * - 관리자만 접근 가능
+ * - 허용된 필드만 업데이트
+ */
+export async function updateUserByAdmin(c: Context): Promise<Response> {
+  try {
+    if (!(await isAdmin(c))) {
+      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
+    }
+
+    const userId = Number(c.req.param("userId"));
+    if (!userId) {
+      return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    if (!body || typeof body !== "object") {
+      return c.json({ error: "요청 본문이 필요합니다." }, 400);
+    }
+
+    // 허용 필드 화이트리스트
+    const allowedRoles = new Set(["user", "admin"]);
+    const updatableKeys: (keyof any)[] = [
+      "role",
+      "name",
+      "userName",
+      "picture",
+      // 개인정보 동의 관련
+      "privacyConsent",
+      "privacyConsentVersion",
+      "privacyConsentAt",
+      "reportStorageConsent",
+      "reportStorageConsentVersion",
+      "reportStorageConsentAt",
+      "lastConsentAt",
+      "consentStatus",
+    ];
+
+    // point 변경은 별도 API로만 허용
+    if (Object.prototype.hasOwnProperty.call(body, "point")) {
+      return c.json({ error: "포인트는 전용 API로만 변경할 수 있습니다." }, 400);
+    }
+
+    const updateData: any = {};
+
+    for (const key of updatableKeys) {
+      if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+      const value = body[key as string];
+
+      if (key === "role") {
+        if (value == null || !allowedRoles.has(String(value))) {
+          return c.json({ error: "role은 'user' 또는 'admin'만 허용됩니다." }, 400);
+        }
+        updateData.role = String(value);
+        continue;
+      }
+
+      if (
+        key === "privacyConsentAt" ||
+        key === "reportStorageConsentAt" ||
+        key === "lastConsentAt"
+      ) {
+        // null 허용, 문자열이면 Date로 변환
+        if (value === null) {
+          updateData[key] = null;
+        } else if (typeof value === "string" || value instanceof Date) {
+          const dateVal = new Date(value as any);
+          if (isNaN(dateVal.getTime())) {
+            return c.json({ error: `${String(key)} 값이 올바른 날짜가 아닙니다.` }, 400);
+          }
+          updateData[key] = dateVal;
+        }
+        continue;
+      }
+
+      // 나머지 필드는 그대로 매핑 (nullable 허용 필드는 null도 허용)
+      updateData[key] = value;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return c.json({ error: "변경할 필드가 없습니다." }, 400);
+    }
+
+    const prisma = createPrismaClient(c.env.DB);
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        userName: true,
+        picture: true,
+        role: true,
+        point: true,
+        privacyConsent: true,
+        privacyConsentVersion: true,
+        privacyConsentAt: true,
+        reportStorageConsent: true,
+        reportStorageConsentVersion: true,
+        reportStorageConsentAt: true,
+        lastConsentAt: true,
+        consentStatus: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }).catch(async (e: any) => {
+      await prisma.$disconnect();
+      throw e;
+    });
+
+    await prisma.$disconnect();
+
+    return c.json({
+      success: true,
+      user: {
+        ...updated,
+        createdAt: toUTC(updated.createdAt),
+        updatedAt: toUTC(updated.updatedAt),
+        privacyConsentAt: updated.privacyConsentAt ? toUTC(updated.privacyConsentAt) : null,
+        reportStorageConsentAt: updated.reportStorageConsentAt ? toUTC(updated.reportStorageConsentAt) : null,
+        lastConsentAt: updated.lastConsentAt ? toUTC(updated.lastConsentAt) : null,
+      },
+    });
+  } catch (error) {
+    return c.json(
+      {
+        error: "사용자 정보 수정 실패",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+}
+
 // 특정 유저의 프로필 조회
 export async function getUserProfiles(
   c: Context

@@ -15,6 +15,7 @@ import {
   getUserAnalysisTransactions,
   getAnalysisById,
   getUserSajuAnalyses,
+  updateUserByAdmin,
 } from "./adminApi";
 
 import { MiddlewareHandler } from "hono";
@@ -44,6 +45,24 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
       example: 1,
     }),
   }).openapi({ type: 'object' });
+
+  // 사용자 수정 스키마 (관리자 전용)
+  const UpdateUserBodySchema = z
+    .object({
+      role: z.enum(["user", "admin"]).optional(),
+      name: z.string().min(1).optional(),
+      userName: z.string().min(1).nullable().optional(),
+      picture: z.string().url().nullable().optional(),
+      privacyConsent: z.boolean().optional(),
+      privacyConsentVersion: z.string().optional(),
+      privacyConsentAt: z.string().datetime().nullable().optional(),
+      reportStorageConsent: z.boolean().optional(),
+      reportStorageConsentVersion: z.string().optional(),
+      reportStorageConsentAt: z.string().datetime().nullable().optional(),
+      lastConsentAt: z.string().datetime().nullable().optional(),
+      consentStatus: z.string().optional(),
+    })
+    .openapi({ type: "object" });
 
   const DateRangeQuerySchema = z.object({
     startDate: z.string().optional().openapi({
@@ -112,6 +131,60 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
           },
         },
       },
+    },
+  });
+
+  const updateUserRoute = createRoute({
+    method: "patch",
+    path: "/users/{userId}",
+    summary: "[Admin] 사용자 정보 수정 (role 포함)",
+    description:
+      "관리자가 사용자 정보를 수정합니다. role, 이름, 프로필, 동의 정보 등 허용된 필드만 수정됩니다.",
+    tags: ["Admin"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      params: UserIdParamSchema,
+      body: {
+        content: {
+          "application/json": {
+            schema: UpdateUserBodySchema,
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "수정 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              user: z
+                .object({
+                  id: z.number().int(),
+                  email: z.string(),
+                  name: z.string(),
+                  userName: z.string().nullable().optional(),
+                  picture: z.string().url().nullable().optional(),
+                  role: z.string(),
+                  point: z.number().int(),
+                  privacyConsent: z.boolean(),
+                  privacyConsentVersion: z.string(),
+                  privacyConsentAt: z.string().datetime().nullable().optional(),
+                  reportStorageConsent: z.boolean(),
+                  reportStorageConsentVersion: z.string(),
+                  reportStorageConsentAt: z.string().datetime().nullable().optional(),
+                  lastConsentAt: z.string().datetime().nullable().optional(),
+                  consentStatus: z.string(),
+                  createdAt: z.string().datetime(),
+                  updatedAt: z.string().datetime(),
+                })
+                .openapi({ type: "object" }),
+            }).openapi({ type: "object" }),
+          },
+        },
+      },
+      400: { description: "잘못된 요청" },
+      403: { description: "관리자 권한이 필요합니다." },
     },
   });
 
@@ -742,6 +815,7 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   // 라우트 등록
   app.openapi(getAdminStatsRoute, (c) => getAdminStats(c));
   app.openapi(getUsersRoute, (c) => getUsers(c)); // 안됨
+  app.openapi(updateUserRoute, (c) => updateUserByAdmin(c));
   app.openapi(getUserProfilesRoute, (c) => getUserProfiles(c)); // 안됨
   app.openapi(getUserSajuAnalysesRoute, (c) => getUserSajuAnalyses(c));
   app.openapi(getLoginHistoryRoute, (c) => getLoginHistory(c)); // 안됨
