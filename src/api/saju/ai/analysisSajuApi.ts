@@ -376,13 +376,15 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       );
     }
 
-    // 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)
-    updateProfileContext(
-      c.env,
-      user.id,
-      options.profileId,
-      options.userContext
-    );
+    // 궁합이 아닐경우에만, 프로필 업데이트를 병렬로 처리 (응답에 영향 없음)
+    if (options.type !== 'compatibility') {
+      updateProfileContext(
+        c.env,
+        user.id,
+        options.profileId,
+        options.userContext
+      );
+    }
 
     return c.json(
       {

@@ -84,6 +84,8 @@ model SajuProfile {
   city      String? /// 도시
   calculationMethod String? /// 계산 방법
   context   String? /// 맥락 정보 (개인적인 상황, 고민 등)
+  groupName String? /// 프로필 그룹 이름(선택)
+  sortOrder Int     @default(0) /// 정렬 순서(낮을수록 먼저)
   createdAt DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 프로필 생성 시간
   updatedAt DateTime @updatedAt /// 프로필 마지막 업데이트 시간
   /// 관계: 사주 프로필은 하나의 사용자에 속함 (사용자 삭제 시 프로필도 삭제)

@@ -46,6 +46,8 @@ CREATE TABLE "SajuProfile" (
     "city" TEXT,
     "calculationMethod" TEXT,
     "context" TEXT,
+    "groupName" TEXT,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
     "createdAt" DATETIME NOT NULL DEFAULT (datetime('now', 'utc')),
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "SajuProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
