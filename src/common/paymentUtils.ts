@@ -1,6 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import { createPrismaClient } from './prismaUtils';
 
+// 구독 관련 상수
+export const SUBSCRIPTION_PRICE_PER_MONTH = 1000; // 1000 포인트 = 1개월
+export const DAYS_PER_SUBSCRIPTION_MONTH = 30; // 정확히 30일 기준
+
 // analysisType에 따른 포인트 계산 함수
 export function getAnalysisTypePoints(analysisType: string): number {
   switch (analysisType) {
@@ -72,6 +76,34 @@ export async function getUserPoints(db: D1Database, userId: number): Promise<num
   } catch (error) {
     console.error("Get user points error:", error);
     return 0;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+// 구독 활성 여부 및 잔여 기간 계산
+export async function isSubscriptionActive(
+  db: D1Database,
+  userId: number
+): Promise<{ active: boolean; subscriptionUntil: Date | null; remainingDays: number; remainingMonths: number }> {
+  const prisma = createPrismaClient(db);
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { subscriptionUntil: true },
+    });
+    const until = user?.subscriptionUntil ?? null;
+    if (!until) {
+      return { active: false, subscriptionUntil: null, remainingDays: 0, remainingMonths: 0 };
+    }
+    const now = new Date();
+    const ms = until.getTime() - now.getTime();
+    const remainingDays = Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+    const remainingMonths = Math.floor(remainingDays / DAYS_PER_SUBSCRIPTION_MONTH);
+    return { active: ms > 0, subscriptionUntil: until, remainingDays, remainingMonths };
+  } catch (error) {
+    console.error("Check subscription error:", error);
+    return { active: false, subscriptionUntil: null, remainingDays: 0, remainingMonths: 0 };
   } finally {
     await prisma.$disconnect();
   }

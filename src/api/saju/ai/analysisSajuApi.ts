@@ -3,6 +3,7 @@ import {
   getAnalysisTypePoints,
   refundPoints,
   usePoints,
+  isSubscriptionActive,
 } from "../../../common/paymentUtils";
 import { createPrismaClient, isAdmin } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
@@ -290,9 +291,15 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
     const analysisType = options.analysisType || "종합운세";
     let pointsCost = getAnalysisTypePoints(analysisType);
 
-    // highQuality(true → pro 모델 사용)일 때 포인트 가격을 1.5배로 조정
+    // highQuality(true → pro 모델 사용)일 때 포인트 가격 계수 적용
     if (options.highQuality) {
-      pointsCost = Math.round(pointsCost * 1.5);
+      try {
+        const sub = await isSubscriptionActive(c.env.DB, user.id);
+        const factor = sub.active ? 1.2 : 1.5;
+        pointsCost = Math.round(pointsCost * factor);
+      } catch (_) {
+        pointsCost = Math.round(pointsCost * 1.5);
+      }
     }
 
     // 포인트 검증

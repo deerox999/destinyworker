@@ -6,6 +6,7 @@
 generator client {
   provider = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
+  engineType = "wasm"
 }
 
 datasource db {
@@ -24,6 +25,9 @@ model User {
   picture   String? /// 사용자 프로필 사진 URL (Google 계정 프로필 사진, 선택사항)
   role      String   @default("user") /// 사용자 역할 (user, admin)
   point     Int      @default(3000) /// 사용자 포인트 (기본값: 3000)
+  
+  // 구독 만료 일시(UTC). null이면 미구독 상태
+  subscriptionUntil DateTime? /// 구독 만료 일시
   
   // 개인정보 동의 관련 필드들
   privacyConsent Boolean @default(false) /// 개인정보 수집 및 이용 동의 여부

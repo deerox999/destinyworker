@@ -86,22 +86,24 @@ async function findOrCreateUser(
         name: googleUserInfo.name,
         picture: googleUserInfo.picture,
       };
-      
+
       // 로컬 로그인 사용자(googleId가 빈 문자열)가 Google 로그인을 시도하는 경우
       // googleId를 업데이트하여 계정을 연결
       if (!user.googleId || user.googleId === "") {
         // googleId가 이미 다른 사용자에게 할당되어 있는지 확인
         const existingUserWithGoogleId = await prisma.user.findUnique({
-          where: { googleId: googleUserInfo.sub }
+          where: { googleId: googleUserInfo.sub },
         });
-        
+
         if (!existingUserWithGoogleId) {
           updateData.googleId = googleUserInfo.sub;
         } else {
-          console.warn(`Google ID ${googleUserInfo.sub} is already assigned to another user`);
+          console.warn(
+            `Google ID ${googleUserInfo.sub} is already assigned to another user`
+          );
         }
       }
-      
+
       user = await prisma.user.update({
         where: { id: user.id },
         data: updateData,
@@ -139,7 +141,7 @@ async function saveSession(
         userId: userId,
         jwtToken: jwtToken,
         expiresAt: expiresAt,
-      }
+      },
     });
     return true;
   } catch (error) {
@@ -155,9 +157,9 @@ async function cleanupExpiredSessions(prisma: any): Promise<void> {
     await prisma.session.deleteMany({
       where: {
         expiresAt: {
-          lt: now
-        }
-      }
+          lt: now,
+        },
+      },
     });
   } catch (error) {
     console.error("Session cleanup error:", error);
@@ -168,7 +170,7 @@ async function cleanupExpiredSessions(prisma: any): Promise<void> {
 async function deleteSession(prisma: any, jwtToken: string): Promise<boolean> {
   try {
     const result = await prisma.session.deleteMany({
-      where: { jwtToken: jwtToken }
+      where: { jwtToken: jwtToken },
     });
     return result.count > 0;
   } catch (error) {
@@ -178,15 +180,13 @@ async function deleteSession(prisma: any, jwtToken: string): Promise<boolean> {
 }
 
 // Google 로그인
-export async function googleLogin(
-  c: Context
-): Promise<Response> {
+export async function googleLogin(c: Context): Promise<Response> {
   if (!c.env.DB) {
     return c.json({ error: "데이터베이스가 설정되지 않았습니다." }, 500);
   }
 
   if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
-    console.log(c.env)
+    console.log(c.env);
     return c.json({ error: "OAuth 설정이 누락되었습니다." }, 500);
   }
 
@@ -199,7 +199,10 @@ export async function googleLogin(
     }
 
     // Google 토큰 검증
-    const googleUserInfo = await verifyGoogleToken(token, c.env.GOOGLE_CLIENT_ID);
+    const googleUserInfo = await verifyGoogleToken(
+      token,
+      c.env.GOOGLE_CLIENT_ID
+    );
     if (!googleUserInfo) {
       return c.json({ error: "유효하지 않은 Google 토큰입니다." }, 401);
     }
@@ -210,10 +213,7 @@ export async function googleLogin(
     const user = await findOrCreateUser(prisma, googleUserInfo);
     if (!user) {
       await prisma.$disconnect();
-      return c.json(
-        { error: "사용자 처리 중 오류가 발생했습니다." },
-        500
-      );
+      return c.json({ error: "사용자 처리 중 오류가 발생했습니다." }, 500);
     }
 
     // JWT 토큰 생성
@@ -223,7 +223,7 @@ export async function googleLogin(
     );
 
     // 세션 저장
-    const limitDate = 7 * 24 * 60 * 60 * 1000
+    const limitDate = 7 * 24 * 60 * 60 * 1000;
     const expiresAt = new Date(Date.now() + limitDate);
     await saveSession(prisma, user.id, jwtToken, expiresAt);
 
@@ -235,8 +235,8 @@ export async function googleLogin(
       await prisma.loginHistory.create({
         data: {
           userId: user.id,
-          action: 'login'
-        }
+          action: "login",
+        },
       });
     } catch (e) {
       console.error("Login history save error:", e);
@@ -293,8 +293,8 @@ export async function logout(c: Context): Promise<Response> {
       await prisma.loginHistory.create({
         data: {
           userId: payload.userId,
-          action: 'logout'
-        }
+          action: "logout",
+        },
       });
     } catch (e) {
       console.error("Logout history save error:", e);
@@ -305,17 +305,12 @@ export async function logout(c: Context): Promise<Response> {
     return c.json({ success: true, message: "로그아웃되었습니다." });
   } catch (error) {
     console.error("Logout error:", error);
-    return c.json(
-      { error: "로그아웃 처리 중 오류가 발생했습니다." },
-      500
-    );
+    return c.json({ error: "로그아웃 처리 중 오류가 발생했습니다." }, 500);
   }
 }
 
 // 사용자 정보 조회
-export async function getUserInfo(
-  c: Context
-): Promise<Response> {
+export async function getUserInfo(c: Context): Promise<Response> {
   if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
@@ -341,9 +336,9 @@ export async function getUserInfo(
       where: {
         jwtToken: token,
         expiresAt: {
-          gt: now
-        }
-      }
+          gt: now,
+        },
+      },
     });
 
     if (!session) {
@@ -353,29 +348,25 @@ export async function getUserInfo(
 
     // 사용자 정보 조회
     const user = await prisma.user.findUnique({
-      where: { id: payload.userId }
+      where: { id: payload.userId },
     });
 
     if (!user) {
       await prisma.$disconnect();
       return c.json({ error: "사용자를 찾을 수 없습니다." }, 404);
     }
+    console.log(`user : `, user)
 
     await prisma.$disconnect();
     return c.json({ user: user });
   } catch (error) {
     console.error("Get user info error:", error);
-    return c.json(
-      { error: "사용자 정보 조회 중 오류가 발생했습니다." },
-      500
-    );
+    return c.json({ error: "사용자 정보 조회 중 오류가 발생했습니다." }, 500);
   }
 }
 
 // 토큰 갱신
-export async function refreshToken(
-  c: Context
-): Promise<Response> {
+export async function refreshToken(c: Context): Promise<Response> {
   if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
@@ -400,7 +391,11 @@ export async function refreshToken(
 
     // 새 JWT 토큰 생성
     const newJwtToken = await generateJWT(
-      { userId: payload.userId, email: payload.email, role: payload.role || "user" },
+      {
+        userId: payload.userId,
+        email: payload.email,
+        role: payload.role || "user",
+      },
       c.env.GOOGLE_CLIENT_SECRET
     );
 

@@ -3,8 +3,6 @@ import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken } from "../../common/utils";
 import { deleteR2Object, deleteImagesFromR2 } from "../common/r2Api";
 
-
-
 // 프로필 이름 유효성 검사
 const validateUserName = (userName: string): boolean => {
   if (!userName || typeof userName !== "string") return false;
@@ -23,9 +21,7 @@ const getObjectKeyFromUrl = (url: string, R2_PUBLIC_URL: string): string => {
 };
 
 // 프로필 수정
-export async function updateUserProfile(
-  c: Context
-): Promise<Response> {
+export async function updateUserProfile(c: Context): Promise<Response> {
   try {
     const user = await getUserFromToken(c);
     if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
@@ -46,17 +42,17 @@ export async function updateUserProfile(
           400
         );
       }
-      
+
       const trimmedUserName = body.userName.trim();
-      
+
       // 사용자 이름 중복 체크
       const prisma = createPrismaClient(c.env.DB);
       const existingUserWithName = await prisma.user.findFirst({
         where: {
           userName: trimmedUserName,
-          id: { not: user.id } // 현재 사용자 제외
+          id: { not: user.id }, // 현재 사용자 제외
         },
-        select: { id: true }
+        select: { id: true },
       });
 
       if (existingUserWithName) {
@@ -88,15 +84,18 @@ export async function updateUserProfile(
     if (body.picture !== undefined) {
       if (typeof body.picture !== "string") {
         await prisma.$disconnect();
-        return c.json(
-          { error: "잘못된 프로필 사진 형식입니다." },
-          400
-        );
+        return c.json({ error: "잘못된 프로필 사진 형식입니다." }, 400);
       }
 
       // 기존 이미지가 R2에 저장된 이미지인 경우 삭제
-      if (existingUser.picture && isR2ImageUrl(existingUser.picture, c.env.R2_PUBLIC_URL)) {
-        const objectKey = getObjectKeyFromUrl(existingUser.picture, c.env.R2_PUBLIC_URL);
+      if (
+        existingUser.picture &&
+        isR2ImageUrl(existingUser.picture, c.env.R2_PUBLIC_URL)
+      ) {
+        const objectKey = getObjectKeyFromUrl(
+          existingUser.picture,
+          c.env.R2_PUBLIC_URL
+        );
         const deleteResult = await deleteR2Object(objectKey, c.env);
         if (!deleteResult) {
           console.error(`Failed to delete old profile image: ${objectKey}`);
@@ -140,9 +139,7 @@ export async function updateUserProfile(
 }
 
 // 개인정보 동의 업데이트
-export async function updateConsent(
-  c: Context
-): Promise<Response> {
+export async function updateConsent(c: Context): Promise<Response> {
   try {
     const userInfo = await getUserFromToken(c);
     if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
@@ -155,7 +152,7 @@ export async function updateConsent(
     };
 
     const prisma = createPrismaClient(c.env.DB);
-    
+
     // 사용자 존재 확인
     const existingUser = await prisma.user.findUnique({
       where: { id: userInfo.id },
@@ -182,18 +179,33 @@ export async function updateConsent(
     // 리포트 저장 동의 처리
     if (body.reportStorageConsent !== undefined) {
       updateData.reportStorageConsent = body.reportStorageConsent;
-      updateData.reportStorageConsentVersion = body.reportStorageConsentVersion || "1.0";
+      updateData.reportStorageConsentVersion =
+        body.reportStorageConsentVersion || "1.0";
       if (body.reportStorageConsent) {
         updateData.reportStorageConsentAt = now;
       }
     }
 
     // 동의 상태 계산
-    const privacyConsent = body.privacyConsent !== undefined ? body.privacyConsent : 
-      (await prisma.user.findUnique({ where: { id: userInfo.id }, select: { privacyConsent: true } }))?.privacyConsent;
-    
-    const reportStorageConsent = body.reportStorageConsent !== undefined ? body.reportStorageConsent : 
-      (await prisma.user.findUnique({ where: { id: userInfo.id }, select: { reportStorageConsent: true } }))?.reportStorageConsent;
+    const privacyConsent =
+      body.privacyConsent !== undefined
+        ? body.privacyConsent
+        : (
+            await prisma.user.findUnique({
+              where: { id: userInfo.id },
+              select: { privacyConsent: true },
+            })
+          )?.privacyConsent;
+
+    const reportStorageConsent =
+      body.reportStorageConsent !== undefined
+        ? body.reportStorageConsent
+        : (
+            await prisma.user.findUnique({
+              where: { id: userInfo.id },
+              select: { reportStorageConsent: true },
+            })
+          )?.reportStorageConsent;
 
     if (privacyConsent && reportStorageConsent) {
       updateData.consentStatus = "complete";
@@ -241,9 +253,7 @@ export async function updateConsent(
 }
 
 // 회원 탈퇴: 사용자와 관련된 모든 기록 삭제
-export async function deleteAccount(
-  c: Context
-): Promise<Response> {
+export async function deleteAccount(c: Context): Promise<Response> {
   try {
     const user = await getUserFromToken(c);
     if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
@@ -252,7 +262,10 @@ export async function deleteAccount(
 
     // 세션 유효성 확인 (만료/삭제 여부 검증)
     const authHeader = c.req.header("Authorization");
-    const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : null;
+    const token =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.substring(7)
+        : null;
     if (!token) {
       await prisma.$disconnect();
       return c.json({ error: "인증 토큰이 필요합니다." }, 401);
@@ -278,8 +291,14 @@ export async function deleteAccount(
     // 사용자가 작성한 게시글/댓글에 포함된 R2 이미지 삭제
     try {
       const [userPosts, userComments] = await Promise.all([
-        prisma.post.findMany({ where: { authorId: user.id }, select: { content: true } }),
-        prisma.comment.findMany({ where: { authorId: user.id }, select: { content: true } }),
+        prisma.post.findMany({
+          where: { authorId: user.id },
+          select: { content: true },
+        }),
+        prisma.comment.findMany({
+          where: { authorId: user.id },
+          select: { content: true },
+        }),
       ]);
       for (const p of userPosts) {
         if (p.content) {
@@ -309,9 +328,16 @@ export async function deleteAccount(
     await prisma.user.delete({ where: { id: user.id } });
 
     // 프로필 이미지 R2에서 삭제 (사용자 레코드 삭제 후에도 URL 정보는 위에서 확보함)
-    if (existingUser?.picture && c.env.R2_PUBLIC_URL && existingUser.picture.startsWith(c.env.R2_PUBLIC_URL)) {
+    if (
+      existingUser?.picture &&
+      c.env.R2_PUBLIC_URL &&
+      existingUser.picture.startsWith(c.env.R2_PUBLIC_URL)
+    ) {
       try {
-        const objectKey = existingUser.picture.replace(`${c.env.R2_PUBLIC_URL}/`, "");
+        const objectKey = existingUser.picture.replace(
+          `${c.env.R2_PUBLIC_URL}/`,
+          ""
+        );
         await deleteR2Object(objectKey, c.env);
       } catch (e) {
         console.error("Failed to delete profile image from R2:", e);
@@ -320,7 +346,10 @@ export async function deleteAccount(
 
     await prisma.$disconnect();
 
-    return c.json({ success: true, message: "회원탈퇴가 완료되었습니다. 모든 기록이 삭제되었습니다." });
+    return c.json({
+      success: true,
+      message: "회원탈퇴가 완료되었습니다. 모든 기록이 삭제되었습니다.",
+    });
   } catch (error) {
     console.error("회원탈퇴 실패:", error);
     return c.json(

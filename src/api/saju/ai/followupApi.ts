@@ -1,7 +1,7 @@
 import { Context } from "hono";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
-import { getAnalysisTypePoints, refundPoints, usePoints } from "../../../common/paymentUtils";
+import { getAnalysisTypePoints, refundPoints, usePoints, isSubscriptionActive } from "../../../common/paymentUtils";
 import { buildFollowUpPrompts } from "./prompt/afterPrompt";
 import { buildGeminiPayload } from "./utils";
 
@@ -116,7 +116,11 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
 
     // 포인트 비용 계산: 동일 모델 기준 정상가의 50%
     const basePrice = getAnalysisTypePoints(analysisType);
-    const modelFactor = inheritedModel.includes("pro") ? 1.5 : 1;
+    let modelFactor = 1;
+    if (inheritedModel.includes("pro")) {
+      const sub = await isSubscriptionActive(c.env.DB, user.id);
+      modelFactor = sub.active ? 1.2 : 1.5;
+    }
     const pointsCost = Math.round(basePrice * modelFactor * 0.5);
 
     // 포인트 차감

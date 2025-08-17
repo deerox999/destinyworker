@@ -1,10 +1,15 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { googleLogin, getUserInfo, logout, refreshToken } from "./googleAuthApi";
+import {
+  googleLogin,
+  getUserInfo,
+  logout,
+  refreshToken,
+} from "./googleAuthApi";
 import { requestEmailAuthCode, verifyEmailCodeAndLogin } from "./localAuthApi";
 import { SuccessSchema } from "../../../common/schemas";
 
 export function createAuthRouter(): OpenAPIHono {
-  const app = new OpenAPIHono(); 
+  const app = new OpenAPIHono();
 
   // Google 로그인 라우트
   const googleLoginRoute = createRoute({
@@ -17,11 +22,16 @@ export function createAuthRouter(): OpenAPIHono {
       body: {
         content: {
           "application/json": {
-            schema: z.object({
-              token: z
-                .string()
-                .openapi({ description: "Google OAuth 토큰(id_token or access_token)", example: "your_google_id_token" }),
-            }).openapi({ type: 'object' }),
+            schema: z
+              .object({
+                token: z
+                  .string()
+                  .openapi({
+                    description: "Google OAuth 토큰(id_token or access_token)",
+                    example: "your_google_id_token",
+                  }),
+              })
+              .openapi({ type: "object" }),
           },
         },
       },
@@ -32,17 +42,33 @@ export function createAuthRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: SuccessSchema.extend({
-              token: z.string().openapi({ description: "JWT", example: "your_jwt_token" }),
-              user: z.object({
-                id: z.number().openapi({ example: 1 }),
-                google_id: z.string().openapi({ example: "1234567890" }),
-                email: z.string().email().openapi({ example: "user@example.com" }),
-                name: z.string().openapi({ example: "홍길동" }),
-                picture: z.string().url().openapi({ example: "https://example.com/profile.jpg" }),
-                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-                updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-              }).openapi({ type: 'object' }),
-            }).openapi({ type: 'object' }),
+              token: z
+                .string()
+                .openapi({ description: "JWT", example: "your_jwt_token" }),
+              user: z
+                .object({
+                  id: z.number().openapi({ example: 1 }),
+                  google_id: z.string().openapi({ example: "1234567890" }),
+                  email: z
+                    .string()
+                    .email()
+                    .openapi({ example: "user@example.com" }),
+                  name: z.string().openapi({ example: "홍길동" }),
+                  picture: z
+                    .string()
+                    .url()
+                    .openapi({ example: "https://example.com/profile.jpg" }),
+                  createdAt: z
+                    .string()
+                    .datetime()
+                    .openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                  updatedAt: z
+                    .string()
+                    .datetime()
+                    .openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                })
+                .openapi({ type: "object" }),
+            }).openapi({ type: "object" }),
           },
         },
       },
@@ -69,7 +95,7 @@ export function createAuthRouter(): OpenAPIHono {
           "application/json": {
             schema: SuccessSchema.extend({
               message: z.string().openapi({ example: "로그아웃 성공" }),
-            }).openapi({ type: 'object' }),
+            }).openapi({ type: "object" }),
           },
         },
       },
@@ -93,17 +119,29 @@ export function createAuthRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: SuccessSchema.extend({
-              user: z.object({
-                id: z.number().openapi({ example: 1 }),
-                email: z.string().email().openapi({ example: "user@example.com" }),
-                name: z.string().openapi({ example: "홍길동" }),
-                userName: z.string().nullable().openapi({ example: "쾌남" }),
-                picture: z.string().url().openapi({ example: "https://example.com/profile.jpg" }),
-                role: z.string().openapi({ example: "user" }),
-                point: z.number().openapi({ example: 3000 }),
-                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-              }).openapi({ type: 'object' }),
-            }).openapi({ type: 'object' }),
+              user: z
+                .object({
+                  id: z.number().openapi({ example: 1 }),
+                  email: z
+                    .string()
+                    .email()
+                    .openapi({ example: "user@example.com" }),
+                  name: z.string().openapi({ example: "홍길동" }),
+                  userName: z.string().nullable().openapi({ example: "쾌남" }),
+                  picture: z
+                    .string()
+                    .url()
+                    .openapi({ example: "https://example.com/profile.jpg" }),
+                  role: z.string().openapi({ example: "user" }),
+                  point: z.number().openapi({ example: 3000 }),
+                  createdAt: z
+                    .string()
+                    .datetime()
+                    .openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                  subscriptionUntil: z.string().datetime().nullable().openapi({ example: "2025-01-01T00:00:00.000Z" }),
+                })
+                .openapi({ type: "object" }),
+            }).openapi({ type: "object" }),
           },
         },
       },
@@ -128,8 +166,13 @@ export function createAuthRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: SuccessSchema.extend({
-              token: z.string().openapi({ description: "새로운 JWT", example: "your_new_jwt_token" }),
-            }).openapi({ type: 'object' }),
+              token: z
+                .string()
+                .openapi({
+                  description: "새로운 JWT",
+                  example: "your_new_jwt_token",
+                }),
+            }).openapi({ type: "object" }),
           },
         },
       },
@@ -144,16 +187,31 @@ export function createAuthRouter(): OpenAPIHono {
     method: "post",
     path: "/local/request-code",
     summary: "이메일 인증 코드 요청",
-    description: "이메일로 인증 코드를 요청합니다. 다국어 지원 (ko, en, zh, ja, vi).",
+    description:
+      "이메일로 인증 코드를 요청합니다. 다국어 지원 (ko, en, zh, ja, vi).",
     tags: ["인증"],
     request: {
       body: {
         content: {
           "application/json": {
-            schema: z.object({
-              email: z.string().email().openapi({ description: "이메일 주소", example: "user@example.com" }),
-              language: z.string().optional().openapi({ description: "언어 설정 (ko, en, zh, ja, vi)", example: "ko" }),
-            }).openapi({ type: 'object' }),
+            schema: z
+              .object({
+                email: z
+                  .string()
+                  .email()
+                  .openapi({
+                    description: "이메일 주소",
+                    example: "user@example.com",
+                  }),
+                language: z
+                  .string()
+                  .optional()
+                  .openapi({
+                    description: "언어 설정 (ko, en, zh, ja, vi)",
+                    example: "ko",
+                  }),
+              })
+              .openapi({ type: "object" }),
           },
         },
       },
@@ -164,8 +222,10 @@ export function createAuthRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: SuccessSchema.extend({
-              message: z.string().openapi({ example: "인증 코드가 이메일로 전송되었습니다." }),
-            }).openapi({ type: 'object' }),
+              message: z
+                .string()
+                .openapi({ example: "인증 코드가 이메일로 전송되었습니다." }),
+            }).openapi({ type: "object" }),
           },
         },
       },
@@ -187,10 +247,20 @@ export function createAuthRouter(): OpenAPIHono {
       body: {
         content: {
           "application/json": {
-            schema: z.object({
-              email: z.string().email().openapi({ description: "이메일 주소", example: "user@example.com" }),
-              code: z.string().openapi({ description: "4자리 인증 코드", example: "1234" }),
-            }).openapi({ type: 'object' }),
+            schema: z
+              .object({
+                email: z
+                  .string()
+                  .email()
+                  .openapi({
+                    description: "이메일 주소",
+                    example: "user@example.com",
+                  }),
+                code: z
+                  .string()
+                  .openapi({ description: "4자리 인증 코드", example: "1234" }),
+              })
+              .openapi({ type: "object" }),
           },
         },
       },
@@ -201,16 +271,33 @@ export function createAuthRouter(): OpenAPIHono {
         content: {
           "application/json": {
             schema: SuccessSchema.extend({
-              token: z.string().openapi({ description: "JWT", example: "your_jwt_token" }),
-              user: z.object({
-                id: z.number().openapi({ example: 1 }),
-                email: z.string().email().openapi({ example: "user@example.com" }),
-                name: z.string().openapi({ example: "홍길동" }),
-                picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
-                createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-                updatedAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-              }).openapi({ type: 'object' }),
-            }).openapi({ type: 'object' }),
+              token: z
+                .string()
+                .openapi({ description: "JWT", example: "your_jwt_token" }),
+              user: z
+                .object({
+                  id: z.number().openapi({ example: 1 }),
+                  email: z
+                    .string()
+                    .email()
+                    .openapi({ example: "user@example.com" }),
+                  name: z.string().openapi({ example: "홍길동" }),
+                  picture: z
+                    .string()
+                    .url()
+                    .nullable()
+                    .openapi({ example: "https://example.com/profile.jpg" }),
+                  createdAt: z
+                    .string()
+                    .datetime()
+                    .openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                  updatedAt: z
+                    .string()
+                    .datetime()
+                    .openapi({ example: "2023-01-01T00:00:00.000Z" }),
+                })
+                .openapi({ type: "object" }),
+            }).openapi({ type: "object" }),
           },
         },
       },

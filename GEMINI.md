@@ -113,9 +113,6 @@
 - 타입/배포 점검: `npm run check`
 
 ### 13. 보안/품질 노트(개선 권장)
-- **JWT 키 재사용**: `GOOGLE_CLIENT_SECRET`를 JWT 서명키로 재사용 중 → `JWT_SECRET` 신설 및 전역 치환 권장
-- **서명 미검증 경로**: `getUserFromToken`이 단순 디코드로 사용자 식별 → 모든 인증 흐름을 `bearerAuth + verifyJWT`로 통일 권장
-- **JWT 구현**: 수동 구현 대신 `jose` 도입(alg 고정, iss/aud, clock skew)
 - **관리자 판별**: 이메일 하드코드 존재 → DB `role` 기반만 사용
 - **CORS**: 환경별 오리진 분기/`Vary: Origin` 적용 권장
 - **경로 케이스**: `/api/R2` 등 대소문자 일관화(소문자 권장)

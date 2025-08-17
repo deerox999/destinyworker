@@ -1,5 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { getPointsApi, completePaymentApi } from "./paymentApi";
+import { getPointsApi, completePaymentApi, subscribeApi, refundSubscriptionApi } from "./paymentApi";
 import { MiddlewareHandler } from "hono";
 import { SuccessSchema } from "../../../common/schemas";
 
@@ -112,6 +112,76 @@ export function createPaymentRouter(
 
   app.openapi(getPointsRoute, (c) => getPointsApi(c));
   app.openapi(completePaymentRoute, (c) => completePaymentApi(c));
+
+  // 구독 구매 라우트
+  const subscribeRoute = createRoute({
+    method: "post",
+    path: "/subscribe",
+    summary: "구독 구매",
+    description: "개월 수만큼 30일씩 구독을 연장합니다 (최대 12개월).",
+    tags: ["결제"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                months: z
+                  .number()
+                  .int()
+                  .min(1)
+                  .max(12)
+                  .default(1)
+                  .openapi({ description: "연장 개월 수 (1~12)", example: 1 }),
+              })
+              .openapi({ type: "object" }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: { description: "구독 구매 성공" },
+      400: { description: "포인트 부족 또는 잘못된 요청" },
+      401: { description: "인증 실패" },
+    },
+  });
+
+  // 구독 환불 라우트
+  const refundSubscriptionRoute = createRoute({
+    method: "post",
+    path: "/subscribe/refund",
+    summary: "구독 환불",
+    description: "남은 기간 중 30일 단위로 환불합니다. 남은 기간이 30일뿐이면 환불 불가.",
+    tags: ["결제"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                months: z
+                  .number()
+                  .int()
+                  .min(1)
+                  .optional()
+                  .openapi({ description: "환불 개월 수 (생략 시 환불 가능한 최대치)", example: 1 }),
+              })
+              .openapi({ type: "object" }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: { description: "구독 환불 성공" },
+      400: { description: "환불 불가 또는 잘못된 요청" },
+      401: { description: "인증 실패" },
+    },
+  });
+
+  app.openapi(subscribeRoute, (c) => subscribeApi(c));
+  app.openapi(refundSubscriptionRoute, (c) => refundSubscriptionApi(c));
 
   return app;
 }
