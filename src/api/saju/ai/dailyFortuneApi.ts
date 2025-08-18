@@ -176,10 +176,12 @@ export async function DailyFortune(c: Context): Promise<Response> {
     // 사용량(토큰 등) 메타데이터 로깅
     try {
       const usageMetadata = (resp as any)?.response?.usageMetadata ?? (resp as any)?.usageMetadata;
-      if (usageMetadata) {
-        console.log("[DailyFortune] usageMetadata:", usageMetadata);
-      } else {
-        console.log("[DailyFortune] usageMetadata: 없음");
+      if (process.env.ENVIRONMENT === "development") {
+        if (usageMetadata) {
+          console.log("[DailyFortune] usageMetadata:", usageMetadata);
+        } else {
+          console.log("[DailyFortune] usageMetadata: 없음");
+        } 
       }
     } catch (e) {
       console.log("[DailyFortune] usageMetadata 로깅 실패:", e);

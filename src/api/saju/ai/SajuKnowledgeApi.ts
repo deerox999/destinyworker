@@ -37,9 +37,9 @@ async function isQuerySajuRelated(ai: any, query: string): Promise<boolean> {
 
     // 응답을 소문자로 변환하고 앞뒤 공백을 제거한 후 "yes"가 포함되어 있는지 확인합니다.
     const isRelated = response.toLowerCase().trim().includes("yes");
-    console.log(
-      `Relevance check for '${query}': AI response is '${response.trim()}', Determined: ${isRelated}`
-    );
+    if (process.env.ENVIRONMENT === "development") {
+      console.log(`Relevance check for '${query}': AI response is '${response.trim()}', Determined: ${isRelated}`);
+    }
     return isRelated;
   } catch (error) {
     console.error("Error during relevance check:", error);
@@ -327,9 +327,9 @@ export async function SajuChat(
     let webSearchResults = "";
     // 내부 지식으로 답변이 부족하다고 판단되면(3개 미만) 웹 검색 수행
     if (ragDocs.length < 3) {
-      console.log(
-        `Found only ${ragDocs.length} documents from RAG. Performing web search as a fallback.`
-      );
+      if (process.env.ENVIRONMENT === "development") {
+        console.log(`Found only ${ragDocs.length} documents from RAG. Performing web search as a fallback.`);
+      }
       webSearchResults = await performWebSearch(userQuery, c.env.BRAVE_API_KEY);
     }
 

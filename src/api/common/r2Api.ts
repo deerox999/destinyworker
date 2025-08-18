@@ -85,9 +85,6 @@ export async function deleteImagesFromR2(content: string, env: any): Promise<voi
       return;
     }
 
-    console.log(`삭제할 이미지 URL 개수: ${matches.length}`);
-    console.log('삭제할 이미지 URL들:', matches);
-
     const S3 = createR2Client(env);
     if (!S3) {
       throw new Error('R2 클라이언트 생성 실패');
@@ -99,14 +96,11 @@ export async function deleteImagesFromR2(content: string, env: any): Promise<voi
         // URL에서 파일 경로 추출
         const filePath = url.replace(env.R2_PUBLIC_URL + '/', '');
         
-        console.log(`R2 이미지 삭제 시도: ${filePath}`);
-        
         await S3.send(new DeleteObjectCommand({
           Bucket: env.R2_BUCKET_NAME,
           Key: filePath,
         }));
         
-        console.log(`R2 이미지 삭제 성공: ${filePath}`);
         return { success: true, path: filePath };
       } catch (error) {
         console.error(`R2 이미지 삭제 실패: ${url}`, error);
@@ -120,8 +114,6 @@ export async function deleteImagesFromR2(content: string, env: any): Promise<voi
     // 결과 요약
     const successCount = results.filter(r => r.success).length;
     const failCount = results.filter(r => !r.success).length;
-    
-    console.log(`R2 이미지 삭제 완료: 성공 ${successCount}개, 실패 ${failCount}개`);
     
     if (failCount > 0) {
       const failedPaths = results.filter(r => !r.success).map(r => r.path);

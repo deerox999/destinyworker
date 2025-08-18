@@ -186,7 +186,9 @@ export async function googleLogin(c: Context): Promise<Response> {
   }
 
   if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
-    console.log(c.env);
+    if (process.env.ENVIRONMENT === "development") {
+      console.log(c.env);
+    }
     return c.json({ error: "OAuth 설정이 누락되었습니다." }, 500);
   }
 
@@ -355,7 +357,6 @@ export async function getUserInfo(c: Context): Promise<Response> {
       await prisma.$disconnect();
       return c.json({ error: "사용자를 찾을 수 없습니다." }, 404);
     }
-    console.log(`user : `, user)
 
     await prisma.$disconnect();
     return c.json({ user: user });
