@@ -85,3 +85,164 @@ function safeParseJson(text?: string | null) {
     return null;
   }
 }
+
+// --- 아래부터 History 라우터의 비즈니스 로직 분리 ---
+
+export async function createApiLog(c: Context) {
+  const prisma = createPrismaClient(c.env.DB);
+  try {
+    const body = await c.req.json();
+
+    const toJson = (v: unknown) => (v === undefined ? null : JSON.stringify(v));
+
+    const ip =
+      (body?.ip as string | undefined) ??
+      c.req.header("cf-connecting-ip") ??
+      c.req.header("x-forwarded-for") ??
+      undefined;
+    const userAgent = (body?.userAgent as string | undefined) ?? c.req.header("user-agent") ?? undefined;
+
+    const created = await prisma.apiLog.create({
+      data: {
+        method: body?.method,
+        url: body?.url,
+        statusCode: body?.statusCode ?? null,
+        durationMs: body?.durationMs ?? null,
+        userJson: toJson(body?.user),
+        paramsJson: toJson(body?.params),
+        responseJson: toJson(body?.response),
+        ip: ip ?? null,
+        userAgent: userAgent ?? null,
+        notes: body?.notes ?? null,
+      },
+    });
+
+    await prisma.$disconnect();
+    return c.json({ success: true, id: created.id });
+  } catch (err: any) {
+    await prisma.$disconnect();
+    return c.json({ success: false, error: err?.message ?? "Invalid request" }, 400 as any);
+  }
+}
+
+export async function getApiLogs(c: Context) {
+  const prisma = createPrismaClient(c.env.DB);
+  try {
+    const isErrorParam = c.req.query("isError");
+    const statusCode = c.req.query("statusCode");
+    const urlContains = c.req.query("urlContains");
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+    const page = Number(c.req.query("page") ?? 1);
+    const pageSize = Math.min(100, Number(c.req.query("pageSize") ?? 20));
+
+    const where: any = {};
+    if (statusCode) where.statusCode = Number(statusCode);
+    if (urlContains) where.url = { contains: urlContains };
+    if (from || to) {
+      where.createdAt = {} as any;
+      if (from) (where.createdAt as any).gte = new Date(from);
+      if (to) (where.createdAt as any).lte = new Date(to);
+    }
+    if (isErrorParam === "true") {
+      where.statusCode = { gte: 400 };
+    } else if (isErrorParam === "false") {
+      where.statusCode = { lt: 400 };
+    }
+
+    const [total, items] = await Promise.all([
+      prisma.apiLog.count({ where }),
+      prisma.apiLog.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          method: true,
+          url: true,
+          statusCode: true,
+          durationMs: true,
+          ip: true,
+          userAgent: true,
+          notes: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    await prisma.$disconnect();
+    return c.json({ success: true, total, page, pageSize, items });
+  } catch (err: any) {
+    await prisma.$disconnect();
+    return c.json({ success: false, error: err?.message ?? "Invalid request" }, 400 as any);
+  }
+}
+
+export async function getApiStats(c: Context) {
+  const prisma = createPrismaClient(c.env.DB);
+  try {
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const from = c.req.query("from") ? new Date(c.req.query("from")!) : defaultFrom;
+    const to = c.req.query("to") ? new Date(c.req.query("to")!) : now;
+    const topN = Number(c.req.query("top") ?? 10);
+
+    const where: any = { createdAt: { gte: from, lte: to } };
+
+    const [total, errorCount, s2xx, s3xx, s4xx, s5xx, topUrlsRaw, byMethodRaw, recentTimestamps] =
+      await Promise.all([
+        prisma.apiLog.count({ where }),
+        prisma.apiLog.count({ where: { ...where, statusCode: { gte: 400 } } }),
+        prisma.apiLog.count({ where: { ...where, statusCode: { gte: 200, lt: 300 } } }),
+        prisma.apiLog.count({ where: { ...where, statusCode: { gte: 300, lt: 400 } } }),
+        prisma.apiLog.count({ where: { ...where, statusCode: { gte: 400, lt: 500 } } }),
+        prisma.apiLog.count({ where: { ...where, statusCode: { gte: 500 } } }),
+        prisma.apiLog.groupBy({
+          by: ["url"],
+          where,
+          _count: { url: true },
+          orderBy: { _count: { url: "desc" } },
+          take: topN,
+        }),
+        prisma.apiLog.groupBy({
+          by: ["method"],
+          where,
+          _count: { method: true },
+          orderBy: { _count: { method: "desc" } },
+          take: topN,
+        }),
+        prisma.apiLog.findMany({ where, select: { createdAt: true, statusCode: true } }),
+      ]);
+
+    const dateKey = (d: Date) => d.toISOString().slice(0, 10);
+    const dailyMap = new Map<string, { count: number; errorCount: number }>();
+    for (const row of recentTimestamps) {
+      const key = dateKey(new Date(row.createdAt));
+      const prev = dailyMap.get(key) ?? { count: 0, errorCount: 0 };
+      prev.count += 1;
+      if ((row as any).statusCode && (row as any).statusCode >= 400) prev.errorCount += 1;
+      dailyMap.set(key, prev);
+    }
+    const dailyCounts = Array.from(dailyMap.entries())
+      .map(([date, v]) => ({ date, count: v.count, errorCount: v.errorCount }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+
+    const topUrls = topUrlsRaw.map((r) => ({ url: r.url ?? "", count: (r as any)._count?.url ?? 0 }));
+    const byMethod = byMethodRaw.map((r) => ({ method: r.method ?? "", count: (r as any)._count?.method ?? 0 }));
+
+    await prisma.$disconnect();
+    return c.json({
+      success: true,
+      total,
+      errorCount,
+      byStatus: { s2xx, s3xx, s4xx, s5xx },
+      topUrls,
+      byMethod,
+      dailyCounts,
+    });
+  } catch (err: any) {
+    await prisma.$disconnect();
+    return c.json({ success: false, error: err?.message ?? "Invalid request" }, 400 as any);
+  }
+}

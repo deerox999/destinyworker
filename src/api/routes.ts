@@ -11,8 +11,9 @@ import { createSajuRouter } from "./saju/profile/saju.routes";
 import { createAuthRouter } from "./user/auth/auth.routes";
 import { createPaymentRouter } from "./user/payment/payment.routes";
 import { createR2Router } from "./common/r2.routes";
+import { createSitemapRouter } from "./common/sitemapApi";
 import { createUserRouter } from "./user/user.routes";
-import { createHistoryRouter } from "./history/routes";
+import { createHistoryRouter } from "./admin/history.routes";
 import { createPrismaClient } from "../common/prismaUtils";
 import { logApi } from "../common/historyLogger";
 
@@ -136,6 +137,7 @@ export function createAppRouter(): OpenAPIHono<AppEnv> {
   app.route("/api/admin/celebrities", createCelebrityAdminRouter(authMiddleware));
   app.route("/api/community", createCommunityRouter());
   app.route("/api/history", createHistoryRouter());
+  app.route("/api/sitemap", createSitemapRouter());
 
   return app;
 }
