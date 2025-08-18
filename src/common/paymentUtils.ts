@@ -5,8 +5,10 @@ import { createPrismaClient } from './prismaUtils';
 export const SUBSCRIPTION_PRICE_PER_MONTH = 1000; // 1000 포인트 = 1개월
 export const DAYS_PER_SUBSCRIPTION_MONTH = 30; // 정확히 30일 기준
 
-// analysisType에 따른 포인트 계산 함수
-export function getAnalysisTypePoints(analysisType: string): number {
+// analysisType과 요청 type(individual/compatibility)에 따른 포인트 계산 함수
+export function getAnalysisTypePoints(analysisType: string, type?: string): number {
+  // 궁합 사주는 고정 2000포인트
+  if (type === "compatibility") return 2000;
   switch (analysisType) {
     case "연간운세": return 500;
     case "종합운세": return 2000;

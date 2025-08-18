@@ -46,6 +46,8 @@ export class SajuAnalysisWorker implements DurableObject {
   private jobTimeouts: Map<string, any> = new Map();
   private isProcessingFromAlarm: boolean = false;
   private historyLoggedJobIds: Set<string> = new Set();
+  // 동일 작업에 대해 실패/환불이 중복 실행되지 않도록 가드
+  private failedJobIds: Set<string> = new Set();
 
   constructor(state: DurableObjectState, env: any) {
     this.state = state;
@@ -63,7 +65,7 @@ export class SajuAnalysisWorker implements DurableObject {
       userId: body.userId,
       analysisType: body.analysisType || "general",
       type: body.type || "individual", 
-      pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType),
+      pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType, body.type),
       reference: body.reference,
       i18n: body.i18n || "ko",
       timezone: body.timezone || "Asia/Seoul",
@@ -600,24 +602,9 @@ export class SajuAnalysisWorker implements DurableObject {
         }
       } catch (_) { /* ignore */ }
 
-      // 품질 검사 및 재시도 제어
-      const attempt = job.retryAttempt || 0;
+      // 품질 검사: 미달 시 즉시 실패 처리 (재시도 없음)
       const poor = this.isPoorResponse(job, cleanedResponse, completedAt);
-
       if (poor) {
-        if (attempt < 1) {
-          // 1회 재시도: 포인트 재차감 없음, 동일 analysisId 유지
-          job.retryAttempt = attempt + 1;
-          this.jobs.set(job.id, job);
-          await this.state.storage.put(job.id, job);
-          await this.scheduleAlarmSoon();
-          // 다시 업스트림 호출 (내부 처리) - 백그라운드로 스케줄
-          this.state.waitUntil(this.processStreamingJob(job.id, false));
-          shouldClearTimeout = false; // 재시도 진행 중이므로 타임아웃 유지
-          return;
-        }
-
-        // 재시도 후에도 품질 미달 → 실패 및 환불
         await this.failJob(job, "응답 품질 미달(빈 응답/짧은 응답/너무 빠른 완료)");
         return;
       }
@@ -739,24 +726,12 @@ export class SajuAnalysisWorker implements DurableObject {
    */
   private async failJob(job: AnalysisJob, message: string): Promise<void> {
     try {
-      // 타임아웃 초과 같은 명시적 종료 사유는 즉시 실패 처리(재시도 없음)
-      const isTimeoutMessage = /10분|시간을\s*초과/.test(message || "");
-
-      if (!isTimeoutMessage) {
-        const attempt = job.retryAttempt || 0;
-        if (attempt < 1) {
-          // 1회 재시도: 포인트 재차감 없음, 동일 analysisId 유지
-          job.retryAttempt = attempt + 1;
-          job.status = "processing";
-          job.error = undefined;
-          this.jobs.set(job.id, job);
-          await this.state.storage.put(job.id, job);
-          await this.scheduleAlarmSoon();
-          // 백그라운드로 재시도 실행
-          this.state.waitUntil(this.processStreamingJob(job.id, false));
-          return;
-        }
+      // 이미 실패 처리된 작업이면 중복 처리 방지
+      if (job.status === "failed" || this.failedJobIds.has(job.id)) {
+        return;
       }
+      // 실패 처리 시작을 기록하여 동시성 중복 진입 방지
+      this.failedJobIds.add(job.id);
 
       // 최종 실패 처리 및 환불
       job.status = "failed";

@@ -115,7 +115,7 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
     );
 
     // 포인트 비용 계산: 동일 모델 기준 정상가의 50%
-    const basePrice = getAnalysisTypePoints(analysisType);
+    const basePrice = getAnalysisTypePoints(analysisType, type);
     let modelFactor = 1;
     if (inheritedModel.includes("pro")) {
       const sub = await isSubscriptionActive(c.env.DB, user.id);

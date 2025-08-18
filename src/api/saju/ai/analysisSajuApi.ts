@@ -289,7 +289,7 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
 
     // 분석 타입에 따른 포인트 비용 결정
     const analysisType = options.analysisType || "종합운세";
-    let pointsCost = getAnalysisTypePoints(analysisType);
+    let pointsCost = getAnalysisTypePoints(analysisType, type);
 
     // highQuality(true → pro 모델 사용)일 때 포인트 가격 계수 적용
     if (options.highQuality) {
