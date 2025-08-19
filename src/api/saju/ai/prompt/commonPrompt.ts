@@ -497,9 +497,7 @@ export const buildTerminologyGlossary = (language: string): string => {
   } else if (language === "한국어") {
     return ``;
   } else {
-    return `**Approved Terminology:**
-* Use consistent, professional ${language} equivalents of core Bazi terms.
-* Do not use Korean romanization. If necessary, show Chinese characters once, then use ${language} terms only.`;
+    return ``;
   }
 };
 

@@ -360,7 +360,7 @@ export function generateTitle(message: SajuAnalysisMessage | AnalysisJob): strin
         return bd.name || bd.이름 || undefined;
       })
       .filter((name: string | undefined) => !!name)
-      .map((name: string) => `${name}님`);
+      .map((name: string) => `${name}`);
     if (names.length > 0) {
       title += ` ${names.join(" & ")}`;
     }
