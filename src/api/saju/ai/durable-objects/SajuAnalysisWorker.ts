@@ -585,11 +585,20 @@ export class SajuAnalysisWorker implements DurableObject {
       }
       const completedAt = new Date();
 
-      // 대운/종합운세의 경우 본문 부록 JSON 추출 및 본문 정리
+      // highQuality(true)인 경우에만 차트(JSON 부록)를 파싱하여 저장
       let cleanedResponse = fullResponse;
       let extractedChartJson: string | null = null;
       try {
-        if (["대운", "종합운세"].includes(job.analysisType)) {
+        let shouldParseChart = false;
+        try {
+          const opts = job.optionsJson ? JSON.parse(job.optionsJson) : undefined;
+          const isHighQuality = Boolean(opts?.highQuality);
+          if (isHighQuality && ["대운", "종합운세"].includes(job.analysisType)) {
+            shouldParseChart = true;
+          }
+        } catch (_) { /* ignore parse error */ }
+
+        if (shouldParseChart) {
           const startTag = "===JSON_START===";
           const endTag = "===JSON_END===";
           const startIdx = fullResponse.indexOf(startTag);

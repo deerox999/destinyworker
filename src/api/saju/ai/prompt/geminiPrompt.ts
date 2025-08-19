@@ -36,7 +36,7 @@ export const generateAnalysisPrompts = (params: PromptParams) => {
   const systemPrompt = joinSections(systemSections);
 
   const 출력형식지시 = getOutputFormatTemplate(해설유형);
-  let userPrompt = getUserPrompt(해설유형, 사용자질문);
+  let userPrompt = getUserPrompt(해설유형, 사용자질문, highQuality, languageName);
   userPrompt += `${특별추가질문(user, isDevelop)}`;
   return { systemPrompt: `${systemPrompt}\n${출력형식지시}`, userPrompt };
 };

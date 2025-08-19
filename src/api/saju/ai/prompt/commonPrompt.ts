@@ -42,7 +42,6 @@ const get어조설정 = (어조옵션: 어조) => {
           "각 섹션당 위트 한 줄 원칙: 유머 대 내용 비율은 1:4 이내로 유지하세요",
           `섹션 제목 옆에 괄호로 짧은 부제를 허용하되, 문서 전체에서 2회 이하로 제한합니다. 예) "용신 분석 (불씨를 어떻게 키울까?)"`,
           "의외성 활용: 대비/반전/약간의 과장으로 미소 포인트를 만드세요",
-          "자기객관화 한 스푼: 가벼운 메타 멘트나 셀프 디스로 공감대를 형성하세요",
           "상황 기반 유머: 사용자 질문과 사주 데이터에서 소재를 뽑아 즉석의 농담을 만드세요 (템플릿 금지)",
           "민감 주제(건강/가족/손실 등)에서는 위로 우선, 유머 강도는 최소화",
           "금지 패턴: 유치한 언어유희, 밈 남발, 과한 이모지/감탄사, 반복되는 아재개그",
@@ -148,8 +147,10 @@ const 이해도설정 = {
   },
 } as const;
 
-export const getUserPrompt = (해설유형: string, 사용자질문: string) => {
-  let userPrompt = `다음 사주 데이터를 ${해설유형} 관점에서 해설하여 마크다운 형식으로 결과를 제공해주세요:`;
+export const getUserPrompt = (해설유형: string, 사용자질문: string, highQuality: boolean, language: string) => {
+  let userPrompt = `다음 사주 데이터를 ${해설유형} 관점에서 해설하여 마크다운 형식으로 결과를 제공해주세요: 
+(**응답 언어(중요)**: ${language}, 질문부터 답변 전부 해당 언어로 답변해야 합니다.)
+`;
   if (해설유형 === "종합운세") {
     userPrompt += `
 ### **기본 분석 질문:**
@@ -162,69 +163,70 @@ export const getUserPrompt = (해설유형: string, 사용자질문: string) => 
 * **종합 분석:** 전 구간 분석 결과를 종합하여 인생의 주요 전환점과 기회가 찾아오는 시기를 명확한 근거와 함께 제시해주세요.
 * **추가 분석:** 사주의 특별한 특징이나 주목할 만한 요소를 최소 2개, 최대 5개 선정하여 심층 분석해주세요. (예: 특수한 격국, 중요한 신살, 특별한 합화 현상 등)
 * **종합 조언:** 위의 모든 분석을 종합하여, 이 사주를 가진 사람에게 가장 중요한 인생 조언과 실천 방안을 제시해주세요.
-
+${highQuality ? `
 추가 지시(중요):
-- 본문 마크다운 해설을 모두 마친 뒤, 마지막에 JSON 부록을 반드시 추가하세요.
-- JSON 부록은 다음 구분자를 정확히 사용하세요:
-  - ===JSON_START===
-  - (여기에 JSON 단일 객체 1개)
-  - ===JSON_END===
-- JSON 작성 규칙:
-  - JSON만, 객체 1개, 더블쿼트만 사용, 주석/코드펜스/트레일링 콤마 금지.
-  - 모든 점수는 0~100 정수. labels와 각 series.data는 동일 길이/순서.
-  - timeline은 대운 구간 순서대로 정렬.
-  - 각 대운마다 자유로운 1~2문장 설명(overview)과, 핵심 하이라이트/리스크/조언을 포함.
-  - 각 대운마다 주요 차원별 점수(예: wealth, career, relationship, health, study, creativity, social, family, travel, luck)를 포함.
-  - 차트는 전체 기간에 대해 다차원 점수 변화를 표현할 수 있도록 multi-line 시계열을 구성.
-  - 전체 대운 데이터를 분석해서 제공되어야 함.
-
-JSON 스키마 예시(참고):
-{
-  "timeline": [
-    {
-      "label": "만 23세~32세 丙辰",
-      "startAge": 23,
-      "endAge": 32,
-      "gan": "丙",
-      "zhi": "辰",
-      "overallScore": 85,
-      "trend": "rising",
-      "overview": "기회가 많고 성장이 빠른 시기.",
-      "scores": {
-        "wealth": 82,
-        "career": 88,
-        "relationship": 70,
-        "health": 76,
-        "study": 68,
-        "creativity": 80,
-        "social": 73,
-        "family": 74,
-        "travel": 65,
-        "luck": 84
-      },
-      "highlights": ["경력 확장 기회", "명예 상승"],
-      "risks": ["과로 위험", "관계 소홀"],
-      "advice": ["일-생활 균형 유지", "장기 목표에 집중"]
+  - 본문 마크다운 해설을 모두 마친 뒤, 마지막에 JSON 부록을 반드시 추가하세요.
+  - JSON 부록은 다음 구분자를 정확히 사용하세요:
+    - ===JSON_START===
+    - (여기에 JSON 단일 객체 1개)
+    - ===JSON_END===
+  - JSON 작성 규칙:
+    - JSON만, 객체 1개, 더블쿼트만 사용, 주석/코드펜스/트레일링 콤마 금지.
+    - 모든 점수는 0~100 정수. labels와 각 series.data는 동일 길이/순서.
+    - timeline은 대운 구간 순서대로 정렬.
+    - 각 대운마다 자유로운 1~2문장 설명(overview)과, 핵심 하이라이트/리스크/조언을 포함.
+    - 각 대운마다 주요 차원별 점수(예: wealth, career, relationship, health, study, creativity, social, family, travel, luck)를 포함.
+    - 차트는 전체 기간에 대해 다차원 점수 변화를 표현할 수 있도록 multi-line 시계열을 구성.
+    - 전체 대운 데이터를 분석해서 제공되어야 함.
+  
+  JSON 스키마 예시(참고):
+  {
+    "timeline": [
+      {
+        "label": "만 23세~32세 丙辰",
+        "startAge": 23,
+        "endAge": 32,
+        "gan": "丙",
+        "zhi": "辰",
+        "overallScore": 85,
+        "trend": "rising",
+        "overview": "기회가 많고 성장이 빠른 시기.",
+        "scores": {
+          "wealth": 82,
+          "career": 88,
+          "relationship": 70,
+          "health": 76,
+          "study": 68,
+          "creativity": 80,
+          "social": 73,
+          "family": 74,
+          "travel": 65,
+          "luck": 84
+        },
+        "highlights": ["경력 확장 기회", "명예 상승"],
+        "risks": ["과로 위험", "관계 소홀"],
+        "advice": ["일-생활 균형 유지", "장기 목표에 집중"]
+      }
+    ],
+    "chart": {
+      "type": "multi_line",
+      "labels": ["23-32세", "33-42세", "43-52세"],
+      "series": [
+        { "key": "overall", "label": "종합", "data": [85, 78, 72] },
+        { "key": "wealth", "label": "재물", "data": [82, 75, 68] },
+        { "key": "career", "label": "직업", "data": [88, 80, 70] },
+        { "key": "relationship", "label": "관계", "data": [70, 76, 74] },
+        { "key": "health", "label": "건강", "data": [76, 72, 69] },
+        { "key": "luck", "label": "행운", "data": [84, 79, 73] }
+      ]
     }
-  ],
-  "chart": {
-    "type": "multi_line",
-    "labels": ["23-32세", "33-42세", "43-52세"],
-    "series": [
-      { "key": "overall", "label": "종합", "data": [85, 78, 72] },
-      { "key": "wealth", "label": "재물", "data": [82, 75, 68] },
-      { "key": "career", "label": "직업", "data": [88, 80, 70] },
-      { "key": "relationship", "label": "관계", "data": [70, 76, 74] },
-      { "key": "health", "label": "건강", "data": [76, 72, 69] },
-      { "key": "luck", "label": "행운", "data": [84, 79, 73] }
-    ]
   }
-}
-
-아래 형식으로 출력 마무리:
-===JSON_START===
-{ JSON 단일 객체 }
-===JSON_END===`
+  
+  아래 형식으로 출력 마무리:
+  ===JSON_START===
+  { JSON 단일 객체 }
+  ===JSON_END===
+` : ""}`
   } else {
     userPrompt += `
 ### **사용자가 선택한 질문:**
