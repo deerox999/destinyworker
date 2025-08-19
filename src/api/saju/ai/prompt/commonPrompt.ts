@@ -7,14 +7,7 @@ export type PromptUnderstanding = "초보" | "중수" | "전문가";
 // ====== geminiPrompt 기준 공통 타입(한국어 명칭) ======
 export type 분석관점 = "현실적" | "약간긍정" | "약간부정";
 export type 이해도레벨 = "초보" | "중수" | "전문가";
-export type 분석요소 =
-  | "십성"
-  | "신살"
-  | "십이신살"
-  | "격국"
-  | "용신"
-  | "십이운성"
-  | "생극제화";
+export type 분석요소 = | "십성" | "신살" | "십이신살" | "격국" | "용신" | "십이운성" | "생극제화";
 export type 어조 = "유쾌한" | "전문적인" | "상냥한";
 
 // 프롬프트 파라미터 타입 정의
@@ -39,13 +32,13 @@ const get어조설정 = (어조옵션: 어조) => {
         소개: "밝고 경쾌하되, 한두 번은 허를 찌르는 재치로 웃음을 만드세요. 농담은 상황에서 자연스럽게 튀어나온 한 줄만 허용—억지 말장난/템플릿 개그는 금지입니다.",
         지침: [
           "오프닝은 재치 있는 한 줄 훅으로 시작하세요. (형식적 인사말 대신)",
-          "각 섹션당 위트 한 줄 원칙: 유머 대 내용 비율은 1:4 이내로 유지하세요",
+          "유머는 본문에 자연스럽게 녹여 쓰세요. 별도의 '위트:' 라벨/독립 문장 금지.",
           `섹션 제목 옆에 괄호로 짧은 부제를 허용하되, 문서 전체에서 2회 이하로 제한합니다. 예) "용신 분석 (불씨를 어떻게 키울까?)"`,
           "의외성 활용: 대비/반전/약간의 과장으로 미소 포인트를 만드세요",
           "상황 기반 유머: 사용자 질문과 사주 데이터에서 소재를 뽑아 즉석의 농담을 만드세요 (템플릿 금지)",
           "민감 주제(건강/가족/손실 등)에서는 위로 우선, 유머 강도는 최소화",
           "금지 패턴: 유치한 언어유희, 밈 남발, 과한 이모지/감탄사, 반복되는 아재개그",
-          `톤 일관성: 결론 및 '핵심 실천 지침' 섹션에서도 유쾌한 포인트를 1줄 유지하세요. (마지막에 급격히 진지 모드로 전환 금지)`,
+          `톤 일관성: 결론 및 '핵심 실천 지침' 섹션에서도 가벼운 여운을 남기세요.`,
           `개인화된 레퍼런스: 사용자 맥락정보에 연령/성별/관심사가 있거나, 생년월일 정보를 통해 성별 세대별로 적절한 비유를 선택하세요.`,
           `성격 기반 비유 선택: 사주분석을 통해 사용자의 성격 특성(내향인/외향인, 활발함/차분함 등)을 파악하고, 성격과 성별 나이대에 걸맞는 비유를 선택하세요.`,
           `예시: 내향인 남자에게는 농구나 축구는 안좋아할 수 있고, 헬스와 같은 개인적 운동을 좋아할 수 있습니다. 게임은 남자들의 공통 취미로 볼 수 있습니다.`,
@@ -55,6 +48,7 @@ const get어조설정 = (어조옵션: 어조) => {
           "위트 품질: 반드시 제공 데이터/맥락을 근거로 한 '관찰 유머'를 사용하세요.",
           "금지 상투구: '반전 매력', '웬만한', '사실은 더', '마치 ~ 같다' 같은 익숙한 클리셰/비유.",
           "형용사 나열로 유머를 대체하지 말고, 구체적 상황/행동으로 웃음을 만드세요.",
+          "유머 빈도는 전체 분량의 30~50% 이내를 권장하며, 해설의 명료성을 해치지 않게 하세요.",
         ],
       };
     case "상냥한":
@@ -80,21 +74,16 @@ const get어조설정 = (어조옵션: 어조) => {
 };
 
 const get분석관점 = (
-  분석관점옵션: 분석관점,
-  isCompatibility: boolean = false
+  분석관점옵션: 분석관점
 ) => {
   const 기본톤설정 = {
     현실적: {
-      기본설명: `현실적이고 균형 잡힌 관점에서 분석하되, 사주 특성에 따라 조언의 비중을 조절합니다.
-긍정적 요소가 압도적이거나 부정적 요소가 더 클 때도 기계적인 50:50 비율보다는 사주 특성에 맞는 유연한 해석을 제공합니다.`,
+      기본설명: `현실적이고 균형 잡힌 관점에서 분석하되, 사주 특성에 따라 조언의 비중을 조절합니다. 긍정적 요소가 압도적이거나 부정적 요소가 더 클 때도 기계적인 50:50 비율보다는 사주 특성에 맞는 유연한 해석을 제공합니다.`,
       분석지침: [
         "명리학적 이론과 데이터에 기반한 객관적인 분석을 제공하되, AI의 심층적인 통찰력을 발휘하여 현대적 맥락에 맞는 의미 있는 조언을 도출하세요.",
         "사주 특성에 따라 긍정적/부정적 요소의 비중을 조절하여 분석하세요",
         "과도한 낙관이나 비관 없이 현실적인 조언을 제시하세요",
       ],
-      추가지침: isCompatibility
-        ? "각 항목에서 두 사람의 조화와 갈등 요소를 균형 있게 분석하세요."
-        : "각 항목에서 긍정적 요소와 부정적 요소를 균형 있게 분석하세요.",
     },
     약간긍정: {
       기본설명:
@@ -105,9 +94,6 @@ const get분석관점 = (
         "부정적 요소가 있더라도 긍정적 관점에서 재해석하거나 극복 방안을 제시하세요",
         "희망적이고 격려적인 톤을 유지하되, 현실적 한계도 함께 언급하세요",
       ],
-      추가지침: isCompatibility
-        ? "각 항목에서 두 사람의 조화와 긍정적 요소를 우선적으로 분석하고 강조하세요."
-        : "각 항목에서 긍정적 요소와 기회를 우선적으로 분석하고 강조하세요.",
     },
     약간부정: {
       기본설명:
@@ -118,9 +104,6 @@ const get분석관점 = (
         "긍정적 요소가 있더라도 신중한 관점에서 재해석하거나 한계점을 함께 언급하세요",
         "보수적이고 신중한 톤을 유지하되, 극단적인 비관은 피하고 해결 방안도 제시하세요",
       ],
-      추가지침: isCompatibility
-        ? "각 항목에서 두 사람의 갈등 요소와 주의사항을 우선적으로 분석하고 강조하세요."
-        : "각 항목에서 주의사항과 약점을 우선적으로 분석하고 강조하세요.",
     },
   } as const;
 
@@ -129,27 +112,29 @@ const get분석관점 = (
 
 const 이해도설정 = {
   초보: {
-    설명스타일:
-      "기본적인 사주 용어와 개념을 쉽고 명료하게 설명하세요. 전문 용어 사용 시 필요할 때만 간단한 풀이를 덧붙이세요.",
-    상세도:
-      "핵심 위주로 설명하되, 이해에 꼭 필요한 범위 내에서만 예시를 사용하세요.",
+    설명스타일: "기본적인 사주 용어와 개념을 쉽고 명료하게 설명하세요. 전문 용어 사용 시 필요할 때만 간단한 풀이를 덧붙이세요.",
+    상세도: "핵심 위주로 설명하되, 이해에 꼭 필요한 범위 내에서만 예시를 사용하세요.",
   },
   중수: {
-    설명스타일:
-      "십성과 기본 격국 용어는 설명 없이 사용해도 좋습니다. 합·충·형·파 등 심화 개념은 필요 시 예시를 간단히 덧붙이세요.",
-    상세도:
-      "중간 수준의 배경을 제공하되, 분석 자율성을 우선하세요. 복합 상호작용은 요점 위주로 정리하세요.",
+    설명스타일: "십성과 기본 격국 용어는 설명 없이 사용해도 좋습니다. 합·충·형·파 등 심화 개념은 필요 시 예시를 간단히 덧붙이세요.",
+    상세도: "중간 수준의 배경을 제공하되, 분석 자율성을 우선하세요. 복합 상호작용은 요점 위주로 정리하세요.",
   },
   전문가: {
-    설명스타일:
-      "전문적인 이론과 심화 개념을 포함하되, 독립적 판단과 자율적 심층 분석을 우선하세요.",
+    설명스타일: "전문적인 이론과 심화 개념을 포함하되, 독립적 판단과 자율적 심층 분석을 우선하세요.",
     상세도: "고급 이론과 복잡한 상호작용을 다루되, 결과 중심으로 정리하세요.",
   },
 } as const;
 
 export const getUserPrompt = (해설유형: string, 사용자질문: string, highQuality: boolean, language: string) => {
-  let userPrompt = `다음 사주 데이터를 ${해설유형} 관점에서 해설하여 마크다운 형식으로 결과를 제공해주세요: 
-(**응답 언어(중요)**: ${language}, 질문부터 답변 전부 해당 언어로 답변해야 합니다.)
+  let userPrompt = `다음 사주 데이터를 ${해설유형} 관점에서 해설하여 마크다운 형식으로 결과를 제공해주세요: `;
+  // 언어 및 표기 강제 규칙(스트리밍 안전)
+  userPrompt += `
+[언어 및 표기 강제 규칙]
+* 출력은 반드시 ${language}로만 작성하세요. ${language !== "한국어" &&
+`* (매우 중요) 한글(Hangul) 문자는 출력에 포함하지 마세요. 한국어 보조설명/번역/로마자/괄호 주석도 금지합니다.
+* 예외: 한자(漢字) 원어 표기는 허용되나, 필요한 경우 병음(Pinyin) 또는 ${language} 병기만 사용하고 한국어 병기는 금지합니다.
+* 내부 데이터 키/라벨이 한국어여도, 출력 시에는 의미를 ${language}로 자연스럽게 번역·재명명해 사용하세요.`}
+* 스트리밍 중간 점검: 문단을 마칠 때마다(혹은 5~7문장마다) 스스로 언어와 어조를 점검하세요. 언어 일탈(예: ${language} 외 단어/문장 또는 금지된 문자)이 감지되면, 사과 없이 바로 다음 문장부터 동일 내용의 ${language} 표현으로 교정하여 이어가세요(이미 출력된 텍스트는 수정하지 말고, 재진술로 수습).
 `;
   if (해설유형 === "종합운세") {
     userPrompt += `
@@ -163,7 +148,7 @@ export const getUserPrompt = (해설유형: string, 사용자질문: string, hig
 * **종합 분석:** 전 구간 분석 결과를 종합하여 인생의 주요 전환점과 기회가 찾아오는 시기를 명확한 근거와 함께 제시해주세요.
 * **추가 분석:** 사주의 특별한 특징이나 주목할 만한 요소를 최소 2개, 최대 5개 선정하여 심층 분석해주세요. (예: 특수한 격국, 중요한 신살, 특별한 합화 현상 등)
 * **종합 조언:** 위의 모든 분석을 종합하여, 이 사주를 가진 사람에게 가장 중요한 인생 조언과 실천 방안을 제시해주세요.
-${highQuality ? `
+${highQuality && `
 추가 지시(중요):
   - 본문 마크다운 해설을 모두 마친 뒤, 마지막에 JSON 부록을 반드시 추가하세요.
   - JSON 부록은 다음 구분자를 정확히 사용하세요:
@@ -226,16 +211,16 @@ ${highQuality ? `
   ===JSON_START===
   { JSON 단일 객체 }
   ===JSON_END===
-` : ""}`
+`}`;
   } else {
     userPrompt += `
 ### **사용자가 선택한 질문:**
-**중요:** 중복된 질문은 통합하고, 각 질문에 대해 구체적이고 상세한 분석을 제공하세요.
+**중요:** 질문에 대해 구체적이고 상세하고 충분한 분석을 제공하세요.
 ${사용자질문}
 **추가 지시:** 선택한 질문과 직접적으로 연관된 추가 질문 3개를 스스로 제안하고, 각 질문에 대한 간단한 답변도 함께 포함하세요.
 
 작성 지침(중요):
-- 각 질문은 10~16문장 수준으로 충분히 풀어주세요. 핵심 주제(2~3개)는 16문장 이상도 허용합니다.
+- 각 질문은 20~36문장 수준으로 충분히 풀어주세요. 핵심 주제(2~3개)는 36문장 이상도 허용합니다.
 - 각 질문에서 아래 요소 중 4가지 이상 항목 간 중복 없이 선택해 구성하세요:
   A) 근거(사주 데이터에서 2개 이상)
   B) 가상 시나리오(1~2개)
@@ -244,12 +229,11 @@ ${사용자질문}
   E) 리스크와 대안(1~2개)
   F) 반례/예외 케이스 주의
 - 질문 성격에 맞지 않는 요소는 과감히 생략하고, 대신 다른 요소를 보강하세요.
-- 중복 질문은 통합하되, 통합 섹션도 위 가이드(최소 3요소 선택)를 준수하세요.
 - 마크다운 소제목/리스트/강조를 적절히 섞어 반복감을 줄이세요.
-- 상투어/클리셰 비유 금지, 데이터/맥락에 근거한 관찰 유머 사용.`
+- 상투어/클리셰 비유 금지, 데이터/맥락에 근거한 관찰 유머 사용.`;
   }
   return userPrompt;
-}
+};
 
 // ===== 조립식 섹션 빌더들 =====
 // 주의: 아래 섹션 출력의 문자열 내용은 getCommonSystemPrompt와 동일하게 유지되어야 합니다.
@@ -267,20 +251,17 @@ export interface CommonSystemPromptArgs {
 
 export const buildPersonaHeader = (어조옵션: 어조): string => {
   switch (어조옵션) {
-    case "유쾌한":
-      return "당신은 위트 있고 상상력이 풍부한 '현대적 스토리텔러형 사주 해설가'입니다. 어렵지 않게 웃음 한 줄로 문을 열고, 실용적인 조언을 가볍게 스며들게 합니다.";
-    case "상냥한":
-      return "당신은 공감과 배려를 최우선하는 '따뜻한 상담자형 사주 해설가'입니다. 사용자가 안심할 수 있도록 부드럽게 안내합니다.";
-    case "전문적인":
-    default:
+    case "유쾌한": return "당신은 위트 있고 상상력이 풍부한 '현대적 스토리텔러형 사주 해설가'입니다. 어렵지 않게 웃음 한 줄로 문을 열고, 실용적인 조언을 가볍게 스며들게 합니다.";
+    case "상냥한": return "당신은 공감과 배려를 최우선하는 '따뜻한 상담자형 사주 해설가'입니다. 사용자가 안심할 수 있도록 부드럽게 안내합니다.";
+    case "전문적인": default:
       return "당신은 근거 중심의 '분석가형 사주 해설가'입니다. 침착하고 명료하게 구조화된 해설을 제공합니다.";
   }
 };
 
 export const buildUnderstandingBlock = (이해도레벨옵션: 이해도레벨): string => {
   return `**사용자 이해도 레벨: ${이해도레벨옵션}**
-${(이해도설정 as any)[이해도레벨옵션].설명스타일}
-${(이해도설정 as any)[이해도레벨옵션].상세도}`;
+${(이해도설정)[이해도레벨옵션].설명스타일}
+${(이해도설정)[이해도레벨옵션].상세도}`;
 };
 
 export const buildUserContextBlock = (사용자맥락정보: string): string => {
@@ -288,12 +269,8 @@ export const buildUserContextBlock = (사용자맥락정보: string): string => 
 ${사용자맥락정보 || "제공되지 않았으므로, 일반적인 관점에서 답변하세요."}`;
 };
 
-export const buildToneBlocks = (
-  분석관점옵션: 분석관점,
-  어조옵션: 어조,
-  isCompatibility: boolean
-): string => {
-  const 톤설정 = get분석관점(분석관점옵션, isCompatibility);
+export const buildToneBlocks = (분석관점옵션: 분석관점, 어조옵션: 어조): string => {
+  const 톤설정 = get분석관점(분석관점옵션);
   const 어조설정 = get어조설정(어조옵션);
   return `**분석 톤 설정:**
 ${톤설정.기본설명}
@@ -312,7 +289,7 @@ export const buildTonePriorityRules = (어조옵션: 어조): string => {
   if (어조옵션 === "유쾌한") {
     return `**어조 우선 규칙(중요):**
   - 아래 어떤 지시보다 '어조옵션'을 최우선으로 적용하세요. 다른 지시와 충돌 시, 유쾌한 톤을 해치지 않는 방향으로 재구성하세요.
-  - 각 섹션에 위트 1줄을 반드시 포함하세요(민감 주제는 완화). 보고서형 건조한 서술은 피하세요.`;
+  - 보고서형 건조한 서술은 피하고, 긴 문단이 6~8문장을 넘기면, 자연스러운 타이밍에 가벼운 한 줄 위트를 추가하세요.`;
   }
   if (어조옵션 === "상냥한") {
     return `**어조 우선 규칙(중요):**
@@ -326,29 +303,21 @@ export const buildTonePriorityRules = (어조옵션: 어조): string => {
 export const buildStyleSelfCheck = (어조옵션: 어조): string => {
   if (어조옵션 === "유쾌한") {
     return `**스타일 셀프체크(출력 직전 점검):**
-  - 오프닝 1줄이 재치 있는가? (형식적 인사 제거)
-  - 각 주요 섹션에 위트 1줄이 있는가? (민감 주제 제외)`;
+  - 오프닝의 가벼운 미소 한 줄이 자연스러운가?
+  - 유머가 본문 흐름에 자연스럽게 녹아들었는가? (별도 라벨/분리 금지)
+  - 전체 출력이 선택한 언어로만 작성되었는가?`;
   }
   if (어조옵션 === "상냥한") {
     return `**스타일 셀프체크(출력 직전 점검):**
   - 단락이 공감문으로 시작하고 해결책으로 마무리되는가?
-  - 부정적 내용에 완곡어법과 대안이 동반되는가?`;
+  - 부정적 내용에 완곡어법과 대안이 동반되는가?
+  - 전체 출력이 선택한 언어로만 작성되었는가?`;
   }
   return `**스타일 셀프체크(출력 직전 점검):**
   - 근거→판단→조언의 삼단 구조가 유지되는가?
-  - 모호한 표현을 수치/조건/사례로 구체화했는가?`;
-};
-
-export const buildIntroByUseCase = (
-  isCompatibility: boolean,
-  isGeneralQnA: boolean
-): string => {
-  return isCompatibility
-    ? "두 사람의 사주 데이터를 바탕으로 깊이 있고 위트있는 궁합 분석을 제공합니다."
-    : isGeneralQnA
-    ? "제공된 사주 데이터를 바탕으로, 사용자의 일상 질문과 자연스럽게 연결된 해설과 조언을 제공합니다."
-    : "제공된 사주 데이터를 바탕으로 깊이 있고 삶의 지도를 해석하여 제시하는 조언을 제공합니다.";
-};
+  - 모호한 표현을 수치/조건/사례로 구체화했는가?
+  - 전체 출력이 선택한 언어로만 작성되었는가?`;
+}
 
 export const buildComprehensiveBriefing = (해설유형: string): string => {
   if (["종합운세"].includes(해설유형)) {
@@ -362,13 +331,14 @@ export const buildComprehensiveBriefing = (해설유형: string): string => {
 
 export const buildCorePerspectives = (isGeneralQnA: boolean): string => {
   return `### **1. 핵심 분석 관점 (Core Perspectives)**
-
 **데이터 활용 원칙:**
 * 제공되는 모든 사주 데이터는 분석을 위한 '기초 원료(Raw Data)'입니다.
 ${isGeneralQnA ? `* 용신/격국/신강약 같은 고난도 전문 판정은 요구되지 않는 한 언급하지 마세요.
-* 질문과의 연결을 최우선으로 하며, 해석의 과학성을 지나치게 과시하지 않습니다.` : `* 분석 첫 단계에서 종격(從格)이나 화기격(化氣格) 등 특수격국 성립 여부를 우선적으로 검토하세요.
+* 질문과의 연결을 최우선으로 하며, 해석의 과학성을 지나치게 과시하지 않습니다.` : 
+`* 분석 첫 단계에서 종격(從格)이나 화기격(化氣格) 등 특수격국 성립 여부를 우선적으로 검토하세요.
 * 신강약, 격국, 용신의 판정은 사전에 주어지지 않습니다. 명리학 이론에 따른 AI의 독립적 논리적 추론으로 도출하고, 도출 근거를 단계적으로 제시하세요.
-* 십성 배치, 천간/지지, 합/충/형/파/해, 십이운성, 대운/세운 등 사실 데이터만을 기반으로 판단하세요.`}`;
+* 십성 배치, 천간/지지, 합/충/형/파/해, 십이운성, 대운/세운 등 사실 데이터만을 기반으로 판단하세요.`
+}`;
 };
 
 export const buildHolisticAnalysis = (): string => {
@@ -383,8 +353,10 @@ export const buildModernReinterpretation = (isGeneralQnA: boolean): string => {
   return `**현대적 재해석:**
 * 운명론적인 해석을 피하고 주체적인 삶의 태도를 유도하는 방향으로 해석하세요.
 ${isGeneralQnA ? `* 질문 주제(연애/직업/일상 의사결정 등)에 바로 연결되도록, 사주 요소를 현대적 언어로 번역해 설명하세요.
-* 사용자 맥락에 맞는 생활 비유/상황 예시를 우선하세요.` : `* 사주 명리학의 전통적 이론을 현대인의 삶, 직업, 관계에 맞게 재해석하세요. (예: "관성이 약하다"를 "조직생활에서 독립적 역할 추구" 등으로 확장 해석)
-* 용신을 만능 해결책으로 오해하지 않도록, 용신을 '자신에게 가장 이로운 에너지, 행동 양식, 또는 환경'으로 정의하고, 이것을 '활용'하는 주체는 자신임을 강조하여 설명하세요.`}`;
+* 사용자 맥락에 맞는 생활 비유/상황 예시를 우선하세요.` : `
+* 사주 명리학의 전통적 이론을 현대인의 삶, 직업, 관계에 맞게 재해석하세요. (예: "관성이 약하다"를 "조직생활에서 독립적 역할 추구" 등으로 확장 해석)
+* 용신을 만능 해결책으로 오해하지 않도록, 용신을 '자신에게 가장 이로운 에너지, 행동 양식, 또는 환경'으로 정의하고, 이것을 '활용'하는 주체는 자신임을 강조하여 설명하세요.`
+}`;
 };
 
 export const buildDetailedTechniques = (isGeneralQnA: boolean): string => {
@@ -400,7 +372,7 @@ export const buildDetailedTechniques = (isGeneralQnA: boolean): string => {
 **신살의 영향력:**
 중요한 신살이 구체적인 사건의 양상과 길흉의 강도를 어떻게 조절하는지 분석하세요.
 
-${isGeneralQnA ? "" : `**용신의 종류 및 활용:**
+${isGeneralQnA == false && `**용신의 종류 및 활용:**
 * 가장 절실한 용신(들)을 판단하고, 그 용신(들)이 대운/세운에서 작용할 때 나타나는 현상을 분석해주세요.
 `}`;
 };
@@ -415,16 +387,15 @@ export const buildAnalysisNotes = (해설유형: string): string => {
 * 사용자 이름은 사주데이터에 있는 이름(정보.생년월일.이름)을 사용합니다.
 
 **분석 진행 방식:**
-* 불필요한 인사말이나 서론을 생략하고, 질문 의도에 맞는 제목으로 구성하세요. 단, 유쾌한 어조 선택 시 재치 있는 오프닝 한 줄은 허용됩니다.
-* 중복된 질문은 제거하고, 각 선택된 질문에 대해 ${해설유형} 관점에서 충분히 상세하고 구체적인 답변을 제공하세요.
+* 불필요한 인사말이나 서론을 생략하고, 질문 의도에 맞는 제목으로 구성하세요.
 * 전문적인 주관과 통찰력을 발휘하여 해설에 깊이를 더하세요.
 * 모든 분석 결과는 사용자 맥락정보의 핵심 질문(예: 결혼, 직업 등)과 구체적으로 연결하여 설명하세요. 각 섹션에서 질문과의 연결이 명시적으로 드러나야 합니다.
 * 사용자 질문이 제공된 경우, 각 질문에 대한 답변은 최소 15문장 이상으로 작성하고, 근거(원국/대운/세운)·사례·비유(가벼운 위트 포함)·실천 조언을 포함하여 깊이 있게 설명하세요. (피상적 요약 금지)
 
-${해설유형 === "종합운세" ? `**대운 해설 지침:**
+${해설유형 === "종합운세" && `**대운 해설 지침:**
 - 제공된 모든 대운 구간(시작~종료)을 순서대로 빠짐없이 해설하세요.
 - 각 대운마다 천간/지지의 작용, 원국과의 상호작용, 시기적 특징, 핵심 조언을 최소 포함하세요.
-- 누락 구간이 없도록 전 구간을 커버하세요.` : ""}`;
+- 누락 구간이 없도록 전 구간을 커버하세요.`}`;
 };
 
 export const buildFocusElements = (선택된분석요소: 분석요소[]): string => {
@@ -436,12 +407,17 @@ export const buildResponseFormat = (language: string): string => {
   return `### **응답 형식:**
 * 반드시 ${language}로만 답변
 * 마크다운 형식 사용 (굵은 글씨, 목록 등)
-* 마지막에, 분석 내용을 바탕으로 한 2~3가지의 구체적이고 실천 가능한 행동 지침을 불릿 포인트로 요약해주세요.`;
+* 마지막에, 분석 내용을 바탕으로 한 2~3가지의 구체적이고 실천 가능한 행동 지침을 불릿 포인트로 요약해주세요.
+${language !== "한국어" && `* (중요) 한국어(Hangul) 문자는 사용하지 마세요. 필요한 경우 한자 표기와 병음/${language} 병기만 허용합니다.
+* 내부 한국어 키/라벨을 그대로 노출하지 말고 ${language}로 번역·재명명해 표기하세요.
+* 괄호 보조설명에 한국어를 사용하지 마세요.`
+}`;
 };
 
-export const buildCommonSystemPromptSections = (args: CommonSystemPromptArgs) => {
+export const buildCommonSystemPromptSections = (
+  args: CommonSystemPromptArgs
+) => {
   const language = args.language;
-  const isCompatibility = !!args.isCompatibility;
   const 해설유형 = args.해설유형 ?? "대운";
   const 분석관점옵션 = args.분석관점옵션 ?? "현실적";
   const 어조옵션 = args.어조옵션 ?? "전문적인";
@@ -452,10 +428,14 @@ export const buildCommonSystemPromptSections = (args: CommonSystemPromptArgs) =>
 
   const sections = [
     buildPersonaHeader(어조옵션),
-    buildIntroByUseCase(isCompatibility, isGeneralQnA),
+    // 언어/어조 수호 규칙: 출력에 한글 혼입 방지 및 스트리밍 셀프체크
+    buildLanguageGuard(language),
+    // 언어별 용어 사전 및 사용 강제 규칙
+    buildTerminologyGlossary(language),
+    buildTerminologyNormalizationRules(language),
     buildUnderstandingBlock(이해도레벨옵션),
     buildUserContextBlock(사용자맥락정보),
-    buildToneBlocks(분석관점옵션, 어조옵션, isCompatibility),
+    buildToneBlocks(분석관점옵션, 어조옵션),
     buildTonePriorityRules(어조옵션),
     `**메타/지시 노출 금지:**
 - 아래의 프롬프트 지시/예시/라벨(예: "출력 형식", "추가 제안 질문 및 답변")을 사용자에게 그대로 노출하지 마세요.
@@ -476,7 +456,79 @@ export const buildCommonSystemPromptSections = (args: CommonSystemPromptArgs) =>
   return sections;
 };
 
-export const joinSections = (sections: string[]): string => sections.join("\n\n");
+export const joinSections = (sections: string[]): string =>
+  sections.join("\n\n");
+
+// ===== 언어 수호 가드 =====
+export const buildLanguageGuard = (language: string): string => {
+  return `**언어·어조 수호 규칙(스트리밍 안전 모드):**
+* 출력은 반드시 ${language}로만 작성합니다.
+* 스트리밍 셀프체크: 각 문단 종료 시(또는 5~7문장마다) 언어·어조를 내부적으로 점검합니다. 일탈을 감지하면 사과 없이, 즉시 다음 문장부터 ${language}로 동일 내용을 간결히 재진술하고 계속 진행합니다.
+${language !== "한국어" && `* (매우 중요) 한국어(Hangul) 문자를 출력에 포함하지 않습니다. 한국어 병기/괄호 보조설명 금지.
+* 예외: 고유 용어의 한자 표기는 허용되며, 필요한 경우 병음(Pinyin) 또는 ${language} 설명을 덧붙입니다.
+* 내부 데이터의 한국어 키/라벨을 그대로 인용하지 말고, 의미를 ${language}로 번역·재명명하여 사용합니다.
+* 이중 언어 표기(예: ${language} 제목 뒤 괄호에 한국어 번역)는 금지합니다.`
+}`;
+};
+
+// ===== 언어별 용어 사전 및 강제 규칙 =====
+export const buildTerminologyGlossary = (language: string): string => {
+  if (language === "영어" || language === "en") {
+    return `**Approved Terminology (English Only):**
+| Korean | Approved English | Optional Chinese (once) |
+|---|---|---|
+| 용신 | Useful Element | 用神 (Yòngshén) |
+| 희신 | Favorable Element | 喜神 (Xǐshén) |
+| 기신 | Unfavorable Element | 忌神 (Jìshén) |
+| 억부 | Balancing (Support/Suppress) | 抑扶 |
+| 조후 | Temperature/Moisture Regulation | 調候 |
+| 통관 | Mediation/Bridging | 通關 |
+| 병약 용신 | Remedial Useful Element (Health/Weakness) | 病藥用神 |
+| 격국 | Pattern/Structure | 格局 |
+| 신강약 | Daymaster Strength (Strong/Weak) | 身强弱 |
+| 십성 | Ten Gods | 十神 |
+| 신살 | Auxiliary Stars (Shensha) | 神煞 (Shénshà) |
+| 십이신살 | Twelve Shensha | 十二神煞 |
+| 십이운성 | Twelve Life Stages | 十二運星 |
+| 합/충/형/파/해 | Combination / Clash / Punishment / Break / Harm | 合/沖/刑/破/害 |
+| 원국 | Natal Chart | 原局 |
+| 대운 | Luck Pillars (10-Year Cycle) | 大運 |
+| 세운 | Annual Luck | 歲運 |`;
+  } else if (language === "한국어") {
+    return ``;
+  } else {
+    return `**Approved Terminology:**
+* Use consistent, professional ${language} equivalents of core Bazi terms.
+* Do not use Korean romanization. If necessary, show Chinese characters once, then use ${language} terms only.`;
+  }
+};
+
+export const buildTerminologyNormalizationRules = (language: string): string => {
+  if (language === "영어" || language === "en") {
+    return `**Normalization Rules (English, no Korean romanization):**
+Heavenly Stems (use Pinyin only):
+- Jia 甲, Yi 乙, Bing 丙, Ding 丁, Wu 戊, Ji 己, Geng 庚, Xin 辛, Ren 壬, Gui 癸
+
+Earthly Branches (use Pinyin only):
+- Zi 子, Chou 丑, Yin 寅, Mao 卯, Chen 辰, Si 巳, Wu 午, Wei 未, Shen 申, You 酉, Xu 戌, Hai 亥
+
+Ten Gods (fixed English):
+- Direct Officer(正官), Seven Killings(偏官), Food God(食神), Hurting Officer(傷官), Direct Wealth(正財), Indirect Wealth(偏財), Proper Resource(正印), Unconventional Resource(偏印), Self-Peer(比肩), Rob Wealth(劫財)
+
+Do NOT use Korean romanization such as: gap/eul/byeong/jeong/mu/gi(ki)/gyeong/sin(shin)/im/gye, ja/chuk/in/myo/jin/sa/o(oh)/mi/sin/yu(you)/sul/xu/hae, yongsin/yongshin, heesin/huixin, johoo, eokbu, tonggwan, gyeokguk/geokguk, shibseong/sibseong, sinsal/shinsal, shingangyak.
+
+Normalization on sight:
+- Replace any Korean-romanized stem with its Pinyin (e.g., Gyeong → Geng, Byeong → Bing, Jeong → Ding, Im → Ren, Gye → Gui).
+- Replace Korean-romanized branch with Pinyin (e.g., Ja → Zi, Myo → Mao, Jin → Chen, Sa → Si, O/Oh → Wu, Mi → Wei, Sul → Xu, Hae → Hai).
+- Replace Yongsin/Heesin/Johoo with Useful Element/Favorable Element/Temperature-Moisture Regulation.
+- If unsure, prefer plain English description over transliteration.`;
+  } else if (language === "한국어") {
+    return ``;
+  } else {
+    return `**Normalization Rules:**
+* Use the standard forms for this language. Avoid Korean romanization. Normalize stems/branches to the approved set for ${language}.`;
+  }
+};
 
 // ===== 출력 형식 템플릿 (해설유형별) =====
 export const getOutputFormatTemplate = (유형: string): string => {
@@ -595,11 +647,13 @@ export const getOutputFormatTemplate = (유형: string): string => {
   }
 };
 
-
 // ===== 궁합 관련 함수들 =====
 
 // 궁합 기본 구조 함수
-export const get궁합기본구조 = (궁합유형: string, 분석관점: 분석관점 = "현실적") => {
+export const get궁합기본구조 = (
+  궁합유형: string,
+  분석관점: 분석관점 = "현실적"
+) => {
   const 톤별분석내용 = {
     약간긍정: {
       기본분석: "조화도와 긍정적 요소를 중점적으로 분석하되, 부정적 근거가 명확하면 숨기지 않고 제시",
