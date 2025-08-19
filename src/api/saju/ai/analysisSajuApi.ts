@@ -18,6 +18,7 @@ import {
   generateAnalysisPrompts,
   generateCompatibilityPrompts,
 } from "./prompt/geminiPrompt";
+import { ensureCelebrityTranslation } from "./utils";
 // API 사용자가 보내는 요청 본문 타입 정의 (안전한 파라미터만 허용)
 interface AnalysisSajuRequest {
   // 사주 데이터 (필수)
@@ -331,6 +332,19 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       user,
       c
     );
+
+    // 유명인물 분석의 경우: 대상 언어 번역 레코드 선보장(없으면 생성/보완)
+    try {
+      if (options.destination && options.destination.type === "celebrityTranslation") {
+        const lang = options.i18n || options.destination.languageCode || "ko";
+        if (options.destination.celebrityId && lang !== "ko") {
+          await ensureCelebrityTranslation(c.env, options.destination.celebrityId, lang);
+        }
+      }
+    } catch (preTranslationError) {
+      console.error("[AnalysisSaju] 사전 번역 보장 실패:", preTranslationError);
+      // 사전 번역 실패는 분석 자체를 막지 않음
+    }
 
     // Durable Object 클라이언트 생성
     const doClient = new DurableObjectClient(c.env, user.id);

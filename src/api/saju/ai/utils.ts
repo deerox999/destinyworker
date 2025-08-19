@@ -1,4 +1,6 @@
 import { createPrismaClient } from "../../../common/prismaUtils";
+import { GoogleGenAI } from "@google/genai";
+import { supportedLanguages } from "../../../common/utils";
 
 // 공통 모델 설정
 export const SERVER_MODEL_CONFIG = {
@@ -175,6 +177,165 @@ export function buildGeminiPayload(
     generationConfig,
     safetySettings: SERVER_MODEL_CONFIG.safetySettings,
   };
+}
+
+/**
+ * 유명인물 번역 레코드 보장 유틸
+ * - 기준: 한국어(ko)
+ * - 대상 언어 레코드가 없거나 비어있는 필드가 있으면 Gemini로 번역하여 생성/보완
+ * - 존재하고 모두 채워져 있으면 noop
+ */
+export async function ensureCelebrityTranslation(
+  env: any,
+  celebrityId: string,
+  languageCode: string
+): Promise<{ created: boolean; updated: boolean; languageCode: string }> {
+  const prisma = createPrismaClient(env.DB);
+  try {
+    if (!celebrityId || !languageCode || languageCode === "ko") {
+      return { created: false, updated: false, languageCode };
+    }
+
+    // 한국어 원문 확보
+    const baseKo = await prisma.celebrityTranslation.findFirst({
+      where: { celebrityId, languageCode: "ko" },
+      select: { name: true, occupation: true, description: true },
+    });
+    if (!baseKo) {
+      return { created: false, updated: false, languageCode };
+    }
+
+    // 대상 언어 현재 상태
+    const existing = await prisma.celebrityTranslation.findFirst({
+      where: { celebrityId, languageCode },
+      select: { id: true, name: true, occupation: true, description: true },
+    });
+
+    const isEmpty = (v?: string | null) => !v || String(v).trim().length === 0;
+    const missingKeys: Array<"name" | "occupation" | "description"> = (
+      existing
+        ? (["name", "occupation", "description"] as const).filter(
+            (k) => isEmpty((existing as any)[k])
+          )
+        : ["name", "occupation", "description"]
+    ) as any;
+
+    if (missingKeys.length > 0) {
+      const input: Record<string, string> = {};
+      missingKeys.forEach((k) => {
+        (input as any)[k] = (baseKo as any)[k] || "";
+      });
+
+      const ai = new GoogleGenAI({ apiKey: env.GOOGLE_GEMINI_API_KEY });
+      const payload: any = {
+        model: "gemini-2.5-flash",
+        systemInstruction: {
+          parts: [
+            {
+              text:
+                "You are a professional translation engine. Translate the provided Korean celebrity profile fields into the target language accurately and naturally. Preserve proper nouns. Return strictly a compact JSON without code fences or extra commentary.",
+            },
+          ],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text:
+                  `sourceLanguage: ko\n` +
+                  `targetLanguage: ${languageCode}\n` +
+                  `Return JSON with exactly these keys if present in input: name, occupation, description.\n` +
+                  `Input JSON:\n${JSON.stringify(input)}`,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          ...SERVER_MODEL_CONFIG.generationConfig,
+          temperature: 0.2,
+          maxOutputTokens: 1024,
+        },
+        safetySettings: SERVER_MODEL_CONFIG.safetySettings,
+      };
+
+      const resp = await ai.models.generateContent(payload);
+      const raw = (resp as any)?.text as string;
+      const cleaned = (raw || "")
+        .trim()
+        .replace(/^```(json)?/i, "")
+        .replace(/```$/i, "")
+        .trim();
+
+      let translated: any;
+      try {
+        translated = JSON.parse(cleaned);
+      } catch (_) {
+        const s = cleaned.indexOf("{");
+        const e = cleaned.lastIndexOf("}");
+        if (s !== -1 && e !== -1 && e > s) {
+          translated = JSON.parse(cleaned.slice(s, e + 1));
+        } else {
+          translated = {};
+        }
+      }
+
+      if (!existing) {
+        await prisma.celebrityTranslation.create({
+          data: {
+            celebrityId,
+            languageCode,
+            name: translated?.name ?? baseKo.name ?? "",
+            occupation: translated?.occupation ?? baseKo.occupation ?? "",
+            description: translated?.description ?? baseKo.description ?? "",
+            aiResponse: null,
+          },
+        });
+        return { created: true, updated: false, languageCode };
+      } else {
+        const updateData: Record<string, string> = {};
+        if (isEmpty(existing.name) && translated?.name) updateData.name = translated.name;
+        if (isEmpty(existing.occupation) && translated?.occupation) updateData.occupation = translated.occupation;
+        if (isEmpty(existing.description) && translated?.description) updateData.description = translated.description;
+        if (Object.keys(updateData).length > 0) {
+          await prisma.celebrityTranslation.update({
+            where: { id: existing.id },
+            data: updateData,
+          });
+          return { created: false, updated: true, languageCode };
+        }
+      }
+    }
+
+    return { created: false, updated: false, languageCode };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/**
+ * 한국어 기준으로 모든 비한국어 번역을 보장합니다.
+ * - 기본 대상: `supportedLanguages`에서 `ko` 제외
+ * - `targetLanguages`를 전달하면 해당 목록만 처리
+ */
+export async function ensureCelebrityTranslationsForAllNonKo(
+  env: any,
+  celebrityId: string,
+  targetLanguages?: string[]
+): Promise<{ created: number; updated: number }> {
+  const langs = (targetLanguages && targetLanguages.length > 0
+    ? targetLanguages
+    : supportedLanguages
+  ).filter((l) => l !== "ko");
+
+  let created = 0;
+  let updated = 0;
+  for (const lang of langs) {
+    const res = await ensureCelebrityTranslation(env, celebrityId, lang);
+    if (res.created) created += 1;
+    if (res.updated) updated += 1;
+  }
+  return { created, updated };
 }
 
 /**

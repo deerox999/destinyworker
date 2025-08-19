@@ -5,6 +5,7 @@ import {
   generateTitle,
   saveSajuAnalysisInitial,
   updateSajuAnalysis,
+  ensureCelebrityTranslation,
   type AnalysisJob
 } from "../utils";
 import { createPrismaClient } from "../../../../common/prismaUtils";
@@ -532,15 +533,17 @@ export class SajuAnalysisWorker implements DurableObject {
           const prisma = createPrismaClient(this.env.DB);
           const { celebrityId, languageCode } = job.destination;
 
-          // 해당 번역이 존재하는지 확인 후 업데이트
-          const existing = await prisma.celebrityTranslation.findFirst({
+          // 번역 레코드 보장(없으면 생성/보완)
+          await ensureCelebrityTranslation(this.env, celebrityId, languageCode);
+
+          // aiResponse 업데이트(보장된 레코드 기준)
+          const target = await prisma.celebrityTranslation.findFirst({
             where: { celebrityId, languageCode },
             select: { id: true },
           });
-
-          if (existing) {
-            const res = await prisma.celebrityTranslation.update({
-              where: { id: existing.id },
+          if (target) {
+            await prisma.celebrityTranslation.update({
+              where: { id: target.id },
               data: { aiResponse: fullResponse },
             });
           }
