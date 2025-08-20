@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-import { createPrismaClient } from "./prismaUtils";
 export type ApiLogInput = {
   method: string;
   url: string;

@@ -51,6 +51,7 @@
     "dev": "wrangler dev --x-remote-bindings --config wrangler.local.json",
     "dev:remote": "wrangler dev --x-remote-bindings",
     "deploy": "wrangler deploy",
+    "postinstall": "npx prisma generate",
     "check": "tsc && wrangler deploy --dry-run",
     "secret:put": "wrangler secret put RESEND_API_KEY",
     "whoami": "npx wrangler whoami",
