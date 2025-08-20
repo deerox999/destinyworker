@@ -9,6 +9,11 @@ generator client {
   engineType = "wasm"
 }
 
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db" // local db 사용함. dev.db
+}
+
 /// 사용자 테이블 - Google OAuth로 로그인한 사용자 정보 저장
 /// Google 계정과 연동된 사용자 관리 시스템
 model User {
