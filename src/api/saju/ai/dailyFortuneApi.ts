@@ -1,6 +1,6 @@
 import { Context } from "hono";
 import { GoogleGenAI } from "@google/genai";
-import { SERVER_MODEL_CONFIG } from "./utils";
+import { logUsageMetadata, SERVER_MODEL_CONFIG } from "./utils";
 import { buildDailyFortunePrompts } from "./prompt/dailyFortunePrompt";
 import { calculateDailyFortuneScores } from "./prompt/dailyFortuneCalculator";
 
@@ -174,18 +174,7 @@ export async function DailyFortune(c: Context): Promise<Response> {
     // console.log("payload : ", payload)
     const resp = await ai.models.generateContent(payload);
     // 사용량(토큰 등) 메타데이터 로깅
-    try {
-      const usageMetadata = (resp as any)?.response?.usageMetadata ?? (resp as any)?.usageMetadata;
-      if (process.env.ENVIRONMENT === "development") {
-        if (usageMetadata) {
-          console.log("[DailyFortune] usageMetadata:", usageMetadata);
-        } else {
-          console.log("[DailyFortune] usageMetadata: 없음");
-        } 
-      }
-    } catch (e) {
-      console.log("[DailyFortune] usageMetadata 로깅 실패:", e);
-    }
+    logUsageMetadata(c.env, resp);
     const text = resp.text as unknown as string;
 
     // 결과를 JSON으로 파싱 (코드펜스/서문 제거 대비)

@@ -230,17 +230,6 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
       { userId: user.id, email: user.email, role: user.role },
       c.env.GOOGLE_CLIENT_SECRET
     );
-
-    // 세션 저장
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await prisma.session.create({
-      data: {
-        userId: user.id,
-        jwtToken: jwtToken,
-        expiresAt: expiresAt,
-      },
-    });
-
     // 인증 코드 삭제
     await c.env.AUTH_CODE_KV.delete(key);
 

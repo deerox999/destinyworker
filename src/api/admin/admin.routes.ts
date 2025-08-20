@@ -3,19 +3,17 @@ import {
   addUserPoints,
   deductUserPoints,
   getAdminStats,
-  getAiUsageLogsForUser,
   getAiUsageStatsByModel,
   getAiUsageStatsByUser,
   getAiUsageStatsForModel,
   getAnalysisById,
-  getLoginHistory,
   getUserAnalysisTransactions,
   getUserCurrentPoints,
   getUserPointTransactions,
   getUserProfiles,
   getUsers,
   getUserSajuAnalyses,
-  updateUserByAdmin,
+  updateUserByAdmin
 } from "./adminApi";
 
 import { MiddlewareHandler } from "hono";
@@ -309,54 +307,6 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
     },
   });
 
-  const getLoginHistoryRoute = createRoute({
-    method: "get",
-    path: "history/login",
-    summary: "로그인/로그아웃 기록 조회",
-    description:
-      "전체 사용자의 로그인/로그아웃 기록을 페이지네이션으로 조회합니다.",
-    tags: ["Admin"],
-    security: [{ BearerAuth: [] }],
-    request: {
-      query: PaginationQuerySchema.merge(UserSearchQuerySchema).extend({
-        action: z
-          .enum(["login", "logout"])
-          .optional()
-          .openapi({ description: "활동 종류 필터링", example: "login" }),
-      }).openapi({ type: 'object' }),
-    },
-    responses: {
-      200: {
-        description: "성공",
-        content: {
-          "application/json": {
-            schema: SuccessSchema.extend({
-              history: z.array(
-                z.object({
-                  id: z.number().openapi({ example: 1 }),
-                  action: z.string().openapi({ example: "login" }),
-                  ip: z.string().nullable().openapi({ example: "192.168.0.1" }),
-                  userAgent: z.string().nullable().openapi({ example: "Mozilla/5.0" }),
-                  createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-                  user: z
-                    .object({
-                      id: z.number().openapi({ example: 1 }),
-                      email: z.string().openapi({ example: "user@example.com" }),
-                      name: z.string().openapi({ example: "홍길동" }),
-                      picture: z.string().url().nullable().openapi({ example: "https://example.com/profile.jpg" }),
-                    })
-                    .nullable().openapi({ type: 'object' }),
-                }).openapi({ type: 'object' })
-              ).openapi({ type: 'array' }),
-              pagination: PaginationResponseSchema,
-            }).openapi({ type: 'object' }),
-          },
-        },
-      },
-      403: { description: "관리자 권한이 필요합니다." },
-    },
-  });
-
   const getAiUsageStatsByModelRoute = createRoute({
     method: "get",
     path: "/stats/ai-usage-by-model",
@@ -466,47 +416,6 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
           },
         },
       },
-    },
-  });
-
-
-  const getAiUsageLogsForUserRoute = createRoute({
-    method: "get",
-    path: "/users/{userId}/ai-logs",
-    summary: "[Admin] 특정 사용자 AI 사용 기록 조회",
-    description:
-      "특정 사용자의 모든 AI API 호출 기록을 페이지네이션하여 조회합니다.",
-    tags: ["Admin"],
-    security: [{ BearerAuth: [] }],
-    request: {
-      params: UserIdParamSchema,
-      query: PaginationQuerySchema.merge(DateRangeQuerySchema).merge(
-        AiUsageSortQuerySchema
-      ),
-    },
-    responses: {
-      200: {
-        description: "성공",
-        content: {
-          "application/json": {
-            schema: SuccessSchema.extend({
-              logs: z.array(
-                z.object({
-                  id: z.number(),
-                  model: z.string(),
-                  promptTokens: z.number().int(),
-                  completionTokens: z.number().int(),
-                  totalTokens: z.number().int(),
-                  createdAt: z.string().datetime().openapi({ example: "2023-01-01T00:00:00.000Z" }),
-                }).openapi({ type: 'object' })
-              ),
-              pagination: PaginationResponseSchema,
-            }).openapi({ type: 'object' }),
-          },
-        },
-      },
-      400: { description: "잘못된 사용자 ID입니다." },
-      403: { description: "관리자 권한이 필요합니다." },
     },
   });
 
@@ -769,11 +678,10 @@ export function createAdminRouter(authMiddleware: MiddlewareHandler): OpenAPIHon
   app.openapi(updateUserRoute, (c) => updateUserByAdmin(c));
   app.openapi(getUserProfilesRoute, (c) => getUserProfiles(c)); // 안됨
   app.openapi(getUserSajuAnalysesRoute, (c) => getUserSajuAnalyses(c));
-  app.openapi(getLoginHistoryRoute, (c) => getLoginHistory(c)); // 안됨
+  
   app.openapi(getAiUsageStatsByModelRoute, (c) => getAiUsageStatsByModel(c)); // 안됨
   app.openapi(getAiUsageStatsForModelRoute, (c) => getAiUsageStatsForModel(c)); // 안됨
   app.openapi(getAiUsageStatsByUserRoute, (c) => getAiUsageStatsByUser(c)); // 안됨
-  app.openapi(getAiUsageLogsForUserRoute, (c) => getAiUsageLogsForUser(c)); // 안됨
   
   // 포인트 관련 라우트
   app.openapi(addUserPointsRoute, (c) => addUserPoints(c));

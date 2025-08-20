@@ -260,6 +260,8 @@ export async function ensureCelebrityTranslation(
       };
 
       const resp = await ai.models.generateContent(payload);
+      logUsageMetadata(env, resp);
+
       const raw = (resp as any)?.text as string;
       const cleaned = (raw || "")
         .trim()
@@ -558,4 +560,21 @@ export function extractSimplifiedBirthArray(sajuData: any): any[] | null {
   const arr = Array.isArray(sajuData) ? sajuData : [sajuData];
   const simplified = arr.map(toBirth).filter((x) => x);
   return simplified.length > 0 ? simplified : null;
+}
+
+
+export function logUsageMetadata(env: any, resp: any) {
+  try {
+    const usageMetadata = (resp as any)?.response?.usageMetadata ?? (resp as any)?.usageMetadata;
+
+    if (env.ENVIRONMENT === "development") {
+      if (usageMetadata) {
+        console.log("[usageMetadata] usageMetadata:", usageMetadata);
+      } else {
+        console.log("[usageMetadata] usageMetadata: 없음");
+      } 
+    }
+  } catch (e) {
+    console.log("[usageMetadata] usageMetadata 로깅 실패:", e);
+  }
 }

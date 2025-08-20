@@ -99,19 +99,16 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
     } catch (_) {
       // ignore parse errors, fallback to defaults
     }
-
-    // [TODO 테스트 필요함@@@] 대화 히스토리 구성
+    
     // - 종합운세: 이전 userPrompt에 JSON/차트 생성 지시가 포함되어 충돌 가능 → userPrompt 제외, 모델 응답만 포함
     // - 그 외 유형: 이전 userPrompt와 모델 응답을 그대로 포함
     const conversationHistory = (
-      (analysisType || "종합운세") === "종합운세"
-        ? [
-            ...(previous.aiResponse ? [{ role: "model", parts: [{ text: previous.aiResponse }] }] : []),
-          ]
-        : [
-            { role: "user", parts: [{ text: previous.userPrompt || "" }] },
-            { role: "model", parts: [{ text: previous.aiResponse || "" }] },
-          ]
+      (analysisType || "종합운세") === "종합운세" ? [
+        ...(previous.aiResponse ? [{ role: "model", parts: [{ text: previous.aiResponse }] }] : []),
+      ] : [
+        { role: "user", parts: [{ text: previous.userPrompt || "" }] },
+        { role: "model", parts: [{ text: previous.aiResponse || "" }] },
+      ]
     );
 
     // 포인트 비용 계산: 동일 모델 기준 정상가의 50%

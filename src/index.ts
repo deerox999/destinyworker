@@ -3,11 +3,14 @@ import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAppRouter } from "./api/routes";
 import { SajuAnalysisWorker } from "./api/saju/ai/durable-objects/SajuAnalysisWorker";
+import { ColumnWorker } from "./api/community/durable-objects/ColumnWorker";
+import { adminColumnApi } from "./api/community/adminColumnApi";
 
 type Env = {
   Bindings: {
     KV: KVNamespace;
     SAJU_ANALYSIS_WORKER: DurableObjectNamespace;
+    COLUMN_WORKER: DurableObjectNamespace;
     GOOGLE_GEMINI_API_KEY: string;
     DB: D1Database;
   }
@@ -54,6 +57,12 @@ const routes = createAppRouter();
 app.route("/", routes);
 
 // Durable Object 등록
-export { SajuAnalysisWorker };
+export { SajuAnalysisWorker, ColumnWorker };
 
 export default app;
+
+// Cloudflare Cron Triggers 스케줄 핸들러
+export const scheduled: ExportedHandlerScheduledHandler<Env["Bindings"]> = async (controller, env, ctx) => {
+  // 매일 정해진 시각에 1건 생성 시도 (실패 시 스킵)
+  await adminColumnApi.scheduledGenerateDaily(env as any);
+};

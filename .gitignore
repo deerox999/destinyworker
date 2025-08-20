@@ -186,3 +186,5 @@ scripts/current-db-schema.sql
 prisma/backup/
 
 prisma/dev.db
+
+tmp

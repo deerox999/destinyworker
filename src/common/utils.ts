@@ -93,13 +93,8 @@ export async function generateJWT(
     false,
     ["sign"]
   );
-
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
-  const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
-
+  const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
   return `${data}.${signatureB64}`;
 }
 

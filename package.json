@@ -56,6 +56,14 @@
     "whoami": "npx wrangler whoami",
     "logout": "npx wrangler logout",
     "login": "npx wrangler login",
-    "db:list": "npx wrangler d1 list"
+    "db:list": "npx wrangler d1 list",
+    "tmp:init": "node -e \"require('fs').mkdirSync('tmp',{recursive:true})\"",
+    "seed:gen": "node ./scripts/gen-celeb-seed.mjs",
+    "db:local:exec": "npx wrangler d1 execute destiny-local --file ./tmp/seed_celeb.sql",
+    "db:prod:dump:celebs": "npx wrangler d1 execute destiny-new --command=\"SELECT id,birthYear,birthMonth,birthDay,birthHour,birthMinute,calendar,gender,imageUrl FROM Celebrity;\" --remote --json > ./tmp/celebs.json",
+    "db:prod:dump:trans": "npx wrangler d1 execute destiny-new --command=\"SELECT celebrityId,languageCode,name,occupation,description FROM CelebrityTranslation WHERE languageCode='ko';\" --remote --json > ./tmp/translations.json",
+    "db:prod:exec": "npx wrangler d1 execute destiny --file ./tmp/seed_celeb.sql --remote",
+    "seed:local": "npm run tmp:init && npm run db:prod:dump:celebs && npm run db:prod:dump:trans && npm run seed:gen && npm run db:local:exec",
+    "seed:prod": "npm run tmp:init && npm run db:prod:dump:celebs && npm run db:prod:dump:trans && npm run seed:gen && npm run db:prod:exec"
   }
 }

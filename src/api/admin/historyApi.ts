@@ -6,16 +6,16 @@ export async function getErrorLogs(c: Context) {
   try {
     const page = Number(c.req.query("page") ?? 1);
     const limit = Number(c.req.query("limit") ?? 20);
-    const urlContains = c.req.query("urlContains");
-    const from = c.req.query("from");
-    const to = c.req.query("to");
+    const urlContains = normalizeQueryString(c.req.query("urlContains"));
+    const fromDate = parseDateParam(c.req.query("from"));
+    const toDate = parseDateParam(c.req.query("to"));
 
     const where: any = { statusCode: { gte: 400 } };
     if (urlContains) where.url = { contains: urlContains };
-    if (from || to) {
+    if (fromDate || toDate) {
       where.createdAt = {} as any;
-      if (from) (where.createdAt as any).gte = new Date(from);
-      if (to) (where.createdAt as any).lte = new Date(to);
+      if (fromDate) (where.createdAt as any).gte = fromDate;
+      if (toDate) (where.createdAt as any).lte = toDate;
     }
 
     const [totalItems, items] = await Promise.all([
@@ -86,6 +86,22 @@ function safeParseJson(text?: string | null) {
   }
 }
 
+function normalizeQueryString(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const trimmed = String(value).trim();
+  if (!trimmed || trimmed.toLowerCase() === "undefined" || trimmed.toLowerCase() === "null") {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function parseDateParam(value?: string | null): Date | undefined {
+  const normalized = normalizeQueryString(value);
+  if (!normalized) return undefined;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 // --- 아래부터 History 라우터의 비즈니스 로직 분리 ---
 
 export async function createApiLog(c: Context) {
@@ -129,26 +145,29 @@ export async function getApiLogs(c: Context) {
   const prisma = createPrismaClient(c.env.DB);
   try {
     const isErrorParam = c.req.query("isError");
-    const statusCode = c.req.query("statusCode");
-    const urlContains = c.req.query("urlContains");
-    const from = c.req.query("from");
-    const to = c.req.query("to");
+    const statusCodeRaw = c.req.query("statusCode");
+    const urlContains = normalizeQueryString(c.req.query("urlContains"));
+    const fromDate = parseDateParam(c.req.query("from"));
+    const toDate = parseDateParam(c.req.query("to"));
     const page = Number(c.req.query("page") ?? 1);
     const pageSize = Math.min(100, Number(c.req.query("pageSize") ?? 20));
 
     const where: any = {};
-    if (statusCode) where.statusCode = Number(statusCode);
+    const parsedStatusCode = parseInt(String(statusCodeRaw ?? ""), 10);
+    if (!Number.isNaN(parsedStatusCode)) where.statusCode = parsedStatusCode;
     if (urlContains) where.url = { contains: urlContains };
-    if (from || to) {
+    if (fromDate || toDate) {
       where.createdAt = {} as any;
-      if (from) (where.createdAt as any).gte = new Date(from);
-      if (to) (where.createdAt as any).lte = new Date(to);
+      if (fromDate) (where.createdAt as any).gte = fromDate;
+      if (toDate) (where.createdAt as any).lte = toDate;
     }
     if (isErrorParam === "true") {
       where.statusCode = { gte: 400 };
     } else if (isErrorParam === "false") {
       where.statusCode = { lt: 400 };
     }
+
+    console.log(where)
 
     const [total, items] = await Promise.all([
       prisma.apiLog.count({ where }),
@@ -184,9 +203,16 @@ export async function getApiStats(c: Context) {
   try {
     const now = new Date();
     const defaultFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const from = c.req.query("from") ? new Date(c.req.query("from")!) : defaultFrom;
-    const to = c.req.query("to") ? new Date(c.req.query("to")!) : now;
-    const topN = Number(c.req.query("top") ?? 10);
+    let from = parseDateParam(c.req.query("from")) ?? defaultFrom;
+    let to = parseDateParam(c.req.query("to")) ?? now;
+    const topNRaw = Number(c.req.query("top") ?? 10);
+    const topN = Number.isFinite(topNRaw) && topNRaw > 0 ? topNRaw : 10;
+
+    if (from > to) {
+      const tmp = from;
+      from = to;
+      to = tmp;
+    }
 
     const where: any = { createdAt: { gte: from, lte: to } };
 

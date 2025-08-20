@@ -4,14 +4,18 @@
   (원격) npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE SajuAnalysis ADD COLUMN optionsJson TEXT;"
   (파일) npx wrangler d1 execute destiny-local --local --file=prisma/migrations/20250805102303_/migration.sql
   
-  npx wrangler d1 execute destiny-local --command "ALTER TABLE "User" ADD COLUMN "subscriptionUntil" DATETIME;"
-  npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE "User" ADD COLUMN "subscriptionUntil" DATETIME;"
+npx wrangler d1 execute destiny-local --command "ALTER TABLE "User" ADD COLUMN "subscriptionUntil" DATETIME;"
+npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE "User" ADD COLUMN "subscriptionUntil" DATETIME;"
+npx wrangler d1 execute destiny-local --command "ALTER TABLE "Celebrity" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT (datetime('now', 'utc'));"
+npx wrangler d1 execute destiny-local --command "ALTER TABLE "Celebrity" DROP COLUMN "updatedAt""
 
   (동기화) npx prisma generate
 
   (1) Prisma 스키마로 전체 스키마 SQL 생성
-  npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/_full_schema.sql
+  npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/full_schema.sql
   (2) 생성된 스키마를 로컬 D1에 적용
-  npx wrangler d1 execute destiny-local --local --file=prisma/migrations/_full_schema.sql
+  npx wrangler d1 execute destiny-local --local --file=prisma/migrations/full_schema.sql
+  (2) 생성된 스키마를 원격 D1에 적용 (체크 필수)
+  npx wrangler d1 execute destiny --remote --file=prisma/migrations/full_schema.sql
   
 */

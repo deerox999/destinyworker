@@ -342,74 +342,6 @@ export async function getAdminStats(
   }
 }
 
-// 로그인/로그아웃 기록 조회
-export async function getLoginHistory(
-  c: Context
-): Promise<Response> {
-  try {
-    if (!(await isAdmin(c))) {
-      return c.json({ error: "관리자 권한이 필요합니다." }, 403);
-    }
-
-    const prisma = createPrismaClient(c.env.DB);
-
-    const { page, take, skip } = parsePagination(c, { defaultLimit: 20, maxLimit: 100 });
-    const search = c.req.query("search") || "";
-    const action = c.req.query("action") || ""; // 'login' or 'logout'
-
-    const whereCondition: any = {};
-    if (search) {
-      whereCondition.user = {
-        OR: [{ name: { contains: search } }, { email: { contains: search } }],
-      };
-    }
-    if (action === "login" || action === "logout") {
-      whereCondition.action = action;
-    }
-
-    const [history, totalCount] = await Promise.all([
-      prisma.loginHistory.findMany({
-        where: whereCondition,
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              picture: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take,
-      }),
-      prisma.loginHistory.count({ where: whereCondition }),
-    ]);
-
-    await prisma.$disconnect();
-
-    return c.json({
-      success: true,
-      history: history.map((h: any) => ({
-        id: h.id,
-        action: h.action,
-        createdAt: toUTC(h.createdAt),
-        user: h.user,
-      })),
-      pagination: buildPaginationMeta(totalCount, page, take),
-    });
-  } catch (error) {
-    return c.json(
-      {
-        error: "로그인 기록 조회 실패",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-      500
-    );
-  }
-}
-
 /**
  * 모델별 AI 사용량 통계를 조회합니다.
  */
@@ -674,60 +606,6 @@ export async function getAiUsageStatsByUser(
     return c.json(
       {
         error: "사용자별 AI 사용량 통계 조회 실패",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-      500
-    );
-  }
-}
-
-/**
- * 특정 사용자의 AI 사용 기록을 페이지네이션하여 조회합니다.
- */
-export async function getAiUsageLogsForUser(
-  c: Context
-): Promise<Response> {
-  if (!(await isAdmin(c))) {
-    return c.json({ error: "관리자 권한이 필요합니다." }, 403);
-  }
-
-  const userId = Number(c.req.param("userId"));
-  if (!userId) {
-    return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
-  }
-
-  const startDate = c.req.query("startDate");
-  const endDate = c.req.query("endDate");
-
-  try {
-    const baseWhereClauses: { clause: string; binding: any }[] = [
-      { clause: "userId = ?", binding: userId },
-    ];
-    if (startDate) {
-      baseWhereClauses.push({
-        clause: "createdAt >= ?",
-        binding: new Date(startDate).toISOString(),
-      });
-    }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      baseWhereClauses.push({
-        clause: "createdAt <= ?",
-        binding: end.toISOString(),
-      });
-    }
-
-    return await paginate(c, c.env.DB, {
-      tableName: "ai_usage_logs",
-      defaultLimit: 20,
-      baseWhereClauses,
-    });
-  } catch (error) {
-    console.error("Error fetching AI usage logs for user:", error);
-    return c.json(
-      {
-        error: "사용자 AI 사용 기록 조회 실패",
         message: error instanceof Error ? error.message : "Unknown error",
       },
       500

@@ -1,6 +1,7 @@
 import { generateJWT, verifyJWT } from "../../../common/utils";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { Context } from "hono";
+import { logApi } from "../../../common/historyLogger";
 
 interface GoogleUserInfo {
   sub: string;
@@ -128,57 +129,6 @@ async function findOrCreateUser(
   }
 }
 
-// 세션 저장
-async function saveSession(
-  prisma: any,
-  userId: number,
-  jwtToken: string,
-  expiresAt: Date
-): Promise<boolean> {
-  try {
-    await prisma.session.create({
-      data: {
-        userId: userId,
-        jwtToken: jwtToken,
-        expiresAt: expiresAt,
-      },
-    });
-    return true;
-  } catch (error) {
-    console.error("Session save error:", error);
-    return false;
-  }
-}
-
-// 만료된 세션 정리
-async function cleanupExpiredSessions(prisma: any): Promise<void> {
-  try {
-    const now = new Date();
-    await prisma.session.deleteMany({
-      where: {
-        expiresAt: {
-          lt: now,
-        },
-      },
-    });
-  } catch (error) {
-    console.error("Session cleanup error:", error);
-  }
-}
-
-// 세션 삭제
-async function deleteSession(prisma: any, jwtToken: string): Promise<boolean> {
-  try {
-    const result = await prisma.session.deleteMany({
-      where: { jwtToken: jwtToken },
-    });
-    return result.count > 0;
-  } catch (error) {
-    console.error("Session delete error:", error);
-    return false;
-  }
-}
-
 // Google 로그인
 export async function googleLogin(c: Context): Promise<Response> {
   if (!c.env.DB) {
@@ -193,6 +143,7 @@ export async function googleLogin(c: Context): Promise<Response> {
   }
 
   try {
+    const startedAt = Date.now();
     const body = (await c.req.json()) as { token?: string };
     const { token } = body;
 
@@ -223,27 +174,22 @@ export async function googleLogin(c: Context): Promise<Response> {
       { userId: user.id, email: user.email, role: user.role },
       c.env.GOOGLE_CLIENT_SECRET
     );
-
-    // 세션 저장
-    const limitDate = 7 * 24 * 60 * 60 * 1000;
-    const expiresAt = new Date(Date.now() + limitDate);
-    await saveSession(prisma, user.id, jwtToken, expiresAt);
-
-    // 만료된 세션 정리
-    await cleanupExpiredSessions(prisma);
-
     // 로그인 기록 추가
-    try {
-      await prisma.loginHistory.create({
-        data: {
-          userId: user.id,
-          action: "login",
-        },
-      });
-    } catch (e) {
-      console.error("Login history save error:", e);
-      // 이 에러는 로그인 자체를 실패시키지는 않음
-    }
+    const durationMs = Date.now() - startedAt;
+    const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? undefined;
+    const userAgent = c.req.header("user-agent") ?? undefined;
+    await logApi(prisma as any, {
+      method: c.req.method,
+      url: c.req.url,
+      statusCode: 200,
+      durationMs,
+      user: { id: user.id, email: user.email, role: user.role },
+      params: { provider: "google" },
+      response: { success: true },
+      ip,
+      userAgent,
+      notes: "login",
+    });
 
     await prisma.$disconnect();
 
@@ -268,39 +214,34 @@ export async function logout(c: Context): Promise<Response> {
   }
 
   try {
+    const startedAt = Date.now();
     const authHeader = c.req.header("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json({ error: "인증 토큰이 필요합니다." }, 401);
     }
-
     const token = authHeader.substring(7);
-
-    // 토큰에서 사용자 정보 추출
     const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
     if (!payload) {
-      // 토큰이 유효하지 않아도 세션은 삭제 시도
-      const prisma = createPrismaClient(c.env.DB);
-      await deleteSession(prisma, token);
-      await prisma.$disconnect();
       return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
     }
 
     const prisma = createPrismaClient(c.env.DB);
-
-    // 세션 삭제 시도 (성공 여부와 관계없이 진행)
-    await deleteSession(prisma, token);
-
     // 로그아웃 기록 추가
-    try {
-      await prisma.loginHistory.create({
-        data: {
-          userId: payload.userId,
-          action: "logout",
-        },
-      });
-    } catch (e) {
-      console.error("Logout history save error:", e);
-    }
+    const durationMs = Date.now() - startedAt;
+    const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? undefined;
+    const userAgent = c.req.header("user-agent") ?? undefined;
+    await logApi(prisma as any, {
+      method: c.req.method,
+      url: c.req.url,
+      statusCode: 200,
+      durationMs,
+      user: { id: payload.userId, email: payload.email, role: payload.role || "user" },
+      params: { action: "logout" },
+      response: { success: true },
+      ip,
+      userAgent,
+      notes: "logout",
+    });
 
     await prisma.$disconnect();
 
@@ -332,21 +273,11 @@ export async function getUserInfo(c: Context): Promise<Response> {
 
     const prisma = createPrismaClient(c.env.DB);
 
-    // 세션 확인
-    const now = new Date();
-    const session = await prisma.session.findFirst({
-      where: {
-        jwtToken: token,
-        expiresAt: {
-          gt: now,
-        },
-      },
-    });
-
-    if (!session) {
-      await prisma.$disconnect();
-      return c.json({ error: "만료된 세션입니다." }, 401);
-    }
+    // 세션 확인 [TODO] jwt토큰에서 만료일자 확인해서 변경해야 함. 생성 시 주입 필요함.
+    // if (!session) {
+    //   await prisma.$disconnect();
+    //   return c.json({ error: "만료된 세션입니다." }, 401);
+    // }
 
     // 사용자 정보 조회
     const user = await prisma.user.findUnique({
@@ -377,33 +308,18 @@ export async function refreshToken(c: Context): Promise<Response> {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json({ error: "인증 토큰이 필요합니다." }, 401);
     }
-
     const oldToken = authHeader.substring(7);
     const payload = await verifyJWT(oldToken, c.env.GOOGLE_CLIENT_SECRET);
-
     if (!payload) {
       return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
     }
-
     const prisma = createPrismaClient(c.env.DB);
-
-    // 기존 세션 삭제
-    await deleteSession(prisma, oldToken);
-
     // 새 JWT 토큰 생성
-    const newJwtToken = await generateJWT(
-      {
+    const newJwtToken = await generateJWT({
         userId: payload.userId,
         email: payload.email,
         role: payload.role || "user",
-      },
-      c.env.GOOGLE_CLIENT_SECRET
-    );
-
-    // 새 세션 저장
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await saveSession(prisma, payload.userId, newJwtToken, expiresAt);
-
+      }, c.env.GOOGLE_CLIENT_SECRET);
     await prisma.$disconnect();
 
     return c.json({

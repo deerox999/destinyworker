@@ -16,7 +16,6 @@ export const createPrismaClient = (db: D1Database) => {
   return client;
 };
 
-
 // 관리자 권한 체크
 export const isAdmin = async (c: Context): Promise<boolean> => {
   const user = await getUserFromToken(c);

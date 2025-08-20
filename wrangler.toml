@@ -19,19 +19,10 @@ memory_mb = 128     # 메모리 사용량 제한 (128MB)
 
 # D1 데이터베이스 설정
 [[d1_databases]]
-database_name = "destiny-new"    # 프로덕션 데이터베이스
+database_name = "destiny"    # 프로덕션 데이터베이스
 binding = "DB"
-database_id = "d15b4855-83f8-49e5-9156-b9c2f99134c8"
-
-[[d1_databases]]
-database_name = "destiny-local"  # 로컬 개발용 데이터베이스
-binding = "DB_LOCAL"
-database_id = "b9c839c9-2356-4bb9-ab20-46e32a85aa2b"
-
-[[d1_databases]]
-database_name = "destiny-dev"    # 개발 환경 데이터베이스
-binding = "DB_DEV"
-database_id = "46554c0a-1866-4ae8-8a5a-3722e0fdf2d0"
+database_id = "f9ef2666-6d2f-419e-b54e-7d7f6951f036"
+experimental_remote = true
 
 # KV 네임스페이스 설정 (캐시 저장소)
 [[kv_namespaces]]
@@ -65,23 +56,32 @@ bucket_name = "destiny"
 preview_bucket_name = "destiny-dev"
 experimental_remote = true
 
-# send_email 설정 제거 - Resend 사용으로 변경
-
-
-
 [durable_objects] # Durable Objects 설정 (상태 유지 객체)
 [[durable_objects.bindings]] # 바인딩 설정
 name = "SAJU_ANALYSIS_WORKER"   # 사주 분석 워커 객체
 class_name = "SajuAnalysisWorker"
+
+[[durable_objects.bindings]]
+name = "COLUMN_WORKER"           # 칼럼 생성 워커 객체
+class_name = "ColumnWorker"
 
 [[durable_objects.classes]] # 클래스 정의
 name = "SajuAnalysisWorker"      # 사주 분석 워커 클래스
 script_name = "destinyworker"
 experimental_remote = true
 
+[[durable_objects.classes]]
+name = "ColumnWorker"            # 칼럼 생성 워커 클래스
+script_name = "destinyworker"
+experimental_remote = true
+
 [[migrations]] # 마이그레이션 설정
 tag = "v1"
 new_classes = ["SajuAnalysisWorker"]  # 새로운 Durable Object 클래스
+
+[[migrations]]
+tag = "v2"
+new_classes = ["ColumnWorker"]
 
 [vars] # 환경 변수
 ENVIRONMENT = "production"       # 환경 설정
@@ -91,3 +91,7 @@ enabled = true                   # 관찰성 기능 활성화
 
 [dev] # 개발 서버 설정
 port = 9393                      # 로컬 개발 서버 포트 
+
+# Cloudflare Cron Triggers (UTC 기준)
+[[triggers]]
+crons = ["33 12 * * *"]

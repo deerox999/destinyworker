@@ -115,21 +115,6 @@ export const LangQuerySchema = z.object({
     }),
 });
 
-export const CelebrityCommentIdParamSchema = z.object({
-  commentId: z
-    .string()
-    .regex(/^\d+$/)
-    .transform(Number)
-    .openapi({
-      param: {
-        name: "commentId",
-        in: "path",
-      },
-      description: "유명인물 댓글 ID",
-      example: "123",
-    }),
-});
-
 export const CommentFieldsSchema = z.object({
   id: z.number().int().openapi({ example: 1 }),
   content: z.string().openapi({ example: "정말 멋져요!" }),

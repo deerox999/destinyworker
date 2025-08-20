@@ -139,7 +139,7 @@ export function createHistoryRouter(): OpenAPIHono {
   const GetLogsQuerySchema = z
     .object({
       isError: z
-        .enum(["true", "false"])
+        .string()
         .optional()
         .openapi({
           param: { name: "isError", in: "query" },

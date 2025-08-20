@@ -270,17 +270,6 @@ export async function deleteAccount(c: Context): Promise<Response> {
       await prisma.$disconnect();
       return c.json({ error: "인증 토큰이 필요합니다." }, 401);
     }
-    const now = new Date();
-    const session = await prisma.session.findFirst({
-      where: {
-        jwtToken: token,
-        expiresAt: { gt: now },
-      },
-    });
-    if (!session) {
-      await prisma.$disconnect();
-      return c.json({ error: "만료된 세션입니다." }, 401);
-    }
 
     // 프로필 이미지가 R2에 있으면 삭제를 위해 현재 사용자 조회
     const existingUser = await prisma.user.findUnique({

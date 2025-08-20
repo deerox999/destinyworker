@@ -1,6 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { SuccessSchema } from "../../common/schemas";
 import { adminCommunityApi } from "./adminCommunityApi";
+import { adminColumnApi } from "./adminColumnApi";
 
 export function createAdminCommunityRouter(): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -501,5 +502,67 @@ export function createAdminCommunityRouter(): OpenAPIHono {
   app.openapi(createCategoryRoute, adminCommunityApi.createCategory);
   app.openapi(updateCategoryRoute, adminCommunityApi.updateCategory);
   app.openapi(deleteCategoryRoute, adminCommunityApi.deleteCategory);
+
+  // ===== 사주 칼럼 생성 (관리자) =====
+  const dryRunRoute = createRoute({
+    method: "post",
+    path: "/columns/dry-run",
+    summary: "사주 칼럼 미리보기(저장 없음)",
+    description: "제목/난이도 기준으로 칼럼 HTML을 생성해 미리보기. 저장하지 않음.",
+    tags: ["커뮤니티-관리자"],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              title: z.string().optional().openapi({ example: "십성이란 무엇일까" }),
+              level: z.enum(["초급","중급","고급"]).default("초급"),
+              language: z.enum(["ko","en","ja","zh","vi"]).default("ko"),
+            })
+          }
+        }
+      }
+    },
+    responses: { 200: { description: "성공" }, 400: { description: "유효성 실패" }, 409: { description: "유사도 중복" }, 500: { description: "서버 오류" } }
+  });
+  const generateRoute = createRoute({
+    method: "post",
+    path: "/columns/generate",
+    summary: "사주 칼럼 생성 및 저장",
+    description: "제목/난이도 기준으로 칼럼을 생성하고 게시글로 저장합니다.",
+    tags: ["커뮤니티-관리자"],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              title: z.string().optional().openapi({ example: "재성은 정말 돈만을 의미하는걸까?" }),
+              level: z.enum(["초급","중급","고급"]).default("초급"),
+              language: z.enum(["ko","en","ja","zh","vi"]).default("ko"),
+            })
+          }
+        }
+      }
+    },
+    responses: { 202: { description: "작업 등록 성공(비동기)" }, 400: { description: "유효성 실패" }, 409: { description: "유사도 중복" }, 500: { description: "서버 오류" } }
+  });
+
+  const generateStatusRoute = createRoute({
+    method: "get",
+    path: "/columns/generate/status",
+    summary: "사주 칼럼 생성 작업 상태 조회",
+    description: "비동기 칼럼 생성 작업의 상태를 조회합니다.",
+    tags: ["커뮤니티-관리자"],
+    request: {
+      query: z.object({
+        jobId: z.string().min(1).openapi({ param: { name: "jobId", in: "query" }, example: "col_1690000000_abcd1234" })
+      })
+    },
+    responses: { 200: { description: "성공" }, 404: { description: "작업없음" }, 500: { description: "서버 오류" } }
+  });
+
+  app.openapi(dryRunRoute, adminColumnApi.dryRunGenerate);
+  app.openapi(generateRoute, adminColumnApi.generateAndCreate);
+  app.openapi(generateStatusRoute, adminColumnApi.getGenerateStatus);
   return app;
 }
