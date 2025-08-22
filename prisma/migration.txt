@@ -9,6 +9,10 @@ npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE "User" ADD C
 npx wrangler d1 execute destiny-local --command "ALTER TABLE "Celebrity" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT (datetime('now', 'utc'));"
 npx wrangler d1 execute destiny-local --command "ALTER TABLE "Celebrity" DROP COLUMN "updatedAt""
 
+
+npx wrangler d1 execute destiny-local --command "CREATE TABLE "NicepayApprovalLog" ( "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "rawPayload" TEXT NOT NULL, "createdAt" DATETIME NOT NULL DEFAULT (datetime('now', 'utc')))"
+
+
   (동기화) npx prisma generate
 
   (1) Prisma 스키마로 전체 스키마 SQL 생성

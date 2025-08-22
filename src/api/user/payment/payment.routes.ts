@@ -1,14 +1,10 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { getPointsApi, completePaymentApi, subscribeApi, refundSubscriptionApi } from "./paymentApi";
 import { MiddlewareHandler } from "hono";
 import { SuccessSchema } from "../../../common/schemas";
+import { completePaymentApi, getPointsApi, nicepayApproveApi, refundSubscriptionApi, subscribeApi } from "./paymentApi";
 
-export function createPaymentRouter(
-  authMiddleware: MiddlewareHandler
-): OpenAPIHono {
+export function createPaymentRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
-  app.use(authMiddleware);
-
   // 포인트 조회 라우트
   const getPointsRoute = createRoute({
     method: "get",
@@ -182,6 +178,7 @@ export function createPaymentRouter(
 
   app.openapi(subscribeRoute, (c) => subscribeApi(c));
   app.openapi(refundSubscriptionRoute, (c) => refundSubscriptionApi(c));
-
+  // 나이스페이 결제 승인 라우트
+  app.post("/nice/approve", (c) => nicepayApproveApi(c));
   return app;
 }

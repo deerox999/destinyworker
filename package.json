@@ -53,7 +53,7 @@
     "deploy": "wrangler deploy",
     "postinstall": "npx prisma generate",
     "check": "tsc && wrangler deploy --dry-run",
-    "secret:put": "wrangler secret put RESEND_API_KEY",
+    "secret:put": "wrangler secret put NICE_SECRET_KEY",
     "whoami": "npx wrangler whoami",
     "logout": "npx wrangler logout",
     "login": "npx wrangler login",

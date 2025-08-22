@@ -1,14 +1,15 @@
 import { Context } from "hono";
 import {
   addPoints,
+  DAYS_PER_SUBSCRIPTION_MONTH,
   deductPoints,
   getUserPoints,
   isSubscriptionActive,
   SUBSCRIPTION_PRICE_PER_MONTH,
-  DAYS_PER_SUBSCRIPTION_MONTH,
 } from "../../../common/paymentUtils";
-import { getUserFromToken } from "../../../common/utils";
 import { createPrismaClient } from "../../../common/prismaUtils";
+import { logApi } from "../../../common/historyLogger";
+import { getUserFromToken } from "../../../common/utils";
 
 // 포인트 조회 API
 export async function getPointsApi(c: Context) {
@@ -289,6 +290,111 @@ export async function refundSubscriptionApi(c: Context) {
     console.error("Refund subscription API error:", error);
     return c.json(
       { success: false, message: "구독 환불 처리 중 오류가 발생했습니다." },
+      500
+    );
+  }
+}
+
+// 나이스페이 결제 승인 처리 API
+export async function nicepayApproveApi(c: Context) {
+  try {
+    // 1) 본문 파싱 (x-www-form-urlencoded / json 모두 지원) + 원문 보존
+    const contentType = (c.req.header("content-type") || "").toLowerCase();
+    const rawText = await c.req.text();
+    let body: any = {};
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+      const params = new URLSearchParams(rawText);
+      body = Object.fromEntries(params.entries());
+    } else if (contentType.includes("application/json")) {
+      try {
+        body = JSON.parse(rawText);
+      } catch {
+        return c.json({ success: false, message: "JSON 파싱 실패" }, 400);
+      }
+    } else {
+      // 기타 타입 폴백: JSON → URLSearchParams 순서로 시도
+      try {
+        body = JSON.parse(rawText);
+      } catch {
+        const params = new URLSearchParams(rawText);
+        body = Object.fromEntries(params.entries());
+      }
+    }
+
+    const tid: string | undefined = body?.tid ?? body?.TID ?? body?.Tid;
+    const amountRaw = body?.amount ?? body?.Amount;
+    const amount: number | undefined = typeof amountRaw === "number" ? amountRaw : Number(amountRaw);
+
+    if (!tid || !amount || Number.isNaN(amount) || amount <= 0) {
+      return c.json(
+        { success: false, message: "유효한 tid와 amount가 필요합니다." },
+        400
+      );
+    }
+
+    // 2) 나이스페이 결제 승인 API 호출
+    const isDev = c.env.ENVIRONMENT === 'development';
+    const clientKey: string = isDev ? 'S2_61d1c9e69d0f42f990151d0eb849861c' : c.env.NICE_CLIENT_KEY;
+    const secretKey: string = isDev ? '9b3f39dfeb8b489dbac6adda9e07bdff' : c.env.NICE_SECRET_KEY;
+
+    if (!clientKey || !secretKey) {
+      return c.json({ success: false, message: "결제 승인 키가 설정되지 않았습니다." }, 500);
+    }
+
+    const basic = typeof btoa === "function" ? btoa(`${clientKey}:${secretKey}`) : Buffer.from(`${clientKey}:${secretKey}`).toString("base64");
+    const baseUrl = isDev ? "https://sandbox-api.nicepay.co.kr/v1/payments" : "https://api.nicepay.co.kr/v1/payments";
+    const finalUrl = `${baseUrl}/${encodeURIComponent(tid)}`;
+    const startedAt = Date.now();
+    const approveRes = await fetch(finalUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${basic}`,
+      },
+      body: JSON.stringify({ amount: Math.floor(amount) }),
+    });
+
+    const approveJson: any = await approveRes.json().catch(() => ({}));
+    const durationMs = Date.now() - startedAt;
+
+    const isOk = approveRes.ok && (!approveJson?.resultCode || approveJson.resultCode === "0000");
+
+    // 3) history(ApiLog)에 응답 저장
+    const prisma = createPrismaClient(c.env.DB);
+    try {
+      const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? undefined;
+      const userAgent = c.req.header("user-agent") ?? undefined;
+      await logApi(prisma, {
+        method: c.req.method,
+        url: c.req.url,
+        statusCode: approveRes.status,
+        durationMs,
+        user: undefined,
+        params: { tid, amount, ...body },
+        response: approveJson,
+        ip,
+        userAgent,
+        notes: isOk ? "nicepay-approve:response:success" : "nicepay-approve:response:fail",
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    // 5) 프론트 결과 페이지로 리다이렉트 (쿼리 파라미터 포함)
+    const success = isOk ? "1" : "0";
+    const message = encodeURIComponent(
+      (isOk ? (approveJson?.resultMsg || "정상 처리되었습니다.") : (approveJson?.resultMsg || "승인 실패"))
+    );
+    const orderId = encodeURIComponent(String(body?.orderId || ""));
+    const tidEnc = encodeURIComponent(String(tid || ""));
+    const amtEnc = encodeURIComponent(String(Math.floor(amount)));
+    const resultUrl = `http://localhost:9999/saju/payment/result?success=${success}&message=${message}&orderId=${orderId}&tid=${tidEnc}&amount=${amtEnc}`;
+
+    return c.redirect(resultUrl);
+  } catch (error) {
+    console.error("Nicepay approve API error:", error);
+    return c.json(
+      { success: false, message: "결제 승인 처리 중 오류가 발생했습니다." },
       500
     );
   }
