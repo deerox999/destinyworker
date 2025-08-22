@@ -24,11 +24,12 @@ binding = "DB"
 database_id = "f9ef2666-6d2f-419e-b54e-7d7f6951f036"
 experimental_remote = true
 
-[[d1_databases]]
-database_name = "destiny-local"
-binding = "DB_LOCAL"
-database_id = "b9c839c9-2356-4bb9-ab20-46e32a85aa2b"
-experimental_remote = true
+## 로컬에 추가할 땐 이게 필요한데, 운영 배포시엔 오류가 발생하는 희한한...
+# [[d1_databases]]
+# database_name = "destiny-local"
+# binding = "DB_LOCAL"
+# database_id = "b9c839c9-2356-4bb9-ab20-46e32a85aa2b"
+# experimental_remote = true
 
 # KV 네임스페이스 설정 (캐시 저장소)
 [[kv_namespaces]]
