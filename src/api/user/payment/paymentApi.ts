@@ -476,7 +476,7 @@ export async function nicepayApproveApi(c: Context) {
       }
     }
 
-    const resultUrl = `http://localhost:9999/saju/payment/result?success=${success}&message=${message}&orderId=${orderId}&tid=${tidEnc}&amount=${amtEnc}`;
+    const resultUrl = `${isDev ? 'http://localhost:9999' : 'https://youram.me'}/saju/payment/result?success=${success}&message=${message}&orderId=${orderId}&tid=${tidEnc}&amount=${amtEnc}`;
 
     return c.redirect(resultUrl);
   } catch (error) {

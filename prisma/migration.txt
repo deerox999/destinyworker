@@ -10,8 +10,8 @@ npx wrangler d1 execute destiny-local --command "ALTER TABLE "Celebrity" ADD COL
 npx wrangler d1 execute destiny-local --command "ALTER TABLE "Celebrity" DROP COLUMN "updatedAt""
 
 
-npx wrangler d1 execute destiny-local --command "CREATE TABLE "NicepayApprovalLog" ( "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "rawPayload" TEXT NOT NULL, "createdAt" DATETIME NOT NULL DEFAULT (datetime('now', 'utc')))"
-
+npx wrangler d1 execute destiny-local --local --file=prisma/migrations/Payment.sql
+npx wrangler d1 execute destiny --remote --file=prisma/migrations/Payment.sql
 
   (동기화) npx prisma generate
 
