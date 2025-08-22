@@ -267,6 +267,71 @@ export async function addPoints(
   }
 }
 
+// 포인트 증가(멱등): 동일 (userId, reference) 거래가 이미 있으면 중복 증가를 방지
+export async function addPointsIdempotent(
+  db: D1Database,
+  userId: number,
+  amount: number,
+  description: string,
+  reference?: string,
+  analysisId?: number
+): Promise<{ success: boolean; message: string; newPoints?: number }> {
+  const prisma = createPrismaClient(db);
+  try {
+    // reference 없으면 일반 증가 사용
+    if (!reference) {
+      return await addPoints(db, userId, amount, description, reference, analysisId);
+    }
+
+    // 이미 동일 거래가 존재하면 현재 포인트 반환하며 성공 처리
+    const existing = await prisma.pointTransaction.findFirst({
+      where: { userId, reference },
+      select: { id: true },
+    });
+    if (existing) {
+      const current = await prisma.user.findUnique({ where: { id: userId }, select: { point: true } });
+      return {
+        success: true,
+        message: "이미 처리된 거래입니다.",
+        newPoints: current?.point,
+      };
+    }
+
+    // 증가와 거래기록을 하나의 트랜잭션으로 처리
+    const [updated] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { point: { increment: amount }, updatedAt: new Date() },
+        select: { point: true },
+      }),
+      prisma.pointTransaction.create({
+        data: {
+          userId,
+          amount,
+          description,
+          type: "CREDIT",
+          reference,
+          analysisId: analysisId ?? null,
+        },
+      }),
+    ]);
+
+    return {
+      success: true,
+      message: `포인트가 성공적으로 증가되었습니다. (증가: ${amount}, 총 포인트: ${updated.point})`,
+      newPoints: updated.point,
+    };
+  } catch (error) {
+    console.error("Add points idempotent error:", error);
+    return {
+      success: false,
+      message: "포인트 증가 중 오류가 발생했습니다.",
+    };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 // 포인트 거래 내역 조회
 export async function getPointTransactions(
   db: D1Database,

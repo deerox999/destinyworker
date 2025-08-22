@@ -47,6 +47,8 @@ model User {
   comments     Comment[]     /// 사용자가 작성한 댓글들
   postLikes    PostLike[]    /// 사용자가 추천한 게시글들
   commentLikes CommentLike[] /// 사용자가 추천한 댓글들
+
+  payments    Payment[] /// 결제 관계: 한 사용자는 여러 결제를 가질 수 있음
 }
 /// API 호출/에러 간단 로깅 테이블
 model ApiLog {
@@ -161,6 +163,27 @@ model PointTransaction {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade) /// 관계: 거래는 하나의 사용자에 속함
 
   @@index([userId, createdAt])
+  @@unique([userId, reference])
+}
+
+/// 결제 테이블 - 외부 결제와 내부 사용자/포인트 적립을 연결
+model Payment {
+  id          Int      @id @default(autoincrement()) /// 결제 고유 ID (자동 증가)
+  orderId     String   @unique /// 주문 ID (서버 생성)
+  userId      Int      /// 사용자 ID
+  amount      Int      /// 주문 금액 (KRW)
+  currency    String   @default("KRW") /// 통화 코드
+  provider    String   @default("nicepay") /// 결제 제공자
+  status      String   /// 결제 상태 (created, approved, failed)
+  tid         String?  @unique /// 결제 TID (승인 후)
+  approvedAt  DateTime? /// 승인 시각
+  createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
+  updatedAt   DateTime @updatedAt /// 갱신 시간
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 /// 게시판 테이블 - 커뮤니티 게시판 관리

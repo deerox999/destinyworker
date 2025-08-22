@@ -10,6 +10,8 @@ import {
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { logApi } from "../../../common/historyLogger";
 import { getUserFromToken } from "../../../common/utils";
+import { addPointsIdempotent } from "../../../common/paymentUtils";
+// import { randomUUID } from "crypto";
 
 // 포인트 조회 API
 export async function getPointsApi(c: Context) {
@@ -138,6 +140,53 @@ export async function completePaymentApi(c: Context) {
       },
       500
     );
+  }
+}
+
+// 주문 생성 API: 서버가 orderId를 생성하고 Payment 레코드 생성
+export async function initiateOrderApi(c: Context) {
+  try {
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
+
+    const { amount, currency = "KRW" } = (await c.req.json()) as {
+      amount?: number;
+      currency?: string;
+    };
+    if (!amount || amount <= 0) {
+      return c.json({ success: false, message: "유효하지 않은 금액입니다." }, 400);
+    }
+
+    const prisma = createPrismaClient(c.env.DB);
+    try {
+      const orderId = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const payment = await (prisma as any).payment.create({
+        data: ({
+          orderId,
+          userId: user.id,
+          amount: Math.floor(amount),
+          currency,
+          provider: "nicepay",
+          status: "created",
+        } as any),
+      });
+
+      return c.json({
+        success: true,
+        message: "주문이 생성되었습니다.",
+        data: {
+          orderId: payment.orderId,
+          amount: payment.amount,
+          currency: payment.currency,
+          status: payment.status,
+        },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+  } catch (error) {
+    console.error("Initiate order API error:", error);
+    return c.json({ success: false, message: "주문 생성 중 오류가 발생했습니다." }, 500);
   }
 }
 
@@ -385,9 +434,48 @@ export async function nicepayApproveApi(c: Context) {
     const message = encodeURIComponent(
       (isOk ? (approveJson?.resultMsg || "정상 처리되었습니다.") : (approveJson?.resultMsg || "승인 실패"))
     );
-    const orderId = encodeURIComponent(String(body?.orderId || ""));
+    const orderIdRaw = String(body?.orderId || "");
+    const orderId = encodeURIComponent(orderIdRaw);
     const tidEnc = encodeURIComponent(String(tid || ""));
     const amtEnc = encodeURIComponent(String(Math.floor(amount)));
+    // 4) 결제 승인 성공 시 Payment 멱등 업데이트 + 포인트 적립
+    if (isOk && orderIdRaw) {
+      const prisma2 = createPrismaClient(c.env.DB);
+      try {
+        // 단순 멱등 처리: 이미 승인된 경우 재시도시 무시
+        const payment = await prisma2.payment.findUnique({ where: { orderId: orderIdRaw } });
+        if (payment && payment.status !== "approved") {
+          // 금액 일치 검증
+          if (Math.floor(amount) !== (payment as any).amount) {
+            // 금액 불일치시 실패 처리로 전환
+            await prisma2.payment.update({
+              where: { orderId: orderIdRaw },
+              data: ({ status: "failed", updatedAt: new Date() } as any),
+            });
+          } else {
+            // 승인 처리 및 TID 저장
+            await prisma2.payment.update({
+              where: { orderId: orderIdRaw },
+              data: ({ status: "approved", tid, approvedAt: new Date(), updatedAt: new Date() } as any),
+            });
+            // 포인트 적립: reference를 tid 기반으로 멱등화
+            const reference = `nicepay:${tid}`;
+            await addPointsIdempotent(
+              c.env.DB,
+              (payment as any).userId,
+              Math.floor(amount),
+              "나이스페이 결제 적립",
+              reference
+            );
+          }
+        }
+      } catch (e) {
+        console.error("nicepay approve idempotent update error:", e);
+      } finally {
+        await prisma2.$disconnect();
+      }
+    }
+
     const resultUrl = `http://localhost:9999/saju/payment/result?success=${success}&message=${message}&orderId=${orderId}&tid=${tidEnc}&amount=${amtEnc}`;
 
     return c.redirect(resultUrl);
@@ -398,4 +486,15 @@ export async function nicepayApproveApi(c: Context) {
       500
     );
   }
+}
+
+// 취소/부분취소/환불 Placeholder (추후 구현)
+export async function nicepayCancelPlaceholderApi(c: Context) {
+  return c.json({ success: false, message: "취소 API는 추후 구현 예정입니다." }, 501 as any);
+}
+export async function nicepayPartialCancelPlaceholderApi(c: Context) {
+  return c.json({ success: false, message: "부분취소 API는 추후 구현 예정입니다." }, 501 as any);
+}
+export async function nicepayRefundPlaceholderApi(c: Context) {
+  return c.json({ success: false, message: "환불 API는 추후 구현 예정입니다." }, 501 as any);
 }

@@ -1,7 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { MiddlewareHandler } from "hono";
 import { SuccessSchema } from "../../../common/schemas";
-import { completePaymentApi, getPointsApi, nicepayApproveApi, refundSubscriptionApi, subscribeApi } from "./paymentApi";
+import { completePaymentApi, getPointsApi, initiateOrderApi, nicepayApproveApi, refundSubscriptionApi, subscribeApi, nicepayCancelPlaceholderApi, nicepayPartialCancelPlaceholderApi, nicepayRefundPlaceholderApi } from "./paymentApi";
 
 export function createPaymentRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -109,6 +109,52 @@ export function createPaymentRouter(authMiddleware: MiddlewareHandler): OpenAPIH
   app.openapi(getPointsRoute, (c) => getPointsApi(c));
   app.openapi(completePaymentRoute, (c) => completePaymentApi(c));
 
+  // 결제 주문 생성(서버 생성 orderId)
+  const initiateOrderRoute = createRoute({
+    method: "post",
+    path: "/orders/initiate",
+    summary: "결제 주문 생성",
+    description: "서버가 orderId를 생성하고 결제용 Payment 레코드를 생성합니다.",
+    tags: ["결제"],
+    security: [{ BearerAuth: [] }],
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                amount: z.number().int().positive().openapi({ description: "결제 금액(KRW)", example: 5000 }),
+                currency: z.string().default("KRW").openapi({ description: "통화", example: "KRW" }),
+              })
+              .openapi({ type: "object" }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "주문 생성 성공",
+        content: {
+          "application/json": {
+            schema: SuccessSchema.extend({
+              data: z
+                .object({
+                  orderId: z.string().openapi({ description: "주문 ID", example: "ord_20250101_abcdef" }),
+                  amount: z.number().openapi({ description: "금액", example: 5000 }),
+                  currency: z.string().openapi({ description: "통화", example: "KRW" }),
+                  status: z.string().openapi({ description: "상태", example: "created" }),
+                })
+                .openapi({ type: "object" }),
+            }).openapi({ type: "object" }),
+          },
+        },
+      },
+      401: { description: "인증 실패" },
+      400: { description: "잘못된 요청" },
+    },
+  });
+  app.openapi(initiateOrderRoute, (c) => initiateOrderApi(c));
+
   // 구독 구매 라우트
   const subscribeRoute = createRoute({
     method: "post",
@@ -180,5 +226,37 @@ export function createPaymentRouter(authMiddleware: MiddlewareHandler): OpenAPIH
   app.openapi(refundSubscriptionRoute, (c) => refundSubscriptionApi(c));
   // 나이스페이 결제 승인 라우트
   app.post("/nice/approve", (c) => nicepayApproveApi(c));
+
+  // 나이스페이 취소/부분취소/환불 (빈 엔드포인트, 추후 구현)
+  const niceCancelRoute = createRoute({
+    method: "post",
+    path: "/nice/cancel",
+    summary: "나이스페이 취소(빈 구현)",
+    description: "취소 로직은 추후 구현 예정.",
+    tags: ["결제"],
+    security: [{ BearerAuth: [] }],
+    responses: { 501: { description: "Not Implemented" } },
+  });
+  const nicePartialCancelRoute = createRoute({
+    method: "post",
+    path: "/nice/partial-cancel",
+    summary: "나이스페이 부분취소(빈 구현)",
+    description: "부분취소 로직은 추후 구현 예정.",
+    tags: ["결제"],
+    security: [{ BearerAuth: [] }],
+    responses: { 501: { description: "Not Implemented" } },
+  });
+  const niceRefundRoute = createRoute({
+    method: "post",
+    path: "/nice/refund",
+    summary: "나이스페이 환불(빈 구현)",
+    description: "환불 로직은 추후 구현 예정.",
+    tags: ["결제"],
+    security: [{ BearerAuth: [] }],
+    responses: { 501: { description: "Not Implemented" } },
+  });
+  app.openapi(niceCancelRoute, (c) => nicepayCancelPlaceholderApi(c));
+  app.openapi(nicePartialCancelRoute, (c) => nicepayPartialCancelPlaceholderApi(c));
+  app.openapi(niceRefundRoute, (c) => nicepayRefundPlaceholderApi(c));
   return app;
 }
