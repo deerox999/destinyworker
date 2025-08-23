@@ -220,7 +220,7 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
           email: email,
           name: email.split("@")[0], // 초기 이름은 이메일 앞부분으로 설정
           googleId: "", // 임시로 빈 문자열 설정 (데이터베이스 NOT NULL 제약조건 때문)
-          point: 3000,
+          point: 300,
         },
       });
     }

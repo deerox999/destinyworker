@@ -133,7 +133,7 @@ export function createAuthRouter(): OpenAPIHono {
                     .url()
                     .openapi({ example: "https://example.com/profile.jpg" }),
                   role: z.string().openapi({ example: "user" }),
-                  point: z.number().openapi({ example: 3000 }),
+                  point: z.number().openapi({ example: 300 }),
                   createdAt: z
                     .string()
                     .datetime()

@@ -24,7 +24,7 @@ model User {
   userName  String? /// 사용자 프로필 이름 (선택사항)
   picture   String? /// 사용자 프로필 사진 URL (Google 계정 프로필 사진, 선택사항)
   role      String   @default("user") /// 사용자 역할 (user, admin)
-  point     Int      @default(3000) /// 사용자 포인트 (기본값: 3000)
+  point     Int      @default(300) /// 사용자 포인트 (기본값: 300)
   // 구독 만료 일시(UTC). null이면 미구독 상태
   subscriptionUntil DateTime? /// 구독 만료 일시
   // 개인정보 동의 관련 필드들
@@ -176,6 +176,7 @@ model Payment {
   provider    String   @default("nicepay") /// 결제 제공자
   status      String   /// 결제 상태 (created, approved, failed)
   tid         String?  @unique /// 결제 TID (승인 후)
+  rawData     String?  /// 결제 전문 (JSON)
   approvedAt  DateTime? /// 승인 시각
   createdAt   DateTime @default(dbgenerated("(datetime('now', 'utc'))")) /// 생성 시간
   updatedAt   DateTime @updatedAt /// 갱신 시간

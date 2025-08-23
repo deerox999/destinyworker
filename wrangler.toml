@@ -29,7 +29,6 @@ experimental_remote = true
 # database_name = "destiny-local"
 # binding = "DB_LOCAL"
 # database_id = "b9c839c9-2356-4bb9-ab20-46e32a85aa2b"
-# experimental_remote = true
 
 # KV 네임스페이스 설정 (캐시 저장소)
 [[kv_namespaces]]

@@ -1,6 +1,6 @@
 import { Context } from "hono";
 import { buildPaginationMeta, paginate, parsePagination } from "../../common/paginationUtils";
-import { addPoints, deductPoints, getPointTransactions, getUserPoints } from "../../common/paymentUtils";
+import { addPoints, deductPoints, getUserPoints } from "../../common/paymentUtils";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
 import { toUTC, toJSON } from "../../common/utils";
 
@@ -251,11 +251,19 @@ export async function getUserProfiles(
       return c.json({ error: "사용자를 찾을 수 없습니다." }, 404);
     }
 
-    // 해당 사용자의 사주 프로필 조회
-    const profiles = await prisma.sajuProfile.findMany({
-      where: { userId },
-      orderBy: { updatedAt: "desc" },
-    });
+    // 페이지네이션 파라미터
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 20, maxLimit: 100 });
+
+    // 해당 사용자의 사주 프로필 조회 + 전체 개수
+    const [profiles, totalItems] = await Promise.all([
+      prisma.sajuProfile.findMany({
+        where: { userId },
+        orderBy: { updatedAt: "desc" },
+        take,
+        skip,
+      }),
+      prisma.sajuProfile.count({ where: { userId } }),
+    ]);
 
     await prisma.$disconnect();
 
@@ -287,7 +295,7 @@ export async function getUserProfiles(
         createdAt: toUTC(p.createdAt),
         updatedAt: toUTC(p.updatedAt),
       })),
-      count: profiles.length,
+      pagination: buildPaginationMeta(totalItems, page, take),
     });
   } catch (error) {
     return c.json(
@@ -892,33 +900,48 @@ export async function getUserPointTransactions(
       return c.json({ error: "잘못된 사용자 ID입니다." }, 400);
     }
 
-    const page = parseInt(c.req.query("page") || "1");
-    const limit = parseInt(c.req.query("limit") || "20");
-    const offset = (page - 1) * limit;
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 20, maxLimit: 100 });
 
-    const transactions = await getPointTransactions(c.env.DB, userId, limit, offset);
+    const prisma = createPrismaClient(c.env.DB);
+    try {
+      const [transactions, totalItems] = await Promise.all([
+        prisma.pointTransaction.findMany({
+          where: { userId },
+          select: {
+            id: true,
+            userId: true,
+            amount: true,
+            description: true,
+            type: true,
+            reference: true,
+            analysisId: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take,
+          skip,
+        }),
+        prisma.pointTransaction.count({ where: { userId } }),
+      ]);
 
-    // analysisId 컬럼이 이미 있으므로 그대로 사용
-    const transactionsWithAnalysisId = transactions;
-
-    return c.json({
-      success: true,
-      userId,
-      transactions: transactionsWithAnalysisId.map((t: any) => ({
-        id: t.id,
-        userId: t.userId,
-        amount: t.amount,
-        description: t.description,
-        type: t.type,
-        reference: t.reference,
-        analysisId: t.analysisId,
-        createdAt: toUTC(t.createdAt),
-      })),
-      pagination: {
-        currentPage: page,
-        pageSize: limit,
-      },
-    });
+      return c.json({
+        success: true,
+        userId,
+        transactions: transactions.map((t: any) => ({
+          id: t.id,
+          userId: t.userId,
+          amount: t.amount,
+          description: t.description,
+          type: t.type,
+          reference: t.reference || undefined,
+          analysisId: t.analysisId || undefined,
+          createdAt: toUTC(t.createdAt),
+        })),
+        pagination: buildPaginationMeta(totalItems, page, take),
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
   } catch (error) {
     return c.json(
       {

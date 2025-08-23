@@ -4,11 +4,13 @@
   (원격) npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE SajuAnalysis ADD COLUMN optionsJson TEXT;"
   (파일) npx wrangler d1 execute destiny-local --local --file=prisma/migrations/20250805102303_/migration.sql
   
-npx wrangler d1 execute destiny-local --command "ALTER TABLE "User" ADD COLUMN "subscriptionUntil" DATETIME;"
-npx wrangler d1 execute destiny-new --remote --command "ALTER TABLE "User" ADD COLUMN "subscriptionUntil" DATETIME;"
+
+npx wrangler d1 execute destiny --remote --command "ALTER TABLE "User" ADD COLUMN "subscriptionUntil" DATETIME;"
 npx wrangler d1 execute destiny-local --command "ALTER TABLE "Celebrity" ADD COLUMN "updatedAt" DATETIME NOT NULL DEFAULT (datetime('now', 'utc'));"
 npx wrangler d1 execute destiny-local --command "ALTER TABLE "Celebrity" DROP COLUMN "updatedAt""
 
+npx wrangler d1 execute destiny-local --command "ALTER TABLE "Payment" ADD COLUMN "rawData" String;"
+npx wrangler d1 execute destiny --remote --command  "ALTER TABLE "Payment" ADD COLUMN "rawData" String;"
 
 npx wrangler d1 execute destiny-local --local --file=prisma/migrations/Payment.sql
 npx wrangler d1 execute destiny --remote --file=prisma/migrations/Payment.sql

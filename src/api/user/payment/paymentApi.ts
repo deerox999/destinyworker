@@ -11,6 +11,7 @@ import { createPrismaClient } from "../../../common/prismaUtils";
 import { logApi } from "../../../common/historyLogger";
 import { getUserFromToken } from "../../../common/utils";
 import { addPointsIdempotent } from "../../../common/paymentUtils";
+import { buildPaginationMeta, parsePagination, parseSort } from "../../../common/paginationUtils";
 // import { randomUUID } from "crypto";
 
 // 포인트 조회 API
@@ -456,14 +457,14 @@ export async function nicepayApproveApi(c: Context) {
             // 승인 처리 및 TID 저장
             await prisma2.payment.update({
               where: { orderId: orderIdRaw },
-              data: ({ status: "approved", tid, approvedAt: new Date(), updatedAt: new Date() } as any),
+              data: ({ status: "approved", tid, rawData: JSON.stringify(approveJson), approvedAt: new Date(), updatedAt: new Date() } as any),
             });
             // 포인트 적립: reference를 tid 기반으로 멱등화
             const reference = `nicepay:${tid}`;
             await addPointsIdempotent(
               c.env.DB,
               (payment as any).userId,
-              Math.floor(amount),
+              Math.floor(amount / 10),
               "나이스페이 결제 적립",
               reference
             );
@@ -492,9 +493,200 @@ export async function nicepayApproveApi(c: Context) {
 export async function nicepayCancelPlaceholderApi(c: Context) {
   return c.json({ success: false, message: "취소 API는 추후 구현 예정입니다." }, 501 as any);
 }
-export async function nicepayPartialCancelPlaceholderApi(c: Context) {
-  return c.json({ success: false, message: "부분취소 API는 추후 구현 예정입니다." }, 501 as any);
+
+// 사용자 결제 내역 조회 API (페이지네이션)
+export async function getUserPaymentsApi(c: Context) {
+  try {
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
+
+    const { page, take, skip } = parsePagination(c, { defaultLimit: 20, maxLimit: 100 });
+    const { sort, order } = parseSort(c, {
+      allowedFields: ["createdAt", "amount", "status"],
+      defaultSort: "createdAt",
+      defaultOrder: "desc",
+    });
+
+    const prisma = createPrismaClient(c.env.DB);
+    try {
+      const [payments, totalItems] = await Promise.all([
+        prisma.payment.findMany({
+          where: { userId: (await getUserFromToken(c))!.id },
+          select: {
+            id: true,
+            orderId: true,
+            amount: true,
+            currency: true,
+            provider: true,
+            status: true,
+            tid: true,
+            rawData: true,
+            approvedAt: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+          orderBy: { [sort]: order as any },
+          skip,
+          take,
+        }),
+        prisma.payment.count({ where: { userId: user.id } }),
+      ]);
+
+      return c.json({
+        success: true,
+        data: payments.map((p: any) => ({
+          id: p.id,
+          orderId: p.orderId,
+          amount: p.amount,
+          currency: p.currency,
+          provider: p.provider,
+          status: p.status,
+          tid: p.tid || undefined,
+          rawData: p.rawData ? JSON.parse(p.rawData) : undefined,
+          approvedAt: p.approvedAt ? p.approvedAt.toISOString() : undefined,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+        })),
+        pagination: buildPaginationMeta(totalItems, page, take),
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+  } catch (error) {
+    console.error("Get user payments API error:", error);
+    return c.json({ success: false, message: "결제 내역 조회 중 오류가 발생했습니다." }, 500);
+  }
 }
-export async function nicepayRefundPlaceholderApi(c: Context) {
-  return c.json({ success: false, message: "환불 API는 추후 구현 예정입니다." }, 501 as any);
+
+// 나이스페이 결제 취소/부분취소 API
+// 참고 문서: https://github.com/nicepayments/nicepay-manual/blob/main/api/cancel.md
+export async function nicepayCancelApi(c: Context) {
+  try {
+    const user = await getUserFromToken(c);
+    if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
+
+    const body = (await c.req.json().catch(() => ({}))) as { tid?: string; orderId?: string; amount?: number; reason?: string };
+    const tid = body.tid?.toString();
+    const orderId = body.orderId?.toString();
+    const cancelAmountRaw = body.amount;
+    const reason = (body.reason || "User requested cancel").toString();
+
+    if ((!tid && !orderId) || !cancelAmountRaw || Number.isNaN(Number(cancelAmountRaw)) || Number(cancelAmountRaw) <= 0) {
+      return c.json({ success: false, message: "tid 또는 orderId와 유효한 amount가 필요합니다." }, 400);
+    }
+
+    const cancelAmount = Math.floor(Number(cancelAmountRaw));
+    const cancelPoints = Math.floor(cancelAmount / 10);
+
+    const prisma = createPrismaClient(c.env.DB);
+    try {
+      // 결제 조회 (사용자 소유)
+      const payment = tid
+        ? await prisma.payment.findFirst({ where: { tid, userId: user.id } })
+        : await prisma.payment.findFirst({ where: { orderId: orderId!, userId: user.id } });
+
+      if (!payment) {
+        return c.json({ success: false, message: "결제 정보를 찾을 수 없습니다." }, 404);
+      }
+
+      if ((payment as any).status !== "approved" && (payment as any).status !== "partially_canceled") {
+        return c.json({ success: false, message: "취소할 수 없는 결제 상태입니다." }, 400);
+      }
+
+      if (!(payment as any).tid) {
+        return c.json({ success: false, message: "TID가 없는 결제는 취소할 수 없습니다." }, 400);
+      }
+
+      // 이미 취소된 포인트 합산 (해당 TID 기준)
+      const refPrefix = `nicepay_cancel:${(payment as any).tid}`;
+      const canceledTx = await prisma.pointTransaction.findMany({
+        where: { userId: user.id, type: "DEBIT", reference: { startsWith: refPrefix } },
+        select: { amount: true },
+      });
+      const alreadyCanceledPoints = canceledTx.reduce((sum, t) => sum + Math.abs(Number((t as any).amount || 0)), 0);
+      // 환불 가능 KRW = 결제 KRW - (이미 회수한 포인트 * 10)
+      const refundableRemainingKrw = Math.max(0, Number((payment as any).amount) - alreadyCanceledPoints * 10);
+
+      if (cancelAmount > refundableRemainingKrw) {
+        return c.json({ success: false, message: `요청 금액이 환불 가능 금액(${refundableRemainingKrw})을 초과합니다.` }, 400);
+      }
+
+      // 잔여 포인트 확인: 현재 포인트가 취소 포인트 이상이어야 함
+      const currentPoints = await getUserPoints(c.env.DB, user.id);
+      if (currentPoints < cancelPoints) {
+        return c.json({ success: false, message: `잔여 포인트(${currentPoints})가 부족하여 취소할 수 없습니다.` }, 400);
+      }
+
+      // NICEPAY 취소 요청
+      const isDev = c.env.ENVIRONMENT === "development";
+      const clientKey: string = isDev ? "S2_61d1c9e69d0f42f990151d0eb849861c" : c.env.NICE_CLIENT_KEY;
+      const secretKey: string = isDev ? "9b3f39dfeb8b489dbac6adda9e07bdff" : c.env.NICE_SECRET_KEY;
+      if (!clientKey || !secretKey) {
+        return c.json({ success: false, message: "결제 취소 키가 설정되지 않았습니다." }, 500);
+      }
+      const basic = typeof btoa === "function" ? btoa(`${clientKey}:${secretKey}`) : Buffer.from(`${clientKey}:${secretKey}`).toString("base64");
+      const baseUrl = isDev ? "https://sandbox-api.nicepay.co.kr/v1/payments" : "https://api.nicepay.co.kr/v1/payments";
+      const url = `${baseUrl}/${encodeURIComponent((payment as any).tid)}/cancel`;
+
+      const startedAt = Date.now();
+      const cancelRes = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${basic}`,
+        },
+        body: JSON.stringify({ amount: cancelAmount, reason }),
+      });
+      const cancelJson: any = await cancelRes.json().catch(() => ({}));
+      const ok = cancelRes.ok && (!cancelJson?.resultCode || cancelJson.resultCode === "0000");
+
+      // 로그 저장
+      try {
+        await logApi(prisma, {
+          method: c.req.method,
+          url: c.req.url,
+          statusCode: cancelRes.status,
+          durationMs: Date.now() - startedAt,
+          user: { id: user.id, email: (user as any).email, name: (user as any).name },
+          params: { tid: (payment as any).tid, amount: cancelAmount, reason },
+          response: cancelJson,
+          notes: ok ? "nicepay-cancel:response:success" : "nicepay-cancel:response:fail",
+        });
+      } catch {}
+
+      if (!ok) {
+        const msg = cancelJson?.resultMsg || "나이스페이 취소 실패";
+        return c.json({ success: false, message: msg, data: cancelJson }, 400);
+      }
+
+      // 포인트 차감 (취소 금액만큼 회수)
+      const ref = `${refPrefix}:${Date.now()}`;
+      const debit = await deductPoints(c.env.DB, user.id, cancelPoints, "나이스페이 결제 취소 환불", ref);
+      if (!debit.success) {
+        // 경고: 외부 취소는 성공했지만 포인트 차감 실패. 운영자 개입 필요
+        return c.json({ success: false, message: "포인트 차감 실패 (외부 취소는 완료됨). 관리자에게 문의해 주세요." }, 500);
+      }
+
+      // 결제 상태 업데이트 (전액이면 canceled, 일부면 partially_canceled)
+      const newStatus = cancelAmount === refundableRemainingKrw ? "canceled" : "partially_canceled";
+      await prisma.payment.update({ where: { id: (payment as any).id }, data: ({ status: newStatus, updatedAt: new Date() } as any) });
+
+      return c.json({
+        success: true,
+        message: "결제가 취소되었습니다.",
+        data: {
+          tid: (payment as any).tid,
+          canceledAmount: cancelAmount,
+          status: newStatus,
+          remainingPoints: (debit as any).remainingPoints,
+          refundableRemaining: refundableRemainingKrw - cancelAmount,
+        },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+  } catch (error) {
+    console.error("Nicepay cancel API error:", error);
+    return c.json({ success: false, message: "결제 취소 처리 중 오류가 발생했습니다." }, 500);
+  }
 }

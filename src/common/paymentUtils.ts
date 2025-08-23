@@ -1,18 +1,18 @@
 import { PrismaClient } from '@prisma/client';
 import { createPrismaClient } from './prismaUtils';
+import { buildPaginationMeta } from './paginationUtils';
 
 // 구독 관련 상수
-export const SUBSCRIPTION_PRICE_PER_MONTH = 1000; // 1000 포인트 = 1개월
+export const SUBSCRIPTION_PRICE_PER_MONTH = 900; // 900 포인트 = 1개월
 export const DAYS_PER_SUBSCRIPTION_MONTH = 30; // 정확히 30일 기준
 
 // analysisType과 요청 type(individual/compatibility)에 따른 포인트 계산 함수
 export function getAnalysisTypePoints(analysisType: string, type?: string): number {
-  // 궁합 사주는 고정 2000포인트
-  if (type === "compatibility") return 2000;
+  if (type === "compatibility") return 600;
   switch (analysisType) {
-    case "연간운세": return 500;
-    case "종합운세": return 2000;
-    default: return 1000;
+    case "연간운세": return 150;
+    case "종합운세": return 500;
+    default: return 300;
   }
 }
 
@@ -336,10 +336,10 @@ export async function addPointsIdempotent(
 export async function getPointTransactions(
   db: D1Database,
   userId: number,
-  limit: number = 20,
-  offset: number = 0
-): Promise<
-  Array<{
+  page: number = 1,
+  limit: number = 20
+): Promise<{
+  transactions: Array<{
     id: number;
     amount: number;
     description: string;
@@ -347,27 +347,35 @@ export async function getPointTransactions(
     reference?: string;
     analysisId?: number;
     createdAt: string;
-  }>
-> {
+  }>;
+  pagination: { totalItems: number; totalPages: number; currentPage: number; pageSize: number };
+}> {
   const prisma = createPrismaClient(db);
   try {
-    const transactions = await prisma.pointTransaction.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        amount: true,
-        description: true,
-        type: true,
-        reference: true,
-        analysisId: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    });
+    const take = Math.max(1, Math.floor(limit));
+    const currentPage = Math.max(1, Math.floor(page));
+    const skip = (currentPage - 1) * take;
 
-    return transactions.map(t => ({
+    const [transactions, totalItems] = await Promise.all([
+      prisma.pointTransaction.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          amount: true,
+          description: true,
+          type: true,
+          reference: true,
+          analysisId: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      prisma.pointTransaction.count({ where: { userId } }),
+    ]);
+
+    const mapped = transactions.map(t => ({
       id: t.id,
       amount: t.amount,
       description: t.description,
@@ -376,9 +384,14 @@ export async function getPointTransactions(
       analysisId: t.analysisId || undefined,
       createdAt: t.createdAt.toISOString(),
     }));
+
+    return {
+      transactions: mapped,
+      pagination: buildPaginationMeta(totalItems, currentPage, take),
+    };
   } catch (error) {
     console.error("Get point transactions error:", error);
-    return [];
+    return { transactions: [], pagination: buildPaginationMeta(0, 1, Math.max(1, Math.floor(limit))) };
   } finally {
     await prisma.$disconnect();
   }

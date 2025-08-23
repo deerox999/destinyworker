@@ -1,7 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { MiddlewareHandler } from "hono";
 import { SuccessSchema } from "../../../common/schemas";
-import { completePaymentApi, getPointsApi, initiateOrderApi, nicepayApproveApi, refundSubscriptionApi, subscribeApi, nicepayCancelPlaceholderApi, nicepayPartialCancelPlaceholderApi, nicepayRefundPlaceholderApi } from "./paymentApi";
+import { completePaymentApi, getPointsApi, initiateOrderApi, nicepayApproveApi, nicepayCancelApi, refundSubscriptionApi, subscribeApi, getUserPaymentsApi } from "./paymentApi";
 
 export function createPaymentRouter(authMiddleware: MiddlewareHandler): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -227,36 +227,35 @@ export function createPaymentRouter(authMiddleware: MiddlewareHandler): OpenAPIH
   // 나이스페이 결제 승인 라우트
   app.post("/nice/approve", (c) => nicepayApproveApi(c));
 
-  // 나이스페이 취소/부분취소/환불 (빈 엔드포인트, 추후 구현)
+  // 사용자 결제 내역 조회
+  const listPaymentsRoute = createRoute({
+    method: "get",
+    path: "/orders",
+    summary: "사용자 결제 내역",
+    description: "사용자의 결제 내역을 페이지네이션하여 조회합니다.",
+    tags: ["결제"],
+    security: [{ BearerAuth: [] }],
+    responses: {
+      200: { description: "조회 성공" },
+      401: { description: "인증 실패" },
+    },
+  });
+  app.openapi(listPaymentsRoute, (c) => getUserPaymentsApi(c));
+
+  // 나이스페이 취소/부분취소
   const niceCancelRoute = createRoute({
     method: "post",
     path: "/nice/cancel",
-    summary: "나이스페이 취소(빈 구현)",
-    description: "취소 로직은 추후 구현 예정.",
+    summary: "나이스페이 결제 취소",
+    description: "잔여 포인트 검증 후 나이스페이 결제 취소를 수행합니다.",
     tags: ["결제"],
     security: [{ BearerAuth: [] }],
-    responses: { 501: { description: "Not Implemented" } },
+    responses: {
+      200: { description: "취소 성공" },
+      400: { description: "취소 실패" },
+      401: { description: "인증 실패" },
+    },
   });
-  const nicePartialCancelRoute = createRoute({
-    method: "post",
-    path: "/nice/partial-cancel",
-    summary: "나이스페이 부분취소(빈 구현)",
-    description: "부분취소 로직은 추후 구현 예정.",
-    tags: ["결제"],
-    security: [{ BearerAuth: [] }],
-    responses: { 501: { description: "Not Implemented" } },
-  });
-  const niceRefundRoute = createRoute({
-    method: "post",
-    path: "/nice/refund",
-    summary: "나이스페이 환불(빈 구현)",
-    description: "환불 로직은 추후 구현 예정.",
-    tags: ["결제"],
-    security: [{ BearerAuth: [] }],
-    responses: { 501: { description: "Not Implemented" } },
-  });
-  app.openapi(niceCancelRoute, (c) => nicepayCancelPlaceholderApi(c));
-  app.openapi(nicePartialCancelRoute, (c) => nicepayPartialCancelPlaceholderApi(c));
-  app.openapi(niceRefundRoute, (c) => nicepayRefundPlaceholderApi(c));
+  app.openapi(niceCancelRoute, (c) => nicepayCancelApi(c));
   return app;
 }

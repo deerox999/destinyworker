@@ -117,7 +117,7 @@ async function findOrCreateUser(
           email: googleUserInfo.email,
           name: googleUserInfo.name,
           picture: googleUserInfo.picture,
-          point: 3000,
+          point: 300,
         },
       });
     }
