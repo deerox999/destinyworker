@@ -45,7 +45,7 @@ export function buildFollowUpUserPrompt(params: Pick<FollowUpPromptParams, "user
   const question = (params.userQuestion || "").trim();
   return [
     `다음은 사용자의 재질문입니다. 이전 보고서를 참고하여 아래 질문에 집중해 답변하되, 필요 시 관련 보강 설명을 자연스럽게 덧붙이세요.`,
-    ``,
+    `질문은 최대 9개로 제한하여, 질문과 내용을 통합하세요.`,
     `[재질문]`,
     `${question}`,
   ].join("\n");
