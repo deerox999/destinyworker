@@ -12,7 +12,6 @@ import { logApi } from "../../../common/historyLogger";
 import { getUserFromToken } from "../../../common/utils";
 import { addPointsIdempotent } from "../../../common/paymentUtils";
 import { buildPaginationMeta, parsePagination, parseSort } from "../../../common/paginationUtils";
-// import { randomUUID } from "crypto";
 
 // 포인트 조회 API
 export async function getPointsApi(c: Context) {
@@ -489,11 +488,6 @@ export async function nicepayApproveApi(c: Context) {
   }
 }
 
-// 취소/부분취소/환불 Placeholder (추후 구현)
-export async function nicepayCancelPlaceholderApi(c: Context) {
-  return c.json({ success: false, message: "취소 API는 추후 구현 예정입니다." }, 501 as any);
-}
-
 // 사용자 결제 내역 조회 API (페이지네이션)
 export async function getUserPaymentsApi(c: Context) {
   try {
@@ -511,7 +505,7 @@ export async function getUserPaymentsApi(c: Context) {
     try {
       const [payments, totalItems] = await Promise.all([
         prisma.payment.findMany({
-          where: { userId: (await getUserFromToken(c))!.id },
+          where: { userId: (await getUserFromToken(c))!.id, status: { not: "created" } },
           select: {
             id: true,
             orderId: true,
