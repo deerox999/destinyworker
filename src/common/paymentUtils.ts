@@ -2,19 +2,43 @@ import { PrismaClient } from '@prisma/client';
 import { createPrismaClient } from './prismaUtils';
 import { buildPaginationMeta } from './paginationUtils';
 
-// 구독 관련 상수
-export const SUBSCRIPTION_PRICE_PER_MONTH = 900; // 900 포인트 = 1개월
-export const DAYS_PER_SUBSCRIPTION_MONTH = 30; // 정확히 30일 기준
+export const 포인트정책 = {
+  구독: 900, 구독일수: 30,
+  분석: {
+    연간운세: 150,
+    종합운세: 500,
+    기타: 300,
+    궁합사주: 600, // compatibility 기본가
+  },
+  모델가중치: {
+    기본: 1,
+    pro_구독자: 1.2,
+    pro_비구독자: 1.5,
+    후속질문_계수: 0.5,
+  },
+  커뮤니티: {
+    순수텍스트_게시글_작성: 30,
+    댓글_작성: 5,
+    게시글_추천_보상: 10,
+    댓글_추천_보상: 5,
+  },
+} as const;
 
-// analysisType과 요청 type(individual/compatibility)에 따른 포인트 계산 함수
-export function getAnalysisTypePoints(analysisType: string, type?: string): number {
-  if (type === "compatibility") return 600;
+export function getAnalysisBasePrice(analysisType: string, type?: string): number {
+  if (type === "compatibility") return 포인트정책.분석.궁합사주;
   switch (analysisType) {
-    case "연간운세": return 150;
-    case "종합운세": return 500;
-    default: return 300;
+    case "연간운세": return 포인트정책.분석.연간운세;
+    case "종합운세": return 포인트정책.분석.종합운세;
+    default: return 포인트정책.분석.기타;
   }
 }
+
+// 모델 가중치: pro 모델 여부와 구독 여부에 따른 계수
+export function getModelFactor(isProModel: boolean, subscriptionActive: boolean): number {
+  if (!isProModel) return 포인트정책.모델가중치.기본;
+  return subscriptionActive ? 포인트정책.모델가중치.pro_구독자 : 포인트정책.모델가중치.pro_비구독자;
+}
+
 
 // 포인트 관련 인터페이스
 export interface PointTransaction {
@@ -101,7 +125,7 @@ export async function isSubscriptionActive(
     const now = new Date();
     const ms = until.getTime() - now.getTime();
     const remainingDays = Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
-    const remainingMonths = Math.floor(remainingDays / DAYS_PER_SUBSCRIPTION_MONTH);
+    const remainingMonths = Math.floor(remainingDays / 포인트정책.구독일수);
     return { active: ms > 0, subscriptionUntil: until, remainingDays, remainingMonths };
   } catch (error) {
     console.error("Check subscription error:", error);

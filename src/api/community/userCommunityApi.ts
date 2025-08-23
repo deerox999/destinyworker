@@ -1,8 +1,8 @@
 import { Context } from "hono";
+import { addPoints, deductPoints, 포인트정책 } from "../../common/paymentUtils";
 import { createPrismaClient } from "../../common/prismaUtils";
 import { getUserFromToken, requireLanguageParam } from "../../common/utils";
 import { deleteImagesFromR2, deleteR2Object, extractR2ImageUrls } from '../common/r2Api';
-import { addPoints, deductPoints } from "../../common/paymentUtils";
 
 export const userCommunityApi = {
   // 커뮤니티 전체 데이터 조회
@@ -702,7 +702,7 @@ export const userCommunityApi = {
             const pointResult = await addPoints(
               c.env.DB,
               authorId,
-              300, // 순수 텍스트 게시글 작성 시 300포인트 증가 (100자 이상)
+              포인트정책.커뮤니티.순수텍스트_게시글_작성,
               "커뮤니티 순수 텍스트 게시글 작성",
               `post_${post.id}`
             );
@@ -924,7 +924,7 @@ export const userCommunityApi = {
             const pointResult = await deductPoints(
               c.env.DB,
               post.authorId,
-              300, // 순수 텍스트 게시글 삭제 시 300포인트 차감 (100자 이상)
+              포인트정책.커뮤니티.순수텍스트_게시글_작성,
               "커뮤니티 순수 텍스트 게시글 삭제",
               `post_${post.id}`
             );
@@ -1022,7 +1022,7 @@ export const userCommunityApi = {
             const pointResult = await addPoints(
               c.env.DB,
               post.authorId,
-              100, // 게시글 추천 받을 시 100포인트 증가
+              포인트정책.커뮤니티.게시글_추천_보상,
               "게시글 추천 받음",
               `post_like_${post.id}_${user.id}`
             );
@@ -1214,7 +1214,7 @@ export const userCommunityApi = {
             const pointResult = await addPoints(
               c.env.DB,
               authorId,
-              50, // 댓글 작성 시 50포인트 증가 (20자 이상)
+              포인트정책.커뮤니티.댓글_작성,
               "커뮤니티 댓글 작성",
               `comment_${comment.id}`
             );
@@ -1387,7 +1387,7 @@ export const userCommunityApi = {
             const pointResult = await deductPoints(
               c.env.DB,
               comment.authorId,
-              50, // 댓글 삭제 시 50포인트 차감 (20자 이상)
+              포인트정책.커뮤니티.댓글_작성,
               "커뮤니티 댓글 삭제",
               `comment_${comment.id}`
             );
@@ -1475,7 +1475,7 @@ export const userCommunityApi = {
             const pointResult = await addPoints(
               c.env.DB,
               comment.authorId,
-              50, // 댓글 추천 받을 시 50포인트 증가
+              포인트정책.커뮤니티.댓글_추천_보상,
               "댓글 추천 받음",
               `comment_like_${comment.id}_${user.id}`
             );

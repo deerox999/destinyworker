@@ -1,9 +1,10 @@
 import { Context } from "hono";
 import {
-  getAnalysisTypePoints,
-  refundPoints,
-  usePoints,
+  getAnalysisBasePrice,
+  getModelFactor,
   isSubscriptionActive,
+  refundPoints,
+  usePoints
 } from "../../../common/paymentUtils";
 import { createPrismaClient, isAdmin } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
@@ -288,18 +289,20 @@ export async function AnalysisSaju(c: Context): Promise<Response> {
       }
     }
 
-    // 분석 타입에 따른 포인트 비용 결정
+    // 분석 타입에 따른 포인트 비용 결정 (정책 기반)
     const analysisType = options.analysisType || "종합운세";
-    let pointsCost = getAnalysisTypePoints(analysisType, type);
+    const basePrice = getAnalysisBasePrice(analysisType, type);
+    let pointsCost = basePrice;
 
-    // highQuality(true → pro 모델 사용)일 때 포인트 가격 계수 적용
+    // highQuality(true → pro 모델 사용)일 때 모델 가중치 적용
     if (options.highQuality) {
       try {
         const sub = await isSubscriptionActive(c.env.DB, user.id);
-        const factor = sub.active ? 1.2 : 1.5;
-        pointsCost = Math.round(pointsCost * factor);
+        const factor = getModelFactor(true, sub.active);
+        pointsCost = Math.round(basePrice * factor);
       } catch (_) {
-        pointsCost = Math.round(pointsCost * 1.5);
+        const factor = getModelFactor(true, false);
+        pointsCost = Math.round(basePrice * factor);
       }
     }
 

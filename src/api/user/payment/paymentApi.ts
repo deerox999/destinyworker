@@ -1,17 +1,16 @@
 import { Context } from "hono";
+import { logApi } from "../../../common/historyLogger";
+import { buildPaginationMeta, parsePagination, parseSort } from "../../../common/paginationUtils";
 import {
   addPoints,
-  DAYS_PER_SUBSCRIPTION_MONTH,
+  addPointsIdempotent,
   deductPoints,
   getUserPoints,
   isSubscriptionActive,
-  SUBSCRIPTION_PRICE_PER_MONTH,
+  포인트정책
 } from "../../../common/paymentUtils";
 import { createPrismaClient } from "../../../common/prismaUtils";
-import { logApi } from "../../../common/historyLogger";
 import { getUserFromToken } from "../../../common/utils";
-import { addPointsIdempotent } from "../../../common/paymentUtils";
-import { buildPaginationMeta, parsePagination, parseSort } from "../../../common/paginationUtils";
 
 // 포인트 조회 API
 export async function getPointsApi(c: Context) {
@@ -202,7 +201,7 @@ export async function subscribeApi(c: Context) {
       return c.json({ error: "months는 1~12 사이의 정수여야 합니다." }, 400);
     }
 
-    const totalPoints = months * SUBSCRIPTION_PRICE_PER_MONTH;
+    const totalPoints = months * 포인트정책.구독;
     const reference = `subscription_${Date.now()}_${user.id}_${months}m`;
 
     // 포인트 차감
@@ -228,7 +227,7 @@ export async function subscribeApi(c: Context) {
       const base = baseVal && baseVal > now
         ? baseVal
         : now;
-      const extended = new Date(base.getTime() + months * DAYS_PER_SUBSCRIPTION_MONTH * 24 * 60 * 60 * 1000);
+      const extended = new Date(base.getTime() + months * 포인트정책.구독일수 * 24 * 60 * 60 * 1000);
 
       await prisma.user.update({
         where: { id: user.id },
@@ -274,11 +273,11 @@ export async function refundSubscriptionApi(c: Context) {
       return c.json({ success: false, message: "이미 구독이 만료되었습니다." }, 400);
     }
     // 30일만 남았을 경우 환불 불가
-    if (sub.remainingMonths === 1 && sub.remainingDays % DAYS_PER_SUBSCRIPTION_MONTH === 0) {
+    if (sub.remainingMonths === 1 && sub.remainingDays % 포인트정책.구독일수 === 0) {
       return c.json({ success: false, message: "남은 기간이 30일뿐이어서 환불이 불가능합니다." }, 400);
     }
 
-    const maxRefundableMonths = Math.floor(sub.remainingDays / DAYS_PER_SUBSCRIPTION_MONTH);
+    const maxRefundableMonths = Math.floor(sub.remainingDays / 포인트정책.구독일수);
     if (maxRefundableMonths <= 0) {
       return c.json({ success: false, message: "환불 가능한 30일 단위가 없습니다." }, 400);
     }
@@ -288,7 +287,7 @@ export async function refundSubscriptionApi(c: Context) {
       return c.json({ success: false, message: `환불 가능한 개월 수는 1~${maxRefundableMonths}개월입니다.` }, 400);
     }
 
-    const refundPoints = monthsToRefund * SUBSCRIPTION_PRICE_PER_MONTH;
+    const refundPoints = monthsToRefund * 포인트정책.구독;
 
     // 만료일 감소
     const prisma = createPrismaClient(c.env.DB);
@@ -301,7 +300,7 @@ export async function refundSubscriptionApi(c: Context) {
         return c.json({ success: false, message: "구독 정보가 없습니다." }, 400);
       }
       const newUntil = new Date(
-        currentUntil.getTime() - monthsToRefund * DAYS_PER_SUBSCRIPTION_MONTH * 24 * 60 * 60 * 1000
+        currentUntil.getTime() - monthsToRefund * 포인트정책.구독일수 * 24 * 60 * 60 * 1000
       );
       await prisma.user.update({
         where: { id: user.id },

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { getAnalysisTypePoints, updatePointTransactionAnalysisId, refundPoints } from "../../../../common/paymentUtils";
+import { getAnalysisBasePrice, updatePointTransactionAnalysisId, refundPoints } from "../../../../common/paymentUtils";
 import {
   buildGeminiPayload,
   generateTitle,
@@ -66,7 +66,7 @@ export class SajuAnalysisWorker implements DurableObject {
       userId: body.userId,
       analysisType: body.analysisType || "general",
       type: body.type || "individual", 
-      pointsCost: body.pointsCost || getAnalysisTypePoints(body.analysisType, body.type),
+      pointsCost: body.pointsCost || getAnalysisBasePrice(body.analysisType, body.type),
       reference: body.reference,
       i18n: body.i18n || "ko",
       timezone: body.timezone || "Asia/Seoul",
