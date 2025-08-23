@@ -559,36 +559,22 @@ export async function nicepayCancelApi(c: Context) {
     const user = await getUserFromToken(c);
     if (!user) return c.json({ error: "인증이 필요합니다." }, 401);
 
-    const body = (await c.req.json().catch(() => ({}))) as { tid?: string; orderId?: string; amount?: number; reason?: string };
-    const tid = body.tid?.toString();
-    const orderId = body.orderId?.toString();
-    const cancelAmountRaw = body.amount;
+    const body = (await c.req.json().catch(() => ({}))) as { orderId?: string; reason?: string };
+    const orderId = body.orderId?.toString().trim();
     const reason = (body.reason || "User requested cancel").toString();
 
-    if ((!tid && !orderId) || !cancelAmountRaw || Number.isNaN(Number(cancelAmountRaw)) || Number(cancelAmountRaw) <= 0) {
-      return c.json({ success: false, message: "tid 또는 orderId와 유효한 amount가 필요합니다." }, 400);
+    if (!orderId) {
+      return c.json({ success: false, message: "orderId는 필수입니다." }, 400);
     }
-
-    const cancelAmount = Math.floor(Number(cancelAmountRaw));
-    const cancelPoints = Math.floor(cancelAmount / 10);
 
     const prisma = createPrismaClient(c.env.DB);
     try {
-      // 결제 조회 (사용자 소유)
-      const payment = tid
-        ? await prisma.payment.findFirst({ where: { tid, userId: user.id } })
-        : await prisma.payment.findFirst({ where: { orderId: orderId!, userId: user.id } });
-
-      if (!payment) {
-        return c.json({ success: false, message: "결제 정보를 찾을 수 없습니다." }, 404);
-      }
-
+      // 결제 조회 (사용자 소유, orderId 기반)
+      const payment = await prisma.payment.findFirst({ where: { orderId: orderId!, userId: user.id } });
+      if (!payment) return c.json({ success: false, message: "결제 정보를 찾을 수 없습니다." }, 404);
+      if (!(payment as any).tid) return c.json({ success: false, message: "TID가 없는 결제는 취소할 수 없습니다." }, 400);
       if ((payment as any).status !== "approved" && (payment as any).status !== "partially_canceled") {
         return c.json({ success: false, message: "취소할 수 없는 결제 상태입니다." }, 400);
-      }
-
-      if (!(payment as any).tid) {
-        return c.json({ success: false, message: "TID가 없는 결제는 취소할 수 없습니다." }, 400);
       }
 
       // 이미 취소된 포인트 합산 (해당 TID 기준)
@@ -601,10 +587,7 @@ export async function nicepayCancelApi(c: Context) {
       // 환불 가능 KRW = 결제 KRW - (이미 회수한 포인트 * 10)
       const refundableRemainingKrw = Math.max(0, Number((payment as any).amount) - alreadyCanceledPoints * 10);
 
-      if (cancelAmount > refundableRemainingKrw) {
-        return c.json({ success: false, message: `요청 금액이 환불 가능 금액(${refundableRemainingKrw})을 초과합니다.` }, 400);
-      }
-
+      const cancelPoints = Math.floor(refundableRemainingKrw / 10);
       // 잔여 포인트 확인: 현재 포인트가 취소 포인트 이상이어야 함
       const currentPoints = await getUserPoints(c.env.DB, user.id);
       if (currentPoints < cancelPoints) {
@@ -629,7 +612,7 @@ export async function nicepayCancelApi(c: Context) {
           "Content-Type": "application/json",
           Authorization: `Basic ${basic}`,
         },
-        body: JSON.stringify({ amount: cancelAmount, reason }),
+        body: JSON.stringify({ orderId: orderId, amount: refundableRemainingKrw, reason }),
       });
       const cancelJson: any = await cancelRes.json().catch(() => ({}));
       const ok = cancelRes.ok && (!cancelJson?.resultCode || cancelJson.resultCode === "0000");
@@ -642,7 +625,7 @@ export async function nicepayCancelApi(c: Context) {
           statusCode: cancelRes.status,
           durationMs: Date.now() - startedAt,
           user: { id: user.id, email: (user as any).email, name: (user as any).name },
-          params: { tid: (payment as any).tid, amount: cancelAmount, reason },
+          params: { tid: (payment as any).tid, amount: refundableRemainingKrw, reason },
           response: cancelJson,
           notes: ok ? "nicepay-cancel:response:success" : "nicepay-cancel:response:fail",
         });
@@ -662,7 +645,7 @@ export async function nicepayCancelApi(c: Context) {
       }
 
       // 결제 상태 업데이트 (전액이면 canceled, 일부면 partially_canceled)
-      const newStatus = cancelAmount === refundableRemainingKrw ? "canceled" : "partially_canceled";
+      const newStatus = refundableRemainingKrw === refundableRemainingKrw ? "canceled" : "partially_canceled";
       await prisma.payment.update({ where: { id: (payment as any).id }, data: ({ status: newStatus, updatedAt: new Date() } as any) });
 
       return c.json({
@@ -670,10 +653,10 @@ export async function nicepayCancelApi(c: Context) {
         message: "결제가 취소되었습니다.",
         data: {
           tid: (payment as any).tid,
-          canceledAmount: cancelAmount,
+          canceledAmount: refundableRemainingKrw,
           status: newStatus,
           remainingPoints: (debit as any).remainingPoints,
-          refundableRemaining: refundableRemainingKrw - cancelAmount,
+          refundableRemaining: refundableRemainingKrw - refundableRemainingKrw,
         },
       });
     } finally {
