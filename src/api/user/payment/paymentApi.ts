@@ -523,7 +523,7 @@ export async function getUserPaymentsApi(c: Context) {
           skip,
           take,
         }),
-        prisma.payment.count({ where: { userId: user.id } }),
+        prisma.payment.count({ where: { userId: user.id, status: { not: "created" } } }),
       ]);
 
       return c.json({
