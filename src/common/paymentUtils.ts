@@ -3,7 +3,11 @@ import { createPrismaClient } from './prismaUtils';
 import { buildPaginationMeta } from './paginationUtils';
 
 export const 포인트정책 = {
-  구독: 900, 구독일수: 30,
+  구독: 900,
+  구독일수: 30,
+  출석: {
+    오늘의운세: 10,
+  },
   분석: {
     연간운세: 150,
     종합운세: 500,

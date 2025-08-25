@@ -3,7 +3,8 @@ import { GoogleGenAI } from "@google/genai";
 import { logUsageMetadata, SERVER_MODEL_CONFIG } from "./utils";
 import { buildDailyFortunePrompts } from "./prompt/dailyFortunePrompt";
 import { calculateDailyFortuneScores } from "./prompt/dailyFortuneCalculator";
-
+import { addPoints, 포인트정책 } from "../../../common/paymentUtils";
+import { getUserFromToken } from "../../../common/utils";
 interface DailyFortuneRequest {
   sajuData: any;
   options?: {
@@ -13,6 +14,10 @@ interface DailyFortuneRequest {
 }
 
 export async function DailyFortune(c: Context): Promise<Response> {
+  const user = await getUserFromToken(c);
+  if (!user) {
+    return c.json({ error: "로그인이 필요합니다." }, 401);
+  }
   try {
     const body: DailyFortuneRequest = await c.req.json();
     if (!body || !body.sajuData) {
@@ -53,13 +58,13 @@ export async function DailyFortune(c: Context): Promise<Response> {
     const translateLabel = (key: string, lang: string): string => {
       const maps: Record<string, Record<string, string>> = {
         ko: {
-          love: "연애운",
-          health: "건강운",
-          wealth: "재물운",
-          work: "직장운",
-          study: "학업운",
-          social: "대인관계운",
-          creativity: "창의운",
+          love: "연애",
+          health: "건강",
+          wealth: "재물",
+          work: "직장",
+          study: "학업",
+          social: "대인관계",
+          creativity: "창의력",
         },
         en: {
           love: "Love",
@@ -120,9 +125,8 @@ export async function DailyFortune(c: Context): Promise<Response> {
     // 사전 계산: 점수/카테고리/차트
     let precomputed: any | null = null;
     try {
-      const { overallScore, categories, elementsStrength } = calculateDailyFortuneScores(
-        body.sajuData as any
-      );
+      const { overallScore, categories, elementsStrength } =
+        calculateDailyFortuneScores(body.sajuData as any);
       // console.log(`overallScore : `, overallScore)
       // console.log(`categories : `, categories)
       // console.log(`elementsStrength : `, elementsStrength)
@@ -213,7 +217,11 @@ export async function DailyFortune(c: Context): Promise<Response> {
 
     // overallScore를 문자열로 포맷팅 (언어별)
     try {
-      const numericOverall = precomputed?.overallScore ?? (typeof json.overallScore === "number" ? json.overallScore : parseInt(String(json.overallScore).replace(/\D/g, ""), 10));
+      const numericOverall =
+        precomputed?.overallScore ??
+        (typeof json.overallScore === "number"
+          ? json.overallScore
+          : parseInt(String(json.overallScore).replace(/\D/g, ""), 10));
       if (!Number.isNaN(numericOverall)) {
         json.overallScore = formatOverallScore(numericOverall, i18n);
       }
@@ -224,6 +232,8 @@ export async function DailyFortune(c: Context): Promise<Response> {
       json.chart.labels = precomputed.chart.labels;
     }
 
+    await addPoints(c.env.DB, user.id, 포인트정책.출석.오늘의운세, "오늘의 운세", `daily_fortune_${new Date().toISOString().slice(0, 10)}`);
+    
     return c.json({ success: true, data: json, model }, 200);
   } catch (error: any) {
     console.error("[DailyFortune] 오류:", error);

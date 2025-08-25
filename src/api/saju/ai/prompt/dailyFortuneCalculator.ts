@@ -76,13 +76,13 @@ const ELEMENT_LABEL: Record<FiveElement, string> = {
 };
 
 const CATEGORY_LABELS: Record<CalculateResult["categories"][number]["key"], string> = {
-  love: "연애운",
-  health: "건강운",
-  wealth: "재물운",
-  work: "직장운",
-  study: "학업운",
-  social: "대인관계운",
-  creativity: "창의운",
+  love: "연애",
+  health: "건강",
+  wealth: "재물",
+  work: "직장",
+  study: "학업",
+  social: "대인관계",
+  creativity: "창의력",
 };
 
 const WEIGHT運 = { day: 0.6, month: 0.2, year: 0.15, decade: 0.05 } as const;
