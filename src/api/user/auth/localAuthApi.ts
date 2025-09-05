@@ -47,6 +47,9 @@ const contents = {
   },
 };
 
+// 테스트 계정 목록
+const TEST_ACCOUNTS = ["tester999@yuram.com", "tester9999@yuram.com"];
+
 async function sendAuthCodeByEmail(
   c: Context,
   email: string,
@@ -134,6 +137,16 @@ export async function requestEmailAuthCode(c: Context): Promise<Response> {
       return c.json({ error: "이메일이 필요합니다." }, 400);
     }
 
+    // 테스트 계정 확인
+    if (TEST_ACCOUNTS.includes(email)) {
+      // 테스트 계정의 경우 이메일 전송 없이 성공 응답만 반환
+      return c.json({
+        success: true,
+        message: "테스트 계정입니다. 인증 코드 없이 로그인하세요.",
+        isTestAccount: true,
+      });
+    }
+
     const authCode = generateAuthCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10분 후 만료
 
@@ -171,6 +184,7 @@ export async function requestEmailAuthCode(c: Context): Promise<Response> {
   }
 }
 
+
 // 이메일 코드 검증 및 로그인
 export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
   if (!c.env.DB) {
@@ -183,8 +197,44 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
       code?: string;
     };
 
-    if (!email || !code) {
-      return c.json({ error: "이메일과 인증 코드가 필요합니다." }, 400);
+    if (!email) {
+      return c.json({ error: "이메일이 필요합니다." }, 400);
+    }
+    
+    if (TEST_ACCOUNTS.includes(email)) {
+      const prisma = createPrismaClient(c.env.DB);
+      // 테스트 계정의 경우 코드 검증 없이 바로 로그인 처리
+      let user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email: email,
+            name: email.split("@")[0], // 초기 이름은 이메일 앞부분으로 설정
+            googleId: "", // 임시로 빈 문자열 설정 (데이터베이스 NOT NULL 제약조건 때문)
+            point: 300,
+          },
+        });
+      }
+
+      // JWT 토큰 생성
+      const jwtToken = await generateJWT(
+        { userId: user.id, email: user.email, role: user.role },
+        c.env.GOOGLE_CLIENT_SECRET
+      );
+
+      await prisma.$disconnect();
+
+      return c.json({
+        success: true,
+        token: jwtToken,
+        user: user,
+        isTestAccount: true,
+      });
+    }
+
+    // 일반 계정의 경우 기존 코드 검증 로직 실행
+    if (!code) {
+      return c.json({ error: "인증 코드가 필요합니다." }, 400);
     }
 
     // AUTH_CODE_KV에서 인증 코드 조회
@@ -211,7 +261,6 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
     }
 
     const prisma = createPrismaClient(c.env.DB);
-
     // 사용자 조회 또는 생성
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -224,7 +273,6 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
         },
       });
     }
-
     // JWT 토큰 생성
     const jwtToken = await generateJWT(
       { userId: user.id, email: user.email, role: user.role },
