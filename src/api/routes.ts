@@ -14,6 +14,7 @@ import { createR2Router } from "./common/r2.routes";
 import { createSitemapRouter } from "./common/sitemapApi";
 import { createUserRouter } from "./user/user.routes";
 import { createHistoryRouter } from "./admin/history.routes";
+import { createDreamRouter } from "./dream/dream.routes";
 import { createPrismaClient } from "../common/prismaUtils";
 import { logApi } from "../common/historyLogger";
 
@@ -138,6 +139,7 @@ export function createAppRouter(): OpenAPIHono<AppEnv> {
   app.route("/api/community", createCommunityRouter());
   app.route("/api/history", createHistoryRouter());
   app.route("/api/sitemap", createSitemapRouter());
+  app.route("/api/dream", createDreamRouter(authMiddleware));
 
   return app;
 }
