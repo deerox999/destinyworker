@@ -11,8 +11,8 @@ export const SERVER_MODEL_CONFIG = {
     topK: 40,
     maxOutputTokens: 39999,
   },
-  geminiModel: "gemini-3.5-flash",
-  proModel: "gemini-3.5-pro",
+  geminiModel: "gemini-2.5-flash", // "gemini-3.5-flash", 개비쌈
+  proModel: "gemini-2.5-pro", // "gemini-3.5-pro", 개비쌈
   // 안전 설정 (고정값)
   safetySettings: [
     {
