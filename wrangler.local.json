@@ -19,24 +19,24 @@
       "binding": "VIEW_CACHE_KV",
       "id": "f76d441ea2524c58a72e355fb4df71b2",
       "preview_id": "68d8ef3bc1644f2f81cca8b57f842267",
-      "experimental_remote": true
+      "remote": true
     },
     {
       "binding": "AUTH_CODE_KV",
       "id": "305beea2b37c45ef9cfb10f957c6c1a1",
       "preview_id": "0131a26fe57e49f99414003d1a6a184e",
-      "experimental_remote": true
+      "remote": true
     }
   ],
   "ai": {
     "binding": "AI",
-    "experimental_remote": true
+    "remote": true
   },
   "vectorize": [
     {
       "binding": "VECTORIZE_INDEX",
       "index_name": "saju-index",
-      "experimental_remote": true
+      "remote": true
     }
   ],
   "r2_buckets": [
@@ -44,7 +44,7 @@
       "binding": "DESTINY_R2",
       "bucket_name": "destiny",
       "preview_bucket_name": "destiny-dev",
-      "experimental_remote": true
+      "remote": true
     }
   ],
   
@@ -60,8 +60,7 @@
         "name": "SajuAnalysisWorker",
         "script_name": "destinyworker"
       }
-    ],
-    "experimental_remote": true
+    ]
   },
   "migrations": [
     {
@@ -74,6 +73,43 @@
   "vars": {
     "ENVIRONMENT": "development"
   },
+  "secrets_store_secrets": [
+    {
+      "binding": "GOOGLE_CLIENT_ID",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "GOOGLE_CLIENT_ID"
+    },
+    {
+      "binding": "GOOGLE_CLIENT_SECRET",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "GOOGLE_CLIENT_SECRET"
+    },
+    {
+      "binding": "GOOGLE_GEMINI_API_KEY",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "GOOGLE_GEMINI_APIKEY"
+    },
+    {
+      "binding": "RESEND_API_KEY",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "RESEND_API_KEY"
+    },
+    {
+      "binding": "NICE_CLIENT_KEY",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "NICE_CLIENT_KEY"
+    },
+    {
+      "binding": "NICE_SECRET_KEY",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "NICE_SECRET_KEY"
+    },
+    {
+      "binding": "BRAVE_API_KEY",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "BRAVE_API_KEY"
+    }
+  ],
   "observability": {
     "enabled": true
   },

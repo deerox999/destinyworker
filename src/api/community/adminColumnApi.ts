@@ -1,11 +1,10 @@
 import { Context } from "hono";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
+import { getSecret } from "../../common/utils";
 import { GoogleGenAI } from "@google/genai";
 import { buildTitleOnlyPrompt, ColumnLevel } from "../saju/ai/prompt/sajuColumnPrompt";
-import { logUsageMetadata } from "../saju/ai/utils";
+import { SERVER_MODEL_CONFIG, logUsageMetadata } from "../saju/ai/utils";
 import {
-  DEFAULT_MIN_CHARS,
-  DEFAULT_MIN_LINES,
   DEFAULT_SIMILARITY_THRESHOLD,
   FIXED_LANGUAGE,
   FIXED_BOARD_ID,
@@ -20,7 +19,7 @@ import {
   validateHtml,
 } from "./columnUtils";
 
-type Env = { DB: D1Database; GOOGLE_GEMINI_API_KEY: string };
+type Env = { DB: D1Database; GOOGLE_GEMINI_API_KEY: SecretsStoreSecret };
 
 export const adminColumnApi = {
   async dryRunGenerate(c: Context) {
@@ -42,12 +41,13 @@ export const adminColumnApi = {
       const existing = await fetchExistingTitlesAndContents(prisma);
       const existingTitles = existing.map((p: any) => p.title);
 
+      const geminiApiKey = await getSecret(c.env.GOOGLE_GEMINI_API_KEY);
       if (!title || title.trim().length === 0) {
-        title = await generateTitleIfNeeded(c.env.GOOGLE_GEMINI_API_KEY, level, existingTitles, undefined);
+        title = await generateTitleIfNeeded(geminiApiKey, level, existingTitles, undefined);
       }
       const cleanTitle = normalizeTitle(title!);
       const html = await generateColumnHtml(
-        c.env.GOOGLE_GEMINI_API_KEY,
+        geminiApiKey,
         level,
         language,
         cleanTitle,
@@ -159,10 +159,11 @@ export const adminColumnApi = {
       const existingTitles = existing.map((p: any) => p.title);
 
       // 제목 제안
-      const ai = new GoogleGenAI({ apiKey: env.GOOGLE_GEMINI_API_KEY });
+      const geminiApiKey = await getSecret(env.GOOGLE_GEMINI_API_KEY);
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
       const titlePrompt = buildTitleOnlyPrompt(level, undefined, existingTitles);
       const titlePayload = {
-        model: "gemini-2.5-flash",
+        model: SERVER_MODEL_CONFIG.geminiModel,
         systemInstruction: { parts: [{ text: "제목 한 줄만 반환" }] },
         contents: [{ role: "user", parts: [{ text: titlePrompt }] }],
         generationConfig: { temperature: 0.6, maxOutputTokens: 256 },
@@ -182,7 +183,7 @@ export const adminColumnApi = {
       const cleanTitle = normalizeTitle(String(titleFromAi).trim());
 
       // 본문 생성 (유틸 사용)
-      const html = await generateColumnHtml(env.GOOGLE_GEMINI_API_KEY, level, FIXED_LANGUAGE, cleanTitle, existingTitles, env);
+      const html = await generateColumnHtml(geminiApiKey, level, FIXED_LANGUAGE, cleanTitle, existingTitles, env);
 
       // 검증
       const v2 = validateHtml(html);

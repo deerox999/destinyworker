@@ -3,7 +3,7 @@ import { createPrismaClient } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
 import { getAnalysisBasePrice, getModelFactor, refundPoints, usePoints, isSubscriptionActive, 포인트정책 } from "../../../common/paymentUtils";
 import { buildFollowUpPrompts } from "./prompt/afterPrompt";
-import { buildGeminiPayload } from "./utils";
+import { buildGeminiPayload, SERVER_MODEL_CONFIG } from "./utils";
 
 class DurableObjectClient {
   constructor(private env: any, private userId: number) {}
@@ -81,7 +81,7 @@ export async function FollowUpAnalysisSaju(c: Context): Promise<Response> {
     const type = previous.type || "individual";
     const i18n = previous.i18n || "ko";
     const timezone = previous.timezone || "Asia/Seoul";
-    const inheritedModel: string = (previous as any).modelUsed || "gemini-2.5-flash";
+    const inheritedModel: string = (previous as any).modelUsed || SERVER_MODEL_CONFIG.geminiModel;
 
     // 이전 옵션 복원 (tone/context/language/understandingLevel 등)
     let toneHint: string | undefined = undefined;

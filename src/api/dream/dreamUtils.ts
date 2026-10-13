@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { logUsageMetadata } from "../saju/ai/utils";
+import { SERVER_MODEL_CONFIG, logUsageMetadata } from "../saju/ai/utils";
 
 export type GeneratedDream = {
   language: string;
@@ -118,7 +118,7 @@ export async function generateDreamWithAi(apiKey: string, language: string, titl
   const sys = { parts: [{ text: "너는 전문 꿈해몽 작가다. 요청 언어로만 응답한다." }] } as any;
   const prompt = buildGenerationPrompt(language, title);
   const payload = {
-    model: "gemini-2.5-flash",
+    model: SERVER_MODEL_CONFIG.geminiModel,
     systemInstruction: sys,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.6, maxOutputTokens: 2048 },
@@ -178,7 +178,7 @@ export async function translateDreamWithAi(apiKey: string, from: GeneratedDream,
   const sys = { parts: [{ text: "너는 정확한 번역가다. 원문의 의미와 마크다운 구조를 유지한다." }] } as any;
   const prompt = buildTranslationPrompt(from, targetLanguage);
   const payload = {
-    model: "gemini-2.5-flash",
+    model: SERVER_MODEL_CONFIG.geminiModel,
     systemInstruction: sys,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },

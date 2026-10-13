@@ -6,20 +6,21 @@ import {
   findSimilarVectors,
   getDocumentsFromD1
 } from "../../../common/ragUtils";
-import { getUserFromToken } from "../../../common/utils";
+import { getSecret, getUserFromToken } from "../../../common/utils";
 import {
   getPersonaPrompt,
   getRejectionMessage,
   SupportedLanguage,
 } from "./prompt/sajuTeacher";
+import { SERVER_MODEL_CONFIG } from "./utils";
 
 // Gemini API와 통신하기 위한 환경 변수 확장
 export interface Env {
   AI: Ai; // Cloudflare AI (임베딩용)
   VECTORIZE_INDEX: VectorizeIndex;
   DB: D1Database;
-  GOOGLE_GEMINI_API_KEY: string; // Gemini API 키
-  BRAVE_API_KEY?: string;
+  GOOGLE_GEMINI_API_KEY: SecretsStoreSecret;
+  BRAVE_API_KEY: SecretsStoreSecret;
 }
 
 /**
@@ -308,8 +309,6 @@ export async function SajuChat(
   const newConversationId = conversationId || crypto.randomUUID();
 
   try {
-    // 2. 대화 기록은 사용하지 않음 (단발성 질문에 최적화)
-    const history: ChatMessage[] = [];
 
     // 3. RAG 및 조건부 웹 검색
     const queryVector = await createEmbedding(c.env.AI, userQuery);
@@ -330,7 +329,7 @@ export async function SajuChat(
       if (process.env.ENVIRONMENT === "development") {
         console.log(`Found only ${ragDocs.length} documents from RAG. Performing web search as a fallback.`);
       }
-      webSearchResults = await performWebSearch(userQuery, c.env.BRAVE_API_KEY);
+      webSearchResults = await performWebSearch(userQuery, await getSecret(c.env.BRAVE_API_KEY));
     }
 
     const ragContext =
@@ -373,13 +372,10 @@ ${fullContext}`;
       role: "user", 
       content: `${finalSystemPrompt}\n\n사용자 질문: ${userQuery}` 
     });
-
-    // 5. LLM 호출 및 사용량 기록 (Gemini 사용)
-    const model = "gemini-2.5-flash";
     
     // Gemini API 초기화
     const geminiApi = new GoogleGenAI({
-      apiKey: c.env.GOOGLE_GEMINI_API_KEY
+      apiKey: await getSecret(c.env.GOOGLE_GEMINI_API_KEY)
     });
     
     // Gemini 형식으로 메시지 변환 (assistant를 model로 변환)
@@ -395,7 +391,7 @@ ${fullContext}`;
     });
 
     const llmResponse = await geminiApi.models.generateContent({
-      model: model,
+      model: SERVER_MODEL_CONFIG.geminiModel,
       contents: geminiContents,
       config: {
         maxOutputTokens: 1024, // 채팅 인터페이스에 맞게 간결한 답변 유도

@@ -1,4 +1,4 @@
-import { generateJWT, verifyJWT } from "../../../common/utils";
+import { generateJWT, getSecret, verifyJWT } from "../../../common/utils";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { Context } from "hono";
 import { logApi } from "../../../common/historyLogger";
@@ -135,7 +135,12 @@ export async function googleLogin(c: Context): Promise<Response> {
     return c.json({ error: "데이터베이스가 설정되지 않았습니다." }, 500);
   }
 
-  if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
+  let googleClientId: string;
+  let jwtSecret: string;
+  try {
+    googleClientId = await getSecret(c.env.GOOGLE_CLIENT_ID);
+    jwtSecret = await getSecret(c.env.GOOGLE_CLIENT_SECRET);
+  } catch {
     if (process.env.ENVIRONMENT === "development") {
       console.log(c.env);
     }
@@ -154,7 +159,7 @@ export async function googleLogin(c: Context): Promise<Response> {
     // Google 토큰 검증
     const googleUserInfo = await verifyGoogleToken(
       token,
-      c.env.GOOGLE_CLIENT_ID
+      googleClientId
     );
     if (!googleUserInfo) {
       return c.json({ error: "유효하지 않은 Google 토큰입니다." }, 401);
@@ -172,7 +177,7 @@ export async function googleLogin(c: Context): Promise<Response> {
     // JWT 토큰 생성
     const jwtToken = await generateJWT(
       { userId: user.id, email: user.email, role: user.role },
-      c.env.GOOGLE_CLIENT_SECRET
+      jwtSecret
     );
     // 로그인 기록 추가
     const durationMs = Date.now() - startedAt;
@@ -206,7 +211,7 @@ export async function googleLogin(c: Context): Promise<Response> {
 
 // 로그아웃
 export async function logout(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
+  if (!c.env.DB) {
     return c.json(
       { error: "데이터베이스가 설정되지 않았거나 JWT 시크릿이 없습니다." },
       500
@@ -215,12 +220,13 @@ export async function logout(c: Context): Promise<Response> {
 
   try {
     const startedAt = Date.now();
+    const jwtSecret = await getSecret(c.env.GOOGLE_CLIENT_SECRET);
     const authHeader = c.req.header("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json({ error: "인증 토큰이 필요합니다." }, 401);
     }
     const token = authHeader.substring(7);
-    const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
+    const payload = await verifyJWT(token, jwtSecret);
     if (!payload) {
       return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
     }
@@ -254,18 +260,19 @@ export async function logout(c: Context): Promise<Response> {
 
 // 사용자 정보 조회
 export async function getUserInfo(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
+  if (!c.env.DB) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
   try {
+    const jwtSecret = await getSecret(c.env.GOOGLE_CLIENT_SECRET);
     const authHeader = c.req.header("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json({ error: "인증 토큰이 필요합니다." }, 401);
     }
 
     const token = authHeader.substring(7);
-    const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
+    const payload = await verifyJWT(token, jwtSecret);
 
     if (!payload) {
       return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
@@ -299,17 +306,18 @@ export async function getUserInfo(c: Context): Promise<Response> {
 
 // 토큰 갱신
 export async function refreshToken(c: Context): Promise<Response> {
-  if (!c.env.DB || !c.env.GOOGLE_CLIENT_SECRET) {
+  if (!c.env.DB) {
     return c.json({ error: "서버 설정이 누락되었습니다." }, 500);
   }
 
   try {
+    const jwtSecret = await getSecret(c.env.GOOGLE_CLIENT_SECRET);
     const authHeader = c.req.header("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json({ error: "인증 토큰이 필요합니다." }, 401);
     }
     const oldToken = authHeader.substring(7);
-    const payload = await verifyJWT(oldToken, c.env.GOOGLE_CLIENT_SECRET);
+    const payload = await verifyJWT(oldToken, jwtSecret);
     if (!payload) {
       return c.json({ error: "유효하지 않은 토큰입니다." }, 401);
     }
@@ -319,7 +327,7 @@ export async function refreshToken(c: Context): Promise<Response> {
         userId: payload.userId,
         email: payload.email,
         role: payload.role || "user",
-      }, c.env.GOOGLE_CLIENT_SECRET);
+      }, jwtSecret);
     await prisma.$disconnect();
 
     return c.json({

@@ -1,8 +1,7 @@
 import { Context } from "hono";
 import { createPrismaClient, isAdmin } from "../../common/prismaUtils";
+import { getSecret } from "../../common/utils";
 import { areTitlesDuplicate, computeContentSimilarity, generateDreamWithAi, makeDuplicateKey, translateDreamWithAi, validateMarkdown } from "./dreamUtils";
-
-type Env = { DB: D1Database; GOOGLE_GEMINI_API_KEY: string };
 
 export const dreamApi = {
   async generateAndCreate(c: Context) {
@@ -23,7 +22,8 @@ export const dreamApi = {
     const prisma = createPrismaClient(c.env.DB);
     try {
       // 1) 기본 언어는 내부 기준 ko로 생성(내용 생성/중복 검사용)
-      const base = await generateDreamWithAi(c.env.GOOGLE_GEMINI_API_KEY, "ko", title, c.env);
+      const geminiApiKey = await getSecret(c.env.GOOGLE_GEMINI_API_KEY);
+      const base = await generateDreamWithAi(geminiApiKey, "ko", title, c.env);
 
       // 2) 마크다운 검증
       const v = validateMarkdown(base.contentMarkdown);
@@ -60,7 +60,7 @@ export const dreamApi = {
       for (const lng of normalizedLanguages) {
         let item = base;
         if (lng !== "ko") {
-          item = await translateDreamWithAi(c.env.GOOGLE_GEMINI_API_KEY, base, lng, c.env);
+          item = await translateDreamWithAi(geminiApiKey, base, lng, c.env);
         }
         // 언어별 저장
         await prisma.dreamTranslation.create({

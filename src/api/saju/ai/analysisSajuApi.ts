@@ -19,7 +19,7 @@ import {
   generateAnalysisPrompts,
   generateCompatibilityPrompts,
 } from "./prompt/geminiPrompt";
-import { ensureCelebrityTranslation } from "./utils";
+import { ensureCelebrityTranslation, SERVER_MODEL_CONFIG } from "./utils";
 // API 사용자가 보내는 요청 본문 타입 정의 (안전한 파라미터만 허용)
 interface AnalysisSajuRequest {
   // 사주 데이터 (필수)
@@ -100,7 +100,7 @@ function generateServerPrompts(
   }
 
   // 환경과 무관하게 highQuality만으로 모델 선택
-  baseModel = highQuality ? "gemini-2.5-pro" : "gemini-2.5-flash";
+  baseModel = highQuality ? SERVER_MODEL_CONFIG.proModel : SERVER_MODEL_CONFIG.geminiModel;
 
   const result = {
     systemPrompt: prompts.systemPrompt,

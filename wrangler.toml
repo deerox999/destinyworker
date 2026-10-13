@@ -22,7 +22,6 @@ memory_mb = 128     # 메모리 사용량 제한 (128MB)
 database_name = "destiny"    # 프로덕션 데이터베이스
 binding = "DB"
 database_id = "f9ef2666-6d2f-419e-b54e-7d7f6951f036"
-experimental_remote = true
 
 ## 로컬에 추가할 땐 이게 필요한데, 운영 배포시엔 오류가 발생하는 희한한...
 # [[d1_databases]]
@@ -35,32 +34,27 @@ experimental_remote = true
 binding = "VIEW_CACHE_KV"        # 뷰 캐시용 KV
 id = "f76d441ea2524c58a72e355fb4df71b2"
 preview_id = "68d8ef3bc1644f2f81cca8b57f842267"
-experimental_remote = true
 
 # 인증 코드용 KV 네임스페이스
 [[kv_namespaces]]
 binding = "AUTH_CODE_KV"         # 인증 코드용 KV
 id = "305beea2b37c45ef9cfb10f957c6c1a1"
 preview_id = "305beea2b37c45ef9cfb10f957c6c1a1"
-experimental_remote = true
 
 # AI 서비스 설정
 [ai]
 binding = "AI"                   # AI 모델 바인딩
-experimental_remote = true
 
 # Vectorize 인덱스 설정 (벡터 검색용)
 [[vectorize]]
 binding = "VECTORIZE_INDEX"      # 사주 지식 검색용 벡터 인덱스
 index_name = "saju-index"
-experimental_remote = true
 
 # R2 스토리지 설정
 [[r2_buckets]]
 binding = "DESTINY_R2"           # 파일 저장용 R2 버킷
 bucket_name = "destiny"
 preview_bucket_name = "destiny-dev"
-experimental_remote = true
 
 [durable_objects] # Durable Objects 설정 (상태 유지 객체)
 [[durable_objects.bindings]] # 바인딩 설정
@@ -74,12 +68,10 @@ class_name = "ColumnWorker"
 [[durable_objects.classes]] # 클래스 정의
 name = "SajuAnalysisWorker"      # 사주 분석 워커 클래스
 script_name = "destinyworker"
-experimental_remote = true
 
 [[durable_objects.classes]]
 name = "ColumnWorker"            # 칼럼 생성 워커 클래스
 script_name = "destinyworker"
-experimental_remote = true
 
 [[migrations]] # 마이그레이션 설정
 tag = "v1"
@@ -92,6 +84,41 @@ new_classes = ["ColumnWorker"]
 [vars] # 환경 변수
 ENVIRONMENT = "production"       # 환경 설정
 
+[[secrets_store_secrets]]
+binding = "GOOGLE_CLIENT_ID"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "GOOGLE_CLIENT_ID"
+
+[[secrets_store_secrets]]
+binding = "GOOGLE_CLIENT_SECRET"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "GOOGLE_CLIENT_SECRET"
+
+[[secrets_store_secrets]]
+binding = "GOOGLE_GEMINI_API_KEY"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "GOOGLE_GEMINI_APIKEY"
+
+[[secrets_store_secrets]]
+binding = "NICE_CLIENT_KEY"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "NICE_CLIENT_KEY"
+
+[[secrets_store_secrets]]
+binding = "NICE_SECRET_KEY"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "NICE_SECRET_KEY"
+
+[[secrets_store_secrets]]
+binding = "RESEND_API_KEY"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "RESEND_API_KEY"
+
+[[secrets_store_secrets]]
+binding = "BRAVE_API_KEY"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "BRAVE_API_KEY"
+
 [observability] # 관찰성 설정 (모니터링)
 enabled = true                   # 관찰성 기능 활성화
 
@@ -99,5 +126,5 @@ enabled = true                   # 관찰성 기능 활성화
 port = 9393                      # 로컬 개발 서버 포트 
 
 # Cloudflare Cron Triggers (UTC 기준)
-[[triggers]]
+[triggers]
 crons = ["33 12 * * *"]

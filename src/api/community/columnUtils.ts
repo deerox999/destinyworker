@@ -5,7 +5,7 @@ import {
   buildTitleOnlyPrompt,
   ColumnLevel,
 } from "../saju/ai/prompt/sajuColumnPrompt";
-import { logUsageMetadata } from "../saju/ai/utils";
+import { SERVER_MODEL_CONFIG, logUsageMetadata } from "../saju/ai/utils";
 
 export const FIXED_BOARD_ID = 2;
 export const FIXED_CATEGORY_ID = 4;
@@ -106,7 +106,7 @@ export async function generateTitleIfNeeded(
   const sys = "당신은 제목만 반환하는 에디터입니다.";
   const user = buildTitleOnlyPrompt(level, undefined, existingTitles);
   const titlePayload = {
-    model: "gemini-2.5-flash",
+    model: SERVER_MODEL_CONFIG.geminiModel,
     systemInstruction: { parts: [{ text: sys }] },
     contents: [{ role: "user", parts: [{ text: user }] }],
     generationConfig: { temperature: 0.6, maxOutputTokens: 256 },
@@ -145,7 +145,7 @@ export async function generateColumnHtml(
     existingTitles
   );
   const contentPayload = {
-    model: "gemini-2.5-flash",
+    model: SERVER_MODEL_CONFIG.geminiModel,
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
     generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },

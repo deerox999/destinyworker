@@ -1,6 +1,12 @@
 import { Context } from "hono";
 import { createPrismaClient } from "./prismaUtils";
 
+export async function getSecret(secret: SecretsStoreSecret): Promise<string> {
+  const value = await secret.get();
+  if (!value) throw new Error("Secrets Store 값이 비어 있습니다.");
+  return value;
+}
+
 interface JWTPayload {
   userId: number;
   email: string;
@@ -44,8 +50,7 @@ export const getUserFromToken = async (
 
   try {
     const token = authHeader.substring(7);
-    // 1단계: GOOGLE_CLIENT_SECRET로 서명 검증
-    const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
+    const payload = await verifyJWT(token, await getSecret(c.env.GOOGLE_CLIENT_SECRET));
     if (!payload) return null;
 
     return {

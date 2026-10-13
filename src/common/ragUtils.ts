@@ -18,7 +18,7 @@ export interface RagEnv {
   AI: Ai;
   DB: D1Database;
   VECTORIZE_INDEX: VectorizeIndex;
-  BRAVE_API_KEY?: string;
+  BRAVE_API_KEY: SecretsStoreSecret;
 }
 
 /**

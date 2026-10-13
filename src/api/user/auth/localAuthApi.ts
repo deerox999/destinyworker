@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { Context } from "hono";
 import { createPrismaClient } from "../../../common/prismaUtils";
-import { generateJWT } from "../../../common/utils";
+import { generateJWT, getSecret } from "../../../common/utils";
 
 // 언어별 이메일 문구 정의
 const contents = {
@@ -57,7 +57,7 @@ async function sendAuthCodeByEmail(
   language: string = "ko"
 ): Promise<boolean> {
   try {
-    const resendApiKey = c.env.RESEND_API_KEY;
+    const resendApiKey = await getSecret(c.env.RESEND_API_KEY);
     const resend = new Resend(resendApiKey);
 
     // 언어별 문구 가져오기 (기본값: 한국어)
@@ -219,7 +219,7 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
       // JWT 토큰 생성
       const jwtToken = await generateJWT(
         { userId: user.id, email: user.email, role: user.role },
-        c.env.GOOGLE_CLIENT_SECRET
+        await getSecret(c.env.GOOGLE_CLIENT_SECRET)
       );
 
       await prisma.$disconnect();
@@ -276,7 +276,7 @@ export async function verifyEmailCodeAndLogin(c: Context): Promise<Response> {
     // JWT 토큰 생성
     const jwtToken = await generateJWT(
       { userId: user.id, email: user.email, role: user.role },
-      c.env.GOOGLE_CLIENT_SECRET
+      await getSecret(c.env.GOOGLE_CLIENT_SECRET)
     );
     // 인증 코드 삭제
     await c.env.AUTH_CODE_KV.delete(key);

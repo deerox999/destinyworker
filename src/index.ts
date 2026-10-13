@@ -11,7 +11,7 @@ type Env = {
     KV: KVNamespace;
     SAJU_ANALYSIS_WORKER: DurableObjectNamespace;
     COLUMN_WORKER: DurableObjectNamespace;
-    GOOGLE_GEMINI_API_KEY: string;
+    GOOGLE_GEMINI_API_KEY: SecretsStoreSecret;
     DB: D1Database;
   }
 }

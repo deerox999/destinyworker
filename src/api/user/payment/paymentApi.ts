@@ -10,7 +10,7 @@ import {
   포인트정책
 } from "../../../common/paymentUtils";
 import { createPrismaClient } from "../../../common/prismaUtils";
-import { getUserFromToken } from "../../../common/utils";
+import { getSecret, getUserFromToken } from "../../../common/utils";
 
 // 포인트 조회 API
 export async function getPointsApi(c: Context) {
@@ -382,8 +382,8 @@ export async function nicepayApproveApi(c: Context) {
 
     // 2) 나이스페이 결제 승인 API 호출
     const isDev = c.env.ENVIRONMENT === 'development';
-    const clientKey: string = isDev ? 'S2_61d1c9e69d0f42f990151d0eb849861c' : c.env.NICE_CLIENT_KEY;
-    const secretKey: string = isDev ? '9b3f39dfeb8b489dbac6adda9e07bdff' : c.env.NICE_SECRET_KEY;
+    const clientKey: string = isDev ? 'S2_61d1c9e69d0f42f990151d0eb849861c' : await getSecret(c.env.NICE_CLIENT_KEY);
+    const secretKey: string = isDev ? '9b3f39dfeb8b489dbac6adda9e07bdff' : await getSecret(c.env.NICE_SECRET_KEY);
 
     if (!clientKey || !secretKey) {
       return c.json({ success: false, message: "결제 승인 키가 설정되지 않았습니다." }, 500);
@@ -595,8 +595,8 @@ export async function nicepayCancelApi(c: Context) {
 
       // NICEPAY 취소 요청
       const isDev = c.env.ENVIRONMENT === "development";
-      const clientKey: string = isDev ? "S2_61d1c9e69d0f42f990151d0eb849861c" : c.env.NICE_CLIENT_KEY;
-      const secretKey: string = isDev ? "9b3f39dfeb8b489dbac6adda9e07bdff" : c.env.NICE_SECRET_KEY;
+      const clientKey: string = isDev ? "S2_61d1c9e69d0f42f990151d0eb849861c" : await getSecret(c.env.NICE_CLIENT_KEY);
+      const secretKey: string = isDev ? "9b3f39dfeb8b489dbac6adda9e07bdff" : await getSecret(c.env.NICE_SECRET_KEY);
       if (!clientKey || !secretKey) {
         return c.json({ success: false, message: "결제 취소 키가 설정되지 않았습니다." }, 500);
       }

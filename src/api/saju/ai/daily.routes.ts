@@ -1,5 +1,6 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { DailyFortune } from "./dailyFortuneApi";
+import { SERVER_MODEL_CONFIG } from "./utils";
 
 export function createDailyRouter(): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -41,7 +42,7 @@ export function createDailyRouter(): OpenAPIHono {
               .object({
                 success: z.literal(true),
                 data: z.any(),
-                model: z.string().openapi({ example: "gemini-2.5-flash" }),
+                model: z.string().openapi({ example: SERVER_MODEL_CONFIG.geminiModel }),
               })
               .openapi({ type: "object" }),
           },

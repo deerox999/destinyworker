@@ -4,7 +4,7 @@ import { logUsageMetadata, SERVER_MODEL_CONFIG } from "./utils";
 import { buildDailyFortunePrompts } from "./prompt/dailyFortunePrompt";
 import { calculateDailyFortuneScores } from "./prompt/dailyFortuneCalculator";
 import { addPoints, 포인트정책 } from "../../../common/paymentUtils";
-import { getUserFromToken } from "../../../common/utils";
+import { getSecret, getUserFromToken } from "../../../common/utils";
 interface DailyFortuneRequest {
   sajuData: any;
   options?: {
@@ -33,10 +33,7 @@ export async function DailyFortune(c: Context): Promise<Response> {
       timezone,
     });
 
-    // 기본 모델
-    const model = "gemini-2.5-flash";
-
-    const ai = new GoogleGenAI({ apiKey: c.env.GOOGLE_GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: await getSecret(c.env.GOOGLE_GEMINI_API_KEY) });
 
     // 프론트가 전달한 sajuData를 그대로 사용하되, 길이 검증만 수행
     const MAX_SAJU_JSON_LENGTH = 4000; // 20줄 내외 가이드 기준 약간 여유
@@ -152,7 +149,7 @@ export async function DailyFortune(c: Context): Promise<Response> {
     }
 
     const payload = {
-      model,
+      model: SERVER_MODEL_CONFIG.geminiModel,
       systemInstruction: systemPrompt,
       contents: [
         {
@@ -234,7 +231,7 @@ export async function DailyFortune(c: Context): Promise<Response> {
 
     await addPoints(c.env.DB, user.id, 포인트정책.출석.오늘의운세, "오늘의 운세", `daily_fortune_${new Date().toISOString().slice(0, 10)}`);
     
-    return c.json({ success: true, data: json, model }, 200);
+    return c.json({ success: true, data: json, model: SERVER_MODEL_CONFIG.geminiModel }, 200);
   } catch (error: any) {
     console.error("[DailyFortune] 오류:", error);
     return c.json(

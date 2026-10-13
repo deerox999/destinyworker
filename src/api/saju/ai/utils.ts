@@ -1,6 +1,6 @@
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { GoogleGenAI } from "@google/genai";
-import { supportedLanguages } from "../../../common/utils";
+import { getSecret, supportedLanguages } from "../../../common/utils";
 
 // 공통 모델 설정
 export const SERVER_MODEL_CONFIG = {
@@ -11,7 +11,8 @@ export const SERVER_MODEL_CONFIG = {
     topK: 40,
     maxOutputTokens: 39999,
   },
-
+  geminiModel: "gemini-3.5-flash",
+  proModel: "gemini-3.5-pro",
   // 안전 설정 (고정값)
   safetySettings: [
     {
@@ -226,9 +227,9 @@ export async function ensureCelebrityTranslation(
         (input as any)[k] = (baseKo as any)[k] || "";
       });
 
-      const ai = new GoogleGenAI({ apiKey: env.GOOGLE_GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: await getSecret(env.GOOGLE_GEMINI_API_KEY) });
       const payload: any = {
-        model: "gemini-2.5-flash",
+        model: SERVER_MODEL_CONFIG.geminiModel,
         systemInstruction: {
           parts: [
             {

@@ -9,7 +9,9 @@ import {
   type AnalysisJob
 } from "../utils";
 import { createPrismaClient } from "../../../../common/prismaUtils";
+import { getSecret } from "../../../../common/utils";
 import { logApi } from "../../../../common/historyLogger";
+import { SERVER_MODEL_CONFIG } from "../utils";
 /**
  * 524오류 때문에 논스트리밍 요청을 해도 내부적으로는 스트리밍 방식으로 호출 후 저장처리
  * 100초안에 ai가 응답을 내놓아야 하기때문
@@ -317,7 +319,8 @@ export class SajuAnalysisWorker implements DurableObject {
       await this.state.storage.put(job.id, job);
 
       // Gemini API 호출 준비
-      const ai = new GoogleGenAI({ apiKey: this.env.GOOGLE_GEMINI_API_KEY });
+      const key = await getSecret(this.env.GOOGLE_GEMINI_API_KEY);
+      const ai = new GoogleGenAI({ apiKey: key });
       const payload = buildGeminiPayload(job);
 
       // 업스트림은 항상 스트리밍으로 호출해 524(100초 Proxy Read Timeout) 회피
@@ -660,7 +663,7 @@ export class SajuAnalysisWorker implements DurableObject {
         // usageMetadata 저장
         ...(latestUsageMetadata && {
           usageMetadata: latestUsageMetadata,
-          modelVersion: 'gemini-2.5-pro'
+          modelVersion: SERVER_MODEL_CONFIG.proModel,
         }),
       },
     }

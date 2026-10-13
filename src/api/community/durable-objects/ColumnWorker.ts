@@ -1,4 +1,5 @@
 import { createPrismaClient } from "../../../common/prismaUtils";
+import { getSecret } from "../../../common/utils";
 import {
   ColumnJob,
   computeMaxSimilarity,
@@ -86,8 +87,9 @@ export class ColumnWorker implements DurableObject {
         const existing = await fetchExistingTitlesAndContents(prisma);
         const existingTitles = existing.map((p: any) => p.title);
 
+        const geminiApiKey = await getSecret(this.env.GOOGLE_GEMINI_API_KEY);
         const cleanTitle = await generateTitleIfNeeded(
-          this.env.GOOGLE_GEMINI_API_KEY,
+          geminiApiKey,
           job.level,
           existingTitles,
           givenTitle
@@ -96,7 +98,7 @@ export class ColumnWorker implements DurableObject {
         await this.state.storage.put(job.id, job);
 
         const html = await generateColumnHtml(
-          this.env.GOOGLE_GEMINI_API_KEY,
+          geminiApiKey,
           job.level,
           job.language,
           cleanTitle,

@@ -1,7 +1,7 @@
 import { swaggerUI } from "@hono/swagger-ui";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { bearerAuth } from "hono/bearer-auth";
-import { verifyJWT } from "../common/utils";
+import { getSecret, verifyJWT } from "../common/utils";
 import { createAdminRouter } from "./admin/admin.routes";
 import { createCelebrityAdminRouter } from "./admin/celebrity/celebrity.routes";
 import { createAiRouter } from "./saju/ai/ai.routes";
@@ -24,7 +24,7 @@ import { logApi } from "../common/historyLogger";
 type AppEnv = {
   Bindings: {
     DB: any;
-    GOOGLE_CLIENT_SECRET?: string;
+    GOOGLE_CLIENT_SECRET: SecretsStoreSecret;
   };
   Variables: {
     user?: { id: number; email: string; role: string };
@@ -44,7 +44,7 @@ export function createAppRouter(): OpenAPIHono<AppEnv> {
   const authMiddleware = bearerAuth({
     verifyToken: async (token, c) => {
       try {
-        const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
+        const payload = await verifyJWT(token, await getSecret(c.env.GOOGLE_CLIENT_SECRET));
         if (payload) {
           c.set("user", {
             id: payload.userId,

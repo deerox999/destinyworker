@@ -24,12 +24,12 @@
     "lunar-javascript": "^1.7.3",
     "swagger-typescript-api": "^13.2.7",
     "typescript": "5.8.3",
-    "wrangler": "^4.32.0"
+    "wrangler": "^4.150.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.844.0",
     "@aws-sdk/s3-request-presigner": "^3.844.0",
-    "@google/genai": "^1.11.0",
+    "@google/genai": "^2.29.0",
     "@google/generative-ai": "^0.24.1",
     "@hono/swagger-ui": "^0.5.2",
     "@hono/zod-openapi": "^0.19.10",
@@ -48,8 +48,8 @@
     "cf-typegen": "wrangler types",
     "update:local": "npm i -D wrangler@latest",
     "update:global": "npm install -g wrangler@latest",
-    "dev": "wrangler dev --x-remote-bindings --config wrangler.local.json",
-    "dev:remote": "wrangler dev --x-remote-bindings",
+    "dev": "wrangler dev --config wrangler.local.json",
+    "dev:remote": "wrangler dev --remote",
     "deploy": "wrangler deploy",
     "postinstall": "npx prisma generate",
     "check": "tsc && wrangler deploy --dry-run",
@@ -57,6 +57,7 @@
     "whoami": "npx wrangler whoami",
     "logout": "npx wrangler logout",
     "login": "npx wrangler login",
+    "secrets:list": "npx wrangler secret list",
     "db:list": "npx wrangler d1 list",
     "tmp:init": "node -e \"require('fs').mkdirSync('tmp',{recursive:true})\"",
     "seed:gen": "node ./scripts/gen-celeb-seed.mjs",

@@ -40,8 +40,8 @@
 - `prisma/schema.prisma`: 전체 스키마(유저/세션/사주/분석/문서/대화/커뮤니티/포인트 등)
 
 ### 5. 실행 스크립트
-- `dev`: 원격 바인딩 포함 로컬 개발 (`wrangler dev --x-remote-bindings --config wrangler.local.json`)
-- `dev:remote`: 원격 바인딩 개발 (`wrangler dev --x-remote-bindings`)
+- `dev`: 원격 바인딩 포함 로컬 개발 (`wrangler dev --config wrangler.local.json`)
+- `dev:remote`: Cloudflare 네트워크에서 원격 개발 (`wrangler dev --remote`)
 - `deploy`: 배포
 - `check`: 타입체크 + 드라이런 배포
 - `cf-typegen`: Cloudflare 타입 생성 (`worker-configuration.d.ts`)
@@ -75,7 +75,7 @@
 - **Board/Post/Comment/Like/Tag**: 커뮤니티 도메인
 
 ### 8. Gemini 통합 상세
-- **SDK/모델**: `@google/genai` 사용. 기본 `gemini-2.5-flash`, 고품질 옵션 시 `gemini-2.5-pro`
+- **SDK/모델**: `@google/genai` 사용. 기본 `gemini-3.5-flash`, 고품질 옵션 시 `gemini-3.5-pro`
 - **프롬프트 생성**: 서버에서 옵션 기반 시스템/유저 프롬프트 구성(`analysisSajuApi.ts`, `prompt/*`)
 - **페이로드**: `buildGeminiPayload`에서 systemInstruction/contents/safety/generationConfig 생성
 - **Durable Object 처리**: `SajuAnalysisWorker`
