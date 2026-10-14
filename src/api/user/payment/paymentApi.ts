@@ -402,14 +402,6 @@ export async function nicepayApproveApi(c: Context) {
       }
     }
 
-    const authResultCode = String(body?.authResultCode ?? body?.AuthResultCode ?? "");
-    if (authResultCode !== "0000") {
-      return redirectResult(
-        false,
-        String(body?.authResultMsg ?? body?.AuthResultMsg ?? "결제가 인증되지 않았습니다.")
-      );
-    }
-
     const tid: string = String(body?.tid ?? body?.TID ?? body?.Tid ?? "");
     const orderId: string = String(body?.orderId ?? body?.Moid ?? "");
     const clientId: string = String(body?.clientId ?? body?.ClientId ?? "");
@@ -418,18 +410,7 @@ export async function nicepayApproveApi(c: Context) {
     const amountRaw = body?.amount ?? body?.Amount;
     const amountText = amountRaw === undefined || amountRaw === null ? "" : String(amountRaw);
     const amount = Number(amountText);
-
-    if (
-      !tid ||
-      !orderId ||
-      !clientId ||
-      !authToken ||
-      !signature ||
-      !Number.isSafeInteger(amount) ||
-      amount <= 0
-    ) {
-      return redirectResult(false, "결제 인증 응답에 필수 정보가 없습니다.", orderId, tid, amountText);
-    }
+    const authResultCode = String(body?.authResultCode ?? body?.AuthResultCode ?? "");
 
     // 2) 나이스페이 결제 승인 API 호출
     const clientKey: string = isDev ? "S2_61d1c9e69d0f42f990151d0eb849861c" : await getSecret(c.env.NICE_CLIENT_KEY);
@@ -437,6 +418,48 @@ export async function nicepayApproveApi(c: Context) {
 
     if (!clientKey || !secretKey) {
       return redirectResult(false, "결제 승인 키가 설정되지 않았습니다.", orderId, tid, amountText);
+    }
+
+    const isClientApproval = clientKey.startsWith("R1_");
+    const isServerApproval = clientKey.startsWith("R2_") || clientKey.startsWith("S2_");
+    if (!isClientApproval && !isServerApproval) {
+      console.error("Unsupported NICEPAY client key type", {
+        environment: isDev ? "development" : "production",
+        clientId: clientKey,
+      });
+      return redirectResult(false, "지원하지 않는 NICEPAY 가맹점 키 유형입니다.", orderId, tid, amountText);
+    }
+
+    if (isClientApproval) {
+      const resultCode = String(body?.resultCode ?? body?.ResultCode ?? "");
+      const resultMsg = String(body?.resultMsg ?? body?.ResultMsg ?? "");
+      const success = String(body?.success ?? "").toLowerCase() === "true";
+      if (!success || resultCode !== "0000" || body?.status !== "paid") {
+        return redirectResult(
+          false,
+          resultMsg || "NICEPAY 결제가 완료되지 않았습니다.",
+          orderId,
+          tid,
+          amountText
+        );
+      }
+    } else if (authResultCode !== "0000") {
+      return redirectResult(
+        false,
+        String(body?.authResultMsg ?? body?.AuthResultMsg ?? "결제가 인증되지 않았습니다.")
+      );
+    }
+
+    if (
+      !tid ||
+      !orderId ||
+      !clientId ||
+      !signature ||
+      (!isClientApproval && !authToken) ||
+      !Number.isSafeInteger(amount) ||
+      amount <= 0
+    ) {
+      return redirectResult(false, "결제 인증 응답에 필수 정보가 없습니다.", orderId, tid, amountText);
     }
 
     if (clientId !== clientKey) {
@@ -455,17 +478,24 @@ export async function nicepayApproveApi(c: Context) {
       );
     }
 
-    
-    const expectedSignature = await sha256Hex(`${authToken}${clientId}${amountText}${secretKey}`);
+    const ediDate = String(body?.ediDate ?? body?.EdiDate ?? "");
+    if (isClientApproval && !ediDate) {
+      return redirectResult(false, "NICEPAY 결제 응답에 검증 정보가 없습니다.", orderId, tid, amountText);
+    }
+
+    const expectedSignature = isClientApproval
+      ? await sha256Hex(`${tid}${amountText}${ediDate}${secretKey}`)
+      : await sha256Hex(`${authToken}${clientId}${amountText}${secretKey}`);
     if (!safeEqual(signature.toLowerCase(), expectedSignature)) {
       console.error("NICEPAY authentication signature mismatch", {
         environment: isDev ? "development" : "production",
         clientId,
         orderId,
+        approvalModel: isClientApproval ? "client" : "server",
       });
       return redirectResult(
         false,
-        "결제 인증 정보와 승인 서버의 NICEPAY 키 설정이 일치하지 않습니다. 관리자에게 문의해 주세요.",
+        "결제 결과 서명이 유효하지 않습니다. 승인 서버의 NICEPAY 키 설정을 확인해 주세요.",
         orderId,
         tid,
         amountText
@@ -488,23 +518,43 @@ export async function nicepayApproveApi(c: Context) {
       return redirectResult(false, "결제 금액이 주문 정보와 일치하지 않습니다.", orderId, tid, amountText);
     }
 
-    const basic = typeof btoa === "function" ? btoa(`${clientKey}:${secretKey}`) : Buffer.from(`${clientKey}:${secretKey}`).toString("base64");
-    const baseUrl = isDev ? "https://sandbox-api.nicepay.co.kr/v1/payments" : "https://api.nicepay.co.kr/v1/payments";
-    const finalUrl = `${baseUrl}/${encodeURIComponent(tid)}`;
-    const startedAt = Date.now();
-    const approveRes = await fetch(finalUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${basic}`,
-      },
-      body: JSON.stringify({ amount: Math.floor(amount) }),
-    });
+    let approveJson: any;
+    let approveStatusCode: number;
+    let durationMs: number;
+    let isOk: boolean;
 
-    const approveJson: any = await approveRes.json().catch(() => ({}));
-    const durationMs = Date.now() - startedAt;
+    if (isClientApproval) {
+      // R1 client-approval SDK already completes payment; verify its signed result instead of approving twice.
+      approveJson = {
+        resultCode: body?.resultCode,
+        resultMsg: body?.resultMsg,
+        status: body?.status,
+        payMethod: body?.payMethod,
+        approveNo: body?.approveNo,
+        paidAt: body?.paidAt,
+      };
+      approveStatusCode = 200;
+      durationMs = 0;
+      isOk = true;
+    } else {
+      const basic = typeof btoa === "function" ? btoa(`${clientKey}:${secretKey}`) : Buffer.from(`${clientKey}:${secretKey}`).toString("base64");
+      const baseUrl = isDev ? "https://sandbox-api.nicepay.co.kr/v1/payments" : "https://api.nicepay.co.kr/v1/payments";
+      const finalUrl = `${baseUrl}/${encodeURIComponent(tid)}`;
+      const startedAt = Date.now();
+      const approveRes = await fetch(finalUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${basic}`,
+        },
+        body: JSON.stringify({ amount: Math.floor(amount) }),
+      });
 
-    const isOk = approveRes.ok && (!approveJson?.resultCode || approveJson.resultCode === "0000");
+      approveJson = await approveRes.json().catch(() => ({}));
+      approveStatusCode = approveRes.status;
+      durationMs = Date.now() - startedAt;
+      isOk = approveRes.ok && (!approveJson?.resultCode || approveJson.resultCode === "0000");
+    }
 
     // 3) history(ApiLog)에 응답 저장
     const prisma = createPrismaClient(c.env.DB);
@@ -514,10 +564,10 @@ export async function nicepayApproveApi(c: Context) {
       await logApi(prisma, {
         method: c.req.method,
         url: c.req.url,
-        statusCode: approveRes.status,
+        statusCode: approveStatusCode,
         durationMs,
         user: undefined,
-        params: { tid, amount, orderId, clientId, authResultCode },
+        params: { tid, amount, orderId, clientId, approvalModel: isClientApproval ? "client" : "server" },
         response: approveJson,
         ip,
         userAgent,
