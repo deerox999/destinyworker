@@ -1,4 +1,5 @@
 import { Context } from "hono";
+import { Prisma } from "@prisma/client";
 import { createPrismaClient } from "../../../common/prismaUtils";
 import { getUserFromToken } from "../../../common/utils";
 
@@ -29,7 +30,10 @@ const validateSajuData = (data: any): boolean => {
     ["남자", "여자"].includes(data.gender) &&
     (data.country === undefined || typeof data.country === 'string') &&
     (data.city === undefined || typeof data.city === 'string') &&
-    (data.calculationMethod === undefined || typeof data.calculationMethod === 'string')
+    (data.calculationMethod === undefined || typeof data.calculationMethod === 'string') &&
+    (data.bloodType === undefined || data.bloodType === null || typeof data.bloodType === 'string') &&
+    (data.mbti === undefined || data.mbti === null || typeof data.mbti === 'string') &&
+    (data.constellation === undefined || data.constellation === null || typeof data.constellation === 'string')
   );
 };
 
@@ -97,6 +101,12 @@ export async function createSajuProfile(
         city: body.city,
         calculationMethod: body.calculationMethod,
         context: body.context ?? null,
+        bloodType: body.bloodType ?? null,
+        mbti: body.mbti ?? null,
+        constellation: body.constellation ?? null,
+        palmistry: body.palmistry == null ? Prisma.DbNull : body.palmistry,
+        physiognomy: body.physiognomy == null ? Prisma.DbNull : body.physiognomy,
+        geomancy: body.geomancy == null ? Prisma.DbNull : body.geomancy,
       },
     });
     await prisma.$disconnect();
@@ -171,6 +181,12 @@ export async function updateSajuProfile(
         city: body.city,
         calculationMethod: body.calculationMethod,
         context: body.context ?? null,
+        bloodType: body.bloodType,
+        mbti: body.mbti,
+        constellation: body.constellation,
+        palmistry: body.palmistry === null ? Prisma.DbNull : body.palmistry,
+        physiognomy: body.physiognomy === null ? Prisma.DbNull : body.physiognomy,
+        geomancy: body.geomancy === null ? Prisma.DbNull : body.geomancy,
       },
     });
     await prisma.$disconnect();
@@ -284,6 +300,13 @@ export async function updateSajuProfilesBulk(
         // 그룹/정렬
         groupName?: string | null;
         sortOrder?: number | null;
+
+        mbti?: string | null; // mbti
+        bloodType?: string | null; // 혈액형
+        constellation?: string | null; // 별자리
+        palmistry?: any | null; // 손금
+        physiognomy?: any | null; // 관상
+        geomancy?: any | null; // 풍수지리
       }>;
       autoSort?: boolean;
     };
@@ -389,6 +412,27 @@ export async function updateSajuProfilesBulk(
         if (item.context !== undefined) {
           if (!(item.context === null || typeof item.context === 'string')) throw new Error("맥락 형식이 올바르지 않습니다.");
           updateData.context = item.context;
+        }
+        if (item.bloodType !== undefined) {
+          if (!(item.bloodType === null || typeof item.bloodType === 'string')) throw new Error("혈액형 형식이 올바르지 않습니다.");
+          updateData.bloodType = item.bloodType;
+        }
+        if (item.mbti !== undefined) {
+          if (!(item.mbti === null || typeof item.mbti === 'string')) throw new Error("MBTI 형식이 올바르지 않습니다.");
+          updateData.mbti = item.mbti;
+        }
+        if (item.constellation !== undefined) {
+          if (!(item.constellation === null || typeof item.constellation === 'string')) throw new Error("별자리 형식이 올바르지 않습니다.");
+          updateData.constellation = item.constellation;
+        }
+        if (item.palmistry !== undefined) {
+          updateData.palmistry = item.palmistry === null ? Prisma.DbNull : item.palmistry;
+        }
+        if (item.physiognomy !== undefined) {
+          updateData.physiognomy = item.physiognomy === null ? Prisma.DbNull : item.physiognomy;
+        }
+        if (item.geomancy !== undefined) {
+          updateData.geomancy = item.geomancy === null ? Prisma.DbNull : item.geomancy;
         }
 
         const groupProvided = item.groupName !== undefined;

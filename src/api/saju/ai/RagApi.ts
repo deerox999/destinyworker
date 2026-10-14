@@ -32,10 +32,6 @@ interface DocumentRequest {
   documents: Document[];
 }
 
-interface QueryRequest {
-  query: string;
-}
-
 // =================================================================
 // 1. 문서 추가 및 인덱싱 (Add & Index Document)
 // =================================================================

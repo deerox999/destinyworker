@@ -15,6 +15,11 @@ npx wrangler d1 execute destiny --remote --command  "ALTER TABLE "Payment" ADD C
 npx wrangler d1 execute destiny-local --local --file=prisma/migrations/Payment.sql
 npx wrangler d1 execute destiny --remote --file=prisma/migrations/Payment.sql
 
+npx wrangler d1 execute destiny-local --local --file=prisma/migrations/Recommendation.sql
+npx wrangler d1 execute destiny --remote --file=prisma/migrations/Recommendation.sql
+npx wrangler d1 execute destiny-local --local --file=prisma/migrations/SajuProfileAdditionalFields.sql
+npx wrangler d1 execute destiny --remote --file=prisma/migrations/SajuProfileAdditionalFields.sql
+
   (동기화) npx prisma generate
 
   (1) Prisma 스키마로 전체 스키마 SQL 생성

@@ -24,6 +24,7 @@ import { ensureCelebrityTranslation, SERVER_MODEL_CONFIG } from "./utils";
 interface AnalysisSajuRequest {
   // 사주 데이터 (필수)
   sajuData: any;
+  userMemo: any; /* [{ "date": "20261014", "text": "qwe" }] */
   // 분석 옵션
   options?: {
     // 분석 설정

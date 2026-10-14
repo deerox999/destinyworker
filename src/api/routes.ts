@@ -4,6 +4,7 @@ import { bearerAuth } from "hono/bearer-auth";
 import { getSecret, verifyJWT } from "../common/utils";
 import { createAdminRouter } from "./admin/admin.routes";
 import { createCelebrityAdminRouter } from "./admin/celebrity/celebrity.routes";
+import { createRecommendationAdminRouter } from "./admin/recommendation/recommendation.routes";
 import { createAiRouter } from "./saju/ai/ai.routes";
 import { createCelebrityRouter } from "./celebrity/celebrity.routes";
 import { createCommunityRouter } from "./community/routes";
@@ -134,6 +135,7 @@ export function createAppRouter(): OpenAPIHono<AppEnv> {
   app.route("/api/saju-profiles", createSajuRouter(authMiddleware));
   app.route("/api/ai", createAiRouter(authMiddleware));
   app.route("/api/admin", createAdminRouter(authMiddleware));
+  app.route("/api/admin/recommendations", createRecommendationAdminRouter(authMiddleware));
   app.route("/api/celebrities", createCelebrityRouter(authMiddleware));
   app.route("/api/admin/celebrities", createCelebrityAdminRouter(authMiddleware));
   app.route("/api/community", createCommunityRouter());
