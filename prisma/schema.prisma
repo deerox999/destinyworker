@@ -112,6 +112,9 @@ model Celebrity {
   birthMinute  Int?
   calendar     String    /// 달력 종류 ("SOLAR" 또는 "LUNAR")
   gender       String    /// 성별 ("MALE" 또는 "FEMALE")
+  country      String?   /// 국가
+  city         String?   /// 도시
+  calculationMethod String? /// 계산 방법
   imageUrl     String?
   viewCount    Int      @default(0) /// 조회수
   translations CelebrityTranslation[]

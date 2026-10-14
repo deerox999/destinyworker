@@ -95,6 +95,9 @@ export const CelebritySchema = z
       .openapi({ example: 30 }),
     calendar: z.enum(["SOLAR", "LUNAR"]).openapi({ example: "SOLAR" }),
     gender: z.enum(["MALE", "FEMALE"]).openapi({ example: "FEMALE" }),
+    country: z.string().nullable().optional().openapi({ description: "국가", example: "한국" }),
+    city: z.string().nullable().optional().openapi({ description: "도시", example: "서울" }),
+    calculationMethod: z.string().nullable().optional().openapi({ description: "계산 방법", example: "일반" }),
     imageUrl: z
       .string()
       .nullable()

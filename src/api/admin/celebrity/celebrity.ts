@@ -63,6 +63,9 @@ export async function createCelebritiesBatch(c: Context): Promise<Response> {
           : null,
         calendar, // "SOLAR" | "LUNAR"
         gender, // "MALE" | "FEMALE"
+        country: celebrity.country ?? null,
+        city: celebrity.city ?? null,
+        calculationMethod: celebrity.calculationMethod ?? null,
         imageUrl: celebrity.imageUrl,
       });
 
@@ -188,6 +191,9 @@ export async function createCelebrity(c: Context): Promise<Response> {
           birthMinute: body.birthMinute ? parseInt(body.birthMinute) : null,
           calendar, // "SOLAR" | "LUNAR"
           gender, // "MALE" | "FEMALE"
+          country: body.country ?? null,
+          city: body.city ?? null,
+          calculationMethod: body.calculationMethod ?? null,
           imageUrl: body.imageUrl,
         },
       }),
@@ -259,6 +265,9 @@ export async function updateCelebrity(c: Context): Promise<Response> {
       "birthMinute",
       "calendar",
       "gender",
+      "country",
+      "city",
+      "calculationMethod",
       "imageUrl",
     ];
 
