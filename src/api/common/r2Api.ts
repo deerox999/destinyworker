@@ -8,22 +8,26 @@ import { getUserFromToken } from "../../common/utils";
 // R2 클라이언트 생성 함수
 export const createR2Client = (env: any): S3Client | null => {
   const {
-    R2_ACCOUNT_ID,
-    R2_ACCESS_KEY_ID,
-    R2_SECRET_ACCESS_KEY,
+    MASTER_API_S3_ENDPOINT,
+    MASTER_API_ACCESSKEY,
+    MASTER_API_SECRET_ACCESSKEY,
   } = env;
 
-  if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+  if (
+    !MASTER_API_S3_ENDPOINT ||
+    !MASTER_API_ACCESSKEY ||
+    !MASTER_API_SECRET_ACCESSKEY
+  ) {
     console.error("R2 credentials are not properly configured");
     return null;
   }
 
   return new S3Client({
     region: "auto",
-    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    endpoint: MASTER_API_S3_ENDPOINT,
     credentials: {
-      accessKeyId: R2_ACCESS_KEY_ID,
-      secretAccessKey: R2_SECRET_ACCESS_KEY,
+      accessKeyId: MASTER_API_ACCESSKEY,
+      secretAccessKey: MASTER_API_SECRET_ACCESSKEY,
     },
   });
 };
@@ -147,27 +151,16 @@ export async function getUploadUrl(
     const objectKey = `uploads/user-${userInfo.id}/${uuidv4()}-${fileName}`;
 
     const {
-      R2_ACCOUNT_ID,
-      R2_ACCESS_KEY_ID,
-      R2_SECRET_ACCESS_KEY,
       R2_BUCKET_NAME,
       R2_PUBLIC_URL,
     } = c.env;
 
     if (
-      !R2_ACCOUNT_ID ||
-      !R2_ACCESS_KEY_ID ||
-      !R2_SECRET_ACCESS_KEY ||
       !R2_BUCKET_NAME ||
       !R2_PUBLIC_URL
     ) {
       console.error(
-        "R2 environment variables are not set",
-        R2_ACCOUNT_ID,
-        R2_ACCESS_KEY_ID,
-        R2_SECRET_ACCESS_KEY,
-        R2_BUCKET_NAME,
-        R2_PUBLIC_URL
+        "R2_BUCKET_NAME and R2_PUBLIC_URL environment variables are not set"
       );
       return c.json({ error: "Server configuration error" }, 500);
     }

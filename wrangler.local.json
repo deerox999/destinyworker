@@ -71,7 +71,9 @@
     }
   ],
   "vars": {
-    "ENVIRONMENT": "development"
+    "ENVIRONMENT": "development",
+    "R2_BUCKET_NAME": "destiny",
+    "R2_PUBLIC_URL": "https://r2.youram.me"
   },
   "secrets_store_secrets": [
     {
@@ -108,6 +110,21 @@
       "binding": "BRAVE_API_KEY",
       "store_id": "9aea31b0e5b24ffda2a17294171bef68",
       "secret_name": "BRAVE_API_KEY"
+    },
+    {
+      "binding": "MASTER_API_ACCESSKEY",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "MASTER_API_ACCESSKEY"
+    },
+    {
+      "binding": "MASTER_API_SECRET_ACCESSKEY",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "MASTER_API_SECRET_ACCESSKEY"
+    },
+    {
+      "binding": "MASTER_API_S3_ENDPOINT",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "MASTER_API_S3_ENDPOINT"
     }
   ],
   "observability": {

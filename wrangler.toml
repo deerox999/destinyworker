@@ -83,6 +83,8 @@ new_classes = ["ColumnWorker"]
 
 [vars] # 환경 변수
 ENVIRONMENT = "production"       # 환경 설정
+R2_BUCKET_NAME = "destiny"
+R2_PUBLIC_URL = "https://r2.youram.me"
 
 [[secrets_store_secrets]]
 binding = "GOOGLE_CLIENT_ID"
@@ -118,6 +120,21 @@ secret_name = "RESEND_API_KEY"
 binding = "BRAVE_API_KEY"
 store_id = "9aea31b0e5b24ffda2a17294171bef68"
 secret_name = "BRAVE_API_KEY"
+
+[[secrets_store_secrets]]
+binding = "MASTER_API_ACCESSKEY"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "MASTER_API_ACCESSKEY"
+
+[[secrets_store_secrets]]
+binding = "MASTER_API_SECRET_ACCESSKEY"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "MASTER_API_SECRET_ACCESSKEY"
+
+[[secrets_store_secrets]]
+binding = "MASTER_API_S3_ENDPOINT"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "MASTER_API_S3_ENDPOINT"
 
 [observability] # 관찰성 설정 (모니터링)
 enabled = true                   # 관찰성 기능 활성화

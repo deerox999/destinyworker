@@ -110,9 +110,9 @@ function generateServerPrompts(
   };
 
   if (c.env.ENVIRONMENT === "development") {
-    // console.log("promptParams", promptParams);
-    // console.log("systemPrompt", result.systemPrompt);
-    // console.log("userPrompt", result.userPrompt);
+    console.log("promptParams", promptParams);
+    console.log("systemPrompt", result.systemPrompt);
+    console.log("userPrompt", result.userPrompt);
   }
   return result;
 }
