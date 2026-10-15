@@ -65,14 +65,6 @@ class_name = "SajuAnalysisWorker"
 name = "COLUMN_WORKER"           # 칼럼 생성 워커 객체
 class_name = "ColumnWorker"
 
-[[durable_objects.classes]] # 클래스 정의
-name = "SajuAnalysisWorker"      # 사주 분석 워커 클래스
-script_name = "destinyworker"
-
-[[durable_objects.classes]]
-name = "ColumnWorker"            # 칼럼 생성 워커 클래스
-script_name = "destinyworker"
-
 [[migrations]] # 마이그레이션 설정
 tag = "v1"
 new_classes = ["SajuAnalysisWorker"]  # 새로운 Durable Object 클래스

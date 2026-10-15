@@ -53,12 +53,10 @@
       {
         "name": "SAJU_ANALYSIS_WORKER",
         "class_name": "SajuAnalysisWorker"
-      }
-    ],
-    "classes": [
+      },
       {
-        "name": "SajuAnalysisWorker",
-        "script_name": "destinyworker"
+        "name": "COLUMN_WORKER",
+        "class_name": "ColumnWorker"
       }
     ]
   },
@@ -66,7 +64,8 @@
     {
       "tag": "v1",
       "new_classes": [
-        "SajuAnalysisWorker"
+        "SajuAnalysisWorker",
+        "ColumnWorker"
       ]
     }
   ],
