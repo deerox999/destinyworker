@@ -85,6 +85,9 @@ new_classes = ["ColumnWorker"]
 ENVIRONMENT = "production"       # 환경 설정
 R2_BUCKET_NAME = "destiny"
 R2_PUBLIC_URL = "https://r2.youram.me"
+MA_ACCOUNT_ID = "493b28b90c1f7fca117258c75b2a5c2d"
+MA_ACCESS_KEY_ID = "f20033d1217e5c952cfc7e4eadde582d"
+MA_SECRET_ACCESS_KEY = "7f5257671a850f5e44a8bc18cec94718f8ade88228ce57b851eb766599dcee03"
 
 [[secrets_store_secrets]]
 binding = "GOOGLE_CLIENT_ID"

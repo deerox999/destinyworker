@@ -2,32 +2,39 @@ import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Context } from "hono";
 import { v4 as uuidv4 } from "uuid";
-import { getUserFromToken } from "../../common/utils";
+import { getSecret, getUserFromToken } from "../../common/utils";
 
-/* 운영 개발 분리 된 환경이 아님. dev 환경에서도, destiny 버킷에 업로드 가능하도록 되어있음. */
-// R2 클라이언트 생성 함수
-export const createR2Client = (env: any): S3Client | null => {
-  const {
-    MASTER_API_S3_ENDPOINT,
-    MASTER_API_ACCESSKEY,
-    MASTER_API_SECRET_ACCESSKEY,
-  } = env;
+/* R2 클라이언트 생성 함수 : 운영 개발 분리 된 환경이 아님. dev 환경에서도, destiny 버킷에 업로드 가능하도록 되어있음. */
+export const createR2Client = async (env: any): Promise<S3Client | null> => {
 
-  if (
-    !MASTER_API_S3_ENDPOINT ||
-    !MASTER_API_ACCESSKEY ||
-    !MASTER_API_SECRET_ACCESSKEY
-  ) {
-    console.error("R2 credentials are not properly configured");
-    return null;
-  }
+  // console.log(env)
+  // console.log('GOOGLE_GEMINI_API_KEY',await getSecret(env.GOOGLE_GEMINI_API_KEY))
+  // console.log('GOOGLE_CLIENT_ID',await getSecret(env.GOOGLE_CLIENT_ID))
+  // console.log('GOOGLE_CLIENT_SECRET',await getSecret(env.GOOGLE_CLIENT_SECRET))
+  // console.log('RESEND_API_KEY',await getSecret(env.RESEND_API_KEY))
 
+  // console.log('MASTER_API_ACCESSKEY', await getSecret(env.MASTER_API_ACCESSKEY))
+  // console.log('MASTER_API_S3_ENDPOINT', await getSecret(env.MASTER_API_S3_ENDPOINT))
+  // console.log('MASTER_API_SECRET_ACCESSKEY', await getSecret(env.MASTER_API_SECRET_ACCESSKEY))
+
+  // console.log('NICE_CLIENT_KEY',await getSecret(env.NICE_CLIENT_KEY))
+  // console.log('NICE_SECRET_KEY',await getSecret(env.NICE_SECRET_KEY))
+  // console.log('BRAVE_API_KEY',await getSecret(env.BRAVE_API_KEY))
+
+  // const [endpoint, accessKeyId, secretAccessKey] = await Promise.all([
+  //   getSecret(env.MASTER_API_S3_ENDPOINT),
+  //   getSecret(env.MASTER_API_ACCESSKEY),
+  //   getSecret(env.MASTER_API_SECRET_ACCESSKEY),
+  // ]);
+
+  const {MA_ACCOUNT_ID, MA_ACCESS_KEY_ID, MA_SECRET_ACCESS_KEY} = env;
+  
   return new S3Client({
     region: "auto",
-    endpoint: MASTER_API_S3_ENDPOINT,
+    endpoint: `https://${MA_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: MASTER_API_ACCESSKEY,
-      secretAccessKey: MASTER_API_SECRET_ACCESSKEY,
+      accessKeyId: MA_ACCESS_KEY_ID,
+      secretAccessKey: MA_SECRET_ACCESS_KEY,
     },
   });
 };
@@ -35,7 +42,7 @@ export const createR2Client = (env: any): S3Client | null => {
 // R2에서 객체 삭제
 export async function deleteR2Object(objectKey: string, env: any): Promise<boolean> {
   try {
-    const S3 = createR2Client(env);
+    const S3 = await createR2Client(env);
     if (!S3) return false;
 
     await S3.send(new DeleteObjectCommand({
@@ -89,7 +96,7 @@ export async function deleteImagesFromR2(content: string, env: any): Promise<voi
       return;
     }
 
-    const S3 = createR2Client(env);
+    const S3 = await createR2Client(env);
     if (!S3) {
       throw new Error('R2 클라이언트 생성 실패');
     }
@@ -129,54 +136,26 @@ export async function deleteImagesFromR2(content: string, env: any): Promise<voi
   }
 }
 
-export async function getUploadUrl(
-  c: Context
-): Promise<Response> {
+export async function getUploadUrl(c: Context): Promise<Response> {
   const userInfo = await getUserFromToken(c);
   if (!userInfo) return c.json({ error: "인증이 필요합니다." }, 401);
 
   try {
-    const { fileName, contentType } = (await c.req.json()) as {
-      fileName: string;
-      contentType: string;
-    };
+    const { fileName, contentType } = (await c.req.json()) as { fileName: string; contentType: string; };
 
-    if (!fileName || !contentType) {
-      return c.json(
-        { error: "fileName and contentType are required." },
-        400
-      );
-    }
+    if (!fileName || !contentType) return c.json({ error: "fileName and contentType are required." }, 400);
 
     const objectKey = `uploads/user-${userInfo.id}/${uuidv4()}-${fileName}`;
+    const { R2_BUCKET_NAME, R2_PUBLIC_URL } = c.env;
 
-    const {
-      R2_BUCKET_NAME,
-      R2_PUBLIC_URL,
-    } = c.env;
-
-    if (
-      !R2_BUCKET_NAME ||
-      !R2_PUBLIC_URL
-    ) {
-      console.error(
-        "R2_BUCKET_NAME and R2_PUBLIC_URL environment variables are not set"
-      );
-      return c.json({ error: "Server configuration error" }, 500);
-    }
-
-    const S3 = createR2Client(c.env);
+    const S3 = await createR2Client(c.env);
     if (!S3) {
       return c.json({ error: "Failed to create R2 client" }, 500);
     }
 
     const signedUrl = await getSignedUrl(
       S3,
-      new PutObjectCommand({
-        Bucket: R2_BUCKET_NAME,
-        Key: objectKey,
-        ContentType: contentType,
-      }),
+      new PutObjectCommand({Bucket: R2_BUCKET_NAME, Key: objectKey, ContentType: contentType}),
       { expiresIn: 300 } // 5 minutes
     );
 
