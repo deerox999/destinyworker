@@ -1,23 +1,6 @@
 ### 전반 진단 요약
 - 핵심 개선 포인트를 보안 → API 일관성 → DX/운영 순으로 정리했습니다. 즉시 수정해야 할 항목에 우선순위를 부여했습니다.
 
-### 보안/인증(Critical)
-- JWT 서명키로 Google OAuth 클라이언트 시크릿을 재사용
-  - 분리 필요: `JWT_SECRET` 환경변수 신설, 전 구간 교체.
-```25:33:src/api/routes.ts
-const payload = await verifyJWT(token, c.env.GOOGLE_CLIENT_SECRET);
-```
-- 서명 검증 없이 페이로드만 디코드해 사용자 식별
-  - `getUserFromToken`은 단순 base64 디코드+exp 체크로 위조 토큰 통과 위험. 전면 교체 필요.
-```35:58:src/common/utils.ts
-export const getUserFromToken = async (c: Context): Promise<{ id: number; email: string; role: string } | null> => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  try {
-    const token = authHeader.substring(7);
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1]...
 ```
 - 라우터별 인증 강제 불일치
   - 일부 라우트는 미들웨어 없이 수동 검사(또는 미검증)로 운영됨. 예: 유명인물 댓글/좋아요 라우트는 `authMiddleware` 미적용, 내부에서 `getUserFromToken` 사용.
