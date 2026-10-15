@@ -22,17 +22,17 @@ interface __BaseEnv_Env {
 	ENVIRONMENT: string;
 	R2_BUCKET_NAME: string;
 	R2_PUBLIC_URL: string;
-	GOOGLE_CLIENT_ID: string;
-	GOOGLE_CLIENT_SECRET: string;
-	GOOGLE_ANDROID_ID: string;
-	GOOGLE_GEMINI_API_KEY: string;
-	BRAVE_API_KEY: string;
-	RESEND_API_KEY: string;
-	NICE_CLIENT_KEY: string;
-	NICE_SECRET_KEY: string;
-    MASTER_API_ACCESSKEY: string;
-    MASTER_API_SECRET_ACCESSKEY: string;
-    MASTER_API_AUTHID: string;
+	// GOOGLE_CLIENT_ID: string;
+	// GOOGLE_CLIENT_SECRET: string;
+	// GOOGLE_ANDROID_ID: string;
+	// GOOGLE_GEMINI_API_KEY: string;
+	// BRAVE_API_KEY: string;
+	// RESEND_API_KEY: string;
+	// NICE_CLIENT_KEY: string;
+	// NICE_SECRET_KEY: string;
+    // MASTER_API_ACCESSKEY: string;
+    // MASTER_API_SECRET_ACCESSKEY: string;
+    // MASTER_API_AUTHID: string;
 	SAJU_ANALYSIS_WORKER: DurableObjectNamespace<import("./src/index").SajuAnalysisWorker>;
 	COLUMN_WORKER: DurableObjectNamespace<import("./src/index").ColumnWorker>;
 }

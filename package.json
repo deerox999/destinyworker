@@ -49,7 +49,7 @@
     "update:local": "npm i -D wrangler@latest",
     "update:global": "npm install -g wrangler@latest",
     "dev": "wrangler dev --config wrangler.local.json",
-    "prod": "wrangler dev --remote",
+    "prod": "wrangler dev",
     "deploy": "wrangler deploy",
     "postinstall": "npx prisma generate",
     "check": "tsc && wrangler deploy --dry-run",
