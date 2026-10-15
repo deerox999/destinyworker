@@ -85,9 +85,6 @@ new_classes = ["ColumnWorker"]
 ENVIRONMENT = "production"       # 환경 설정
 R2_BUCKET_NAME = "destiny"
 R2_PUBLIC_URL = "https://r2.youram.me"
-MA_ACCOUNT_ID = "493b28b90c1f7fca117258c75b2a5c2d"
-MA_ACCESS_KEY_ID = "f20033d1217e5c952cfc7e4eadde582d"
-MA_SECRET_ACCESS_KEY = "7f5257671a850f5e44a8bc18cec94718f8ade88228ce57b851eb766599dcee03"
 
 [[secrets_store_secrets]]
 binding = "GOOGLE_CLIENT_ID"
@@ -135,9 +132,10 @@ store_id = "9aea31b0e5b24ffda2a17294171bef68"
 secret_name = "MASTER_API_SECRET_ACCESSKEY"
 
 [[secrets_store_secrets]]
-binding = "MASTER_API_S3_ENDPOINT"
+binding = "MASTER_API_AUTHID"
 store_id = "9aea31b0e5b24ffda2a17294171bef68"
-secret_name = "MASTER_API_S3_ENDPOINT"
+secret_name = "MASTER_API_AUTHID"
+
 
 [observability] # 관찰성 설정 (모니터링)
 enabled = true                   # 관찰성 기능 활성화

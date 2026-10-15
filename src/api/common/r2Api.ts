@@ -21,20 +21,18 @@ export const createR2Client = async (env: any): Promise<S3Client | null> => {
   // console.log('NICE_SECRET_KEY',await getSecret(env.NICE_SECRET_KEY))
   // console.log('BRAVE_API_KEY',await getSecret(env.BRAVE_API_KEY))
 
-  // const [endpoint, accessKeyId, secretAccessKey] = await Promise.all([
-  //   getSecret(env.MASTER_API_S3_ENDPOINT),
-  //   getSecret(env.MASTER_API_ACCESSKEY),
-  //   getSecret(env.MASTER_API_SECRET_ACCESSKEY),
-  // ]);
-
-  const {MA_ACCOUNT_ID, MA_ACCESS_KEY_ID, MA_SECRET_ACCESS_KEY} = env;
+  const [authId, accessKeyId, secretAccessKey] = await Promise.all([
+    getSecret(env.MASTER_API_AUTHID),
+    getSecret(env.MASTER_API_ACCESSKEY),
+    getSecret(env.MASTER_API_SECRET_ACCESSKEY),
+  ]);
   
   return new S3Client({
     region: "auto",
-    endpoint: `https://${MA_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    endpoint: `https://${authId}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: MA_ACCESS_KEY_ID,
-      secretAccessKey: MA_SECRET_ACCESS_KEY,
+      accessKeyId: accessKeyId,
+      secretAccessKey: secretAccessKey,
     },
   });
 };

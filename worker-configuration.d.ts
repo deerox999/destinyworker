@@ -16,19 +16,11 @@ interface __BaseEnv_Env {
 	BRAVE_API_KEY: SecretsStoreSecret;
 	MASTER_API_ACCESSKEY: SecretsStoreSecret;
 	MASTER_API_SECRET_ACCESSKEY: SecretsStoreSecret;
-	MASTER_API_S3_ENDPOINT: SecretsStoreSecret;
+	MASTER_API_AUTHID: SecretsStoreSecret;
 	AI: Ai;
 	ENVIRONMENT: string;
-	GOOGLE_CLIENT_ID: string;
-	GOOGLE_CLIENT_SECRET: string;
-	GOOGLE_ANDROID_ID: string;
-	GOOGLE_GEMINI_API_KEY: string;
 	R2_BUCKET_NAME: string;
 	R2_PUBLIC_URL: string;
-	BRAVE_API_KEY: string;
-	RESEND_API_KEY: string;
-	NICE_CLIENT_KEY: string;
-	NICE_SECRET_KEY: string;
 	SAJU_ANALYSIS_WORKER: DurableObjectNamespace<import("./src/index").SajuAnalysisWorker>;
 	COLUMN_WORKER: DurableObjectNamespace<import("./src/index").ColumnWorker>;
 }
