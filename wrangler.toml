@@ -102,6 +102,11 @@ store_id = "9aea31b0e5b24ffda2a17294171bef68"
 secret_name = "GOOGLE_GEMINI_APIKEY"
 
 [[secrets_store_secrets]]
+binding = "GOOGLE_GEMINI_FREE_APIKEY"
+store_id = "9aea31b0e5b24ffda2a17294171bef68"
+secret_name = "GOOGLE_GEMINI_FREE_APIKEY"
+
+[[secrets_store_secrets]]
 binding = "NICE_CLIENT_KEY"
 store_id = "9aea31b0e5b24ffda2a17294171bef68"
 secret_name = "NICE_CLIENT_KEY"

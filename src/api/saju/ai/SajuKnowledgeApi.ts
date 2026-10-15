@@ -14,13 +14,15 @@ import {
 } from "./prompt/sajuTeacher";
 import { SERVER_MODEL_CONFIG } from "./utils";
 
-// Gemini API와 통신하기 위한 환경 변수 확장
-export interface Env {
-  AI: Ai; // Cloudflare AI (임베딩용)
-  VECTORIZE_INDEX: VectorizeIndex;
-  DB: D1Database;
-  GOOGLE_GEMINI_API_KEY: SecretsStoreSecret;
-  BRAVE_API_KEY: SecretsStoreSecret;
+interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+interface WebSearchResult {
+  title: string;
+  description: string;
+  url: string;
 }
 
 /**
@@ -47,17 +49,6 @@ async function isQuerySajuRelated(ai: any, query: string): Promise<boolean> {
     // 오류 발생 시 안전하게 관련 있는 것으로 간주하여 처리를 계속 진행합니다.
     return true;
   }
-}
-
-interface ChatMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
-
-interface WebSearchResult {
-  title: string;
-  description: string;
-  url: string;
 }
 
 /**
@@ -375,7 +366,7 @@ ${fullContext}`;
     
     // Gemini API 초기화
     const geminiApi = new GoogleGenAI({
-      apiKey: await getSecret(c.env.GOOGLE_GEMINI_API_KEY)
+      apiKey: await getSecret(c.env.GOOGLE_GEMINI_FREE_APIKEY)
     });
     
     // Gemini 형식으로 메시지 변환 (assistant를 model로 변환)

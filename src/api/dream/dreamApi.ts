@@ -22,7 +22,7 @@ export const dreamApi = {
     const prisma = createPrismaClient(c.env.DB);
     try {
       // 1) 기본 언어는 내부 기준 ko로 생성(내용 생성/중복 검사용)
-      const geminiApiKey = await getSecret(c.env.GOOGLE_GEMINI_API_KEY);
+      const geminiApiKey = await getSecret(c.env.GOOGLE_GEMINI_FREE_APIKEY);
       const base = await generateDreamWithAi(geminiApiKey, "ko", title, c.env);
 
       // 2) 마크다운 검증

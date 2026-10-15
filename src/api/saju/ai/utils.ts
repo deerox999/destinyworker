@@ -227,7 +227,7 @@ export async function ensureCelebrityTranslation(
         (input as any)[k] = (baseKo as any)[k] || "";
       });
 
-      const ai = new GoogleGenAI({ apiKey: await getSecret(env.GOOGLE_GEMINI_API_KEY) });
+      const ai = new GoogleGenAI({ apiKey: await getSecret(env.GOOGLE_GEMINI_FREE_APIKEY) });
       const payload: any = {
         model: SERVER_MODEL_CONFIG.geminiModel,
         systemInstruction: {

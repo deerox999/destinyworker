@@ -33,7 +33,7 @@ export async function DailyFortune(c: Context): Promise<Response> {
       timezone,
     });
 
-    const ai = new GoogleGenAI({ apiKey: await getSecret(c.env.GOOGLE_GEMINI_API_KEY) });
+    const ai = new GoogleGenAI({ apiKey: await getSecret(c.env.GOOGLE_GEMINI_FREE_APIKEY) });
 
     // 프론트가 전달한 sajuData를 그대로 사용하되, 길이 검증만 수행
     const MAX_SAJU_JSON_LENGTH = 4000; // 20줄 내외 가이드 기준 약간 여유

@@ -19,8 +19,6 @@ import {
   validateHtml,
 } from "./columnUtils";
 
-type Env = { DB: D1Database; GOOGLE_GEMINI_API_KEY: SecretsStoreSecret };
-
 export const adminColumnApi = {
   async dryRunGenerate(c: Context) {
     if (!(await isAdmin(c))) {
@@ -41,7 +39,7 @@ export const adminColumnApi = {
       const existing = await fetchExistingTitlesAndContents(prisma);
       const existingTitles = existing.map((p: any) => p.title);
 
-      const geminiApiKey = await getSecret(c.env.GOOGLE_GEMINI_API_KEY);
+      const geminiApiKey = await getSecret(c.env.GOOGLE_GEMINI_FREE_APIKEY);
       if (!title || title.trim().length === 0) {
         title = await generateTitleIfNeeded(geminiApiKey, level, existingTitles, undefined);
       }
@@ -159,7 +157,7 @@ export const adminColumnApi = {
       const existingTitles = existing.map((p: any) => p.title);
 
       // 제목 제안
-      const geminiApiKey = await getSecret(env.GOOGLE_GEMINI_API_KEY);
+      const geminiApiKey = await getSecret(env.GOOGLE_GEMINI_FREE_APIKEY);
       const ai = new GoogleGenAI({ apiKey: geminiApiKey });
       const titlePrompt = buildTitleOnlyPrompt(level, undefined, existingTitles);
       const titlePayload = {

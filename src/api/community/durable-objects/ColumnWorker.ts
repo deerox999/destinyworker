@@ -87,7 +87,7 @@ export class ColumnWorker implements DurableObject {
         const existing = await fetchExistingTitlesAndContents(prisma);
         const existingTitles = existing.map((p: any) => p.title);
 
-        const geminiApiKey = await getSecret(this.env.GOOGLE_GEMINI_API_KEY);
+        const geminiApiKey = await getSecret(this.env.GOOGLE_GEMINI_FREE_APIKEY);
         const cleanTitle = await generateTitleIfNeeded(
           geminiApiKey,
           job.level,

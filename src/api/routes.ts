@@ -22,10 +22,32 @@ import { logApi } from "../common/historyLogger";
 /**
  * 애플리케이션의 모든 라우트를 등록하고 관리하는 메인 라우터 (Hono 기반)
  */
+
 type AppEnv = {
   Bindings: {
-    DB: any;
+    AI: Ai;
+    DB: D1Database;
+    KV: KVNamespace;
+    SAJU_ANALYSIS_WORKER: DurableObjectNamespace;
+    COLUMN_WORKER: DurableObjectNamespace;
+    VIEW_CACHE_KV: KVNamespace;
+    AUTH_CODE_KV: KVNamespace;
+    DESTINY_R2: R2Bucket;
+    VECTORIZE_INDEX: VectorizeIndex;
+    GOOGLE_CLIENT_ID: SecretsStoreSecret;
     GOOGLE_CLIENT_SECRET: SecretsStoreSecret;
+    GOOGLE_GEMINI_API_KEY: SecretsStoreSecret;
+    GOOGLE_GEMINI_FREE_APIKEY: SecretsStoreSecret;
+    NICE_CLIENT_KEY: SecretsStoreSecret;
+    NICE_SECRET_KEY: SecretsStoreSecret;
+    RESEND_API_KEY: SecretsStoreSecret;
+    BRAVE_API_KEY: SecretsStoreSecret;
+    MASTER_API_ACCESSKEY: SecretsStoreSecret;
+    MASTER_API_SECRET_ACCESSKEY: SecretsStoreSecret;
+    MASTER_API_AUTHID: SecretsStoreSecret;
+    ENVIRONMENT: string;
+    R2_BUCKET_NAME: string;
+    R2_PUBLIC_URL: string;
   };
   Variables: {
     user?: { id: number; email: string; role: string };

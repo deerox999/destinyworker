@@ -92,6 +92,11 @@
       "secret_name": "GOOGLE_GEMINI_APIKEY"
     },
     {
+      "binding": "GOOGLE_GEMINI_FREE_APIKEY",
+      "store_id": "9aea31b0e5b24ffda2a17294171bef68",
+      "secret_name": "GOOGLE_GEMINI_FREE_APIKEY"
+    },
+    {
       "binding": "RESEND_API_KEY",
       "store_id": "9aea31b0e5b24ffda2a17294171bef68",
       "secret_name": "RESEND_API_KEY"

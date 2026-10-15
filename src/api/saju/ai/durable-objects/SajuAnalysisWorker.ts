@@ -319,7 +319,7 @@ export class SajuAnalysisWorker implements DurableObject {
       await this.state.storage.put(job.id, job);
 
       // Gemini API 호출 준비
-      const key = await getSecret(this.env.GOOGLE_GEMINI_API_KEY);
+      const key = await getSecret(this.env.GOOGLE_GEMINI_FREE_APIKEY);
       const ai = new GoogleGenAI({ apiKey: key });
       const payload = buildGeminiPayload(job);
 

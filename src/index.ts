@@ -8,11 +8,29 @@ import { adminColumnApi } from "./api/community/adminColumnApi";
 
 type Env = {
   Bindings: {
+    AI: Ai;
+    DB: D1Database;
     KV: KVNamespace;
     SAJU_ANALYSIS_WORKER: DurableObjectNamespace;
     COLUMN_WORKER: DurableObjectNamespace;
+    VIEW_CACHE_KV: KVNamespace;
+    AUTH_CODE_KV: KVNamespace;
+    DESTINY_R2: R2Bucket;
+    VECTORIZE_INDEX: VectorizeIndex;
+    GOOGLE_CLIENT_ID: SecretsStoreSecret;
+    GOOGLE_CLIENT_SECRET: SecretsStoreSecret;
     GOOGLE_GEMINI_API_KEY: SecretsStoreSecret;
-    DB: D1Database;
+    GOOGLE_GEMINI_FREE_APIKEY: SecretsStoreSecret;
+    NICE_CLIENT_KEY: SecretsStoreSecret;
+    NICE_SECRET_KEY: SecretsStoreSecret;
+    RESEND_API_KEY: SecretsStoreSecret;
+    BRAVE_API_KEY: SecretsStoreSecret;
+    MASTER_API_ACCESSKEY: SecretsStoreSecret;
+    MASTER_API_SECRET_ACCESSKEY: SecretsStoreSecret;
+    MASTER_API_AUTHID: SecretsStoreSecret;
+    ENVIRONMENT: string;
+    R2_BUCKET_NAME: string;
+    R2_PUBLIC_URL: string;
   }
 }
 
